@@ -109,6 +109,58 @@ npm run dev
 
 ---
 
+## 可选数据源配置（API Key）
+
+ScholarScout 默认已启用 6 个无需注册的数据源（arXiv、Semantic Scholar、OpenAlex、PubMed、Europe PMC、INSPIRE-HEP）。以下两个数据源需要免费注册 API Key 才能启用：
+
+| 数据源 | 覆盖领域 | Key 获取 |
+|--------|---------|---------|
+| **CORE** | 1.7 亿+ 开放获取论文 | [core.ac.uk/services/api](https://core.ac.uk/services/api) |
+| **NASA ADS** | 天文 / 天体物理 / 地球科学 | [ui.adsabs.harvard.edu/user/settings/token](https://ui.adsabs.harvard.edu/user/settings/token) |
+
+两者均完全免费，注册后即可获得 Key。**没有 Key 的数据源会自动跳过，不影响其他数据源正常使用。**
+
+### 本地运行时配置
+
+在 `backend/` 目录下新建 `.env` 文件（参考 `.env.example`），填入你拥有的 Key：
+
+```bash
+cd backend
+cp .env.example .env   # 复制模板
+```
+
+用文本编辑器打开 `backend/.env`，填入对应 Key：
+
+```
+CORE_API_KEY=你的CoreKey
+NASA_ADS_API_KEY=你的NASAADSKey
+```
+
+保存后重启后端服务即可生效。没有的 Key 留空或删除那行。
+
+### 服务器部署时配置
+
+```bash
+# 在服务器上创建配置文件（仅服务器本地存储，不会上传到 GitHub）
+sudo mkdir -p /etc/scholarscout
+sudo nano /etc/scholarscout/env
+```
+
+在文件中填入你拥有的 Key（没有的直接不写）：
+
+```
+CORE_API_KEY=你的CoreKey
+NASA_ADS_API_KEY=你的NASAADSKey
+```
+
+保存后重启服务生效：
+
+```bash
+sudo systemctl restart scholarscout-backend
+```
+
+---
+
 ## 服务器部署
 
 如果你想把 ScholarScout 部署到云服务器，供他人通过公网访问，克隆仓库后执行：
