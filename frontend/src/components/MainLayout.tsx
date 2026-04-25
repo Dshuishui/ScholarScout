@@ -20,7 +20,7 @@ export function MainLayout({ apiKey, onClearKey }: Props) {
           onClearKey={onClearKey}
         />
       </div>
-      <div className="flex-1 min-w-0">
+      <div className="flex-1 min-w-0 relative">
         <ResultsPanel
           papers={papers}
           isLoading={isLoading}
