@@ -21,13 +21,15 @@ def _arxiv_to_paper(raw) -> Paper:
 
 async def _search_arxiv(parsed: ParsedQuery, limit: int) -> list[Paper]:
     try:
-        query = " AND ".join(f'all:"{kw}"' for kw in parsed.keywords)
+        # OR 连接关键词，扩大召回；日期直接传入查询，而非事后过滤
+        kw_part = " OR ".join(f'all:{kw}' for kw in parsed.keywords)
+        query = f'({kw_part})'
+        if parsed.date_from:
+            date_str = parsed.date_from.replace("-", "")  # "2023-01-01" -> "20230101"
+            query += f' AND submittedDate:[{date_str}000000 TO *]'
         searcher = ArxivSearcher()
         results = searcher.search(query, max_results=limit)
-        papers = [_arxiv_to_paper(r) for r in results]
-        if parsed.date_from:
-            papers = [p for p in papers if p.published_date and p.published_date >= parsed.date_from]
-        return papers
+        return [_arxiv_to_paper(r) for r in results]
     except Exception as e:
         print(f"arXiv search error: {e}")
         return []
@@ -42,6 +44,9 @@ async def _search_semantic_scholar(parsed: ParsedQuery, limit: int) -> list[Pape
             "limit": limit,
             "fields": "paperId,title,authors,abstract,year,externalIds,openAccessPdf,citationCount",
         }
+        # 日期传给 API，让服务端过滤，而非事后丢弃
+        if parsed.date_from:
+            params["year"] = f"{parsed.date_from[:4]}-"  # e.g. "2023-"
         async with httpx.AsyncClient(timeout=15) as client:
             resp = await client.get(url, params=params)
             resp.raise_for_status()
@@ -51,8 +56,6 @@ async def _search_semantic_scholar(parsed: ParsedQuery, limit: int) -> list[Pape
         for item in data.get("data", []):
             year = item.get("year")
             published_date = f"{year}-01-01" if year else None
-            if parsed.date_from and published_date and published_date < parsed.date_from:
-                continue
             doi = (item.get("externalIds") or {}).get("DOI")
             oa = item.get("openAccessPdf") or {}
             papers.append(Paper(
