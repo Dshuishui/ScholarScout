@@ -3,6 +3,18 @@ from openai import AsyncOpenAI
 from models import ParsedQuery, Paper
 from config import DEEPSEEK_BASE_URL, DEEPSEEK_MODEL
 
+INTENT_PROMPT = """判断用户输入的意图。
+
+搜索论文的例子：找2023年后RAG相关的论文、帮我搜transformer综述、有没有关于RAFT的最新研究
+普通对话的例子：只有一篇吗、你好、帮我解释一下RAFT算法、谢谢、这篇论文讲的是什么
+
+用户输入：{query}
+
+返回 JSON（不要额外文字）：
+{{"intent": "search"}}
+或
+{{"intent": "chat", "reply": "直接回答用户的话"}}"""
+
 PARSE_PROMPT = """你是学术搜索助手。将用户的中文需求转为结构化搜索参数。
 
 用户需求：{query}
@@ -31,6 +43,18 @@ VALIDATE_PROMPT = """用户的原始需求：{query}
   {{"id": "paper_id", "relevant": true, "reason": "一句话说明"}},
   ...
 ]"""
+
+
+async def classify_intent(user_query: str, api_key: str) -> dict:
+    """返回 {"intent": "search"} 或 {"intent": "chat", "reply": "..."}"""
+    client = AsyncOpenAI(api_key=api_key, base_url=DEEPSEEK_BASE_URL)
+    response = await client.chat.completions.create(
+        model=DEEPSEEK_MODEL,
+        messages=[{"role": "user", "content": INTENT_PROMPT.format(query=user_query)}],
+        response_format={"type": "json_object"},
+        temperature=0.1,
+    )
+    return json.loads(response.choices[0].message.content)
 
 
 async def parse_query(user_query: str, api_key: str) -> ParsedQuery:

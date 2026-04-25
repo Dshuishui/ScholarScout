@@ -14,61 +14,55 @@ export function useSearch(apiKey: string) {
   const [isLoading, setIsLoading] = useState(false)
   const [statusMessage, setStatusMessage] = useState('')
 
-  const search = async (query: string) => {
-    const userMsg: Message = {
-      id: Date.now().toString(),
-      role: 'user',
-      content: query,
-    }
-    setMessages(prev => [...prev, userMsg])
-    setIsLoading(true)
-    setPapers([])
-    setStatusMessage('')
+  const updateAssistant = (assistantId: string, patch: Partial<Message>) =>
+    setMessages(prev => prev.map(m => m.id === assistantId ? { ...m, ...patch } : m))
 
+  const search = async (query: string) => {
+    const userMsg: Message = { id: Date.now().toString(), role: 'user', content: query }
     const assistantId = (Date.now() + 1).toString()
+
     setMessages(prev => [
       ...prev,
+      userMsg,
       { id: assistantId, role: 'assistant', content: '', isLoading: true },
     ])
+    setIsLoading(true)
+    setStatusMessage('')
 
     try {
       for await (const event of searchPapers(query, apiKey)) {
         if (event.type === 'progress') {
+          // 第一个 progress 说明是搜索意图，清空旧论文
+          setPapers([])
           setStatusMessage(event.message)
-          setMessages(prev =>
-            prev.map(m =>
-              m.id === assistantId ? { ...m, content: event.message } : m
-            )
-          )
+          updateAssistant(assistantId, { content: event.message })
+
         } else if (event.type === 'done') {
           setPapers(event.papers)
           setStatusMessage(event.message)
-          setMessages(prev =>
-            prev.map(m =>
-              m.id === assistantId
-                ? { ...m, content: event.message, isLoading: false, papers: event.papers }
-                : m
-            )
-          )
+          updateAssistant(assistantId, {
+            content: event.message,
+            isLoading: false,
+            papers: event.papers,
+          })
+
+        } else if (event.type === 'chat') {
+          // 普通对话：只更新消息气泡，不清空右侧论文结果
+          updateAssistant(assistantId, { content: event.message, isLoading: false })
+
         } else if (event.type === 'error') {
           setStatusMessage('')
-          setMessages(prev =>
-            prev.map(m =>
-              m.id === assistantId
-                ? { ...m, content: `搜索出错：${event.message}`, isLoading: false }
-                : m
-            )
-          )
+          updateAssistant(assistantId, {
+            content: `出错了：${event.message}`,
+            isLoading: false,
+          })
         }
       }
-    } catch (e) {
-      setMessages(prev =>
-        prev.map(m =>
-          m.id === assistantId
-            ? { ...m, content: '网络错误，请检查 Key 是否正确或稍后重试', isLoading: false }
-            : m
-        )
-      )
+    } catch {
+      updateAssistant(assistantId, {
+        content: '网络错误，请检查 Key 是否正确或稍后重试',
+        isLoading: false,
+      })
     } finally {
       setIsLoading(false)
     }

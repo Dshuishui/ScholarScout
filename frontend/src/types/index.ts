@@ -36,4 +36,9 @@ export type SearchErrorEvent = {
   message: string
 }
 
-export type SearchEvent = SearchProgressEvent | SearchDoneEvent | SearchErrorEvent
+export type SearchChatEvent = {
+  type: 'chat'
+  message: string
+}
+
+export type SearchEvent = SearchProgressEvent | SearchDoneEvent | SearchErrorEvent | SearchChatEvent

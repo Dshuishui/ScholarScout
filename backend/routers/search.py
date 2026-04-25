@@ -2,10 +2,10 @@ import json
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse, Response
 from models import SearchRequest
-from services.llm_service import parse_query, validate_papers
+from services.llm_service import classify_intent, parse_query, validate_papers
 from services.search_service import search_all_sources
 from services.download_service import fetch_pdf_bytes
-from config import SEARCH_RAW_LIMIT, VALIDATED_LIMIT
+from config import SEARCH_LIMIT_PER_SOURCE, VALIDATED_LIMIT
 
 router = APIRouter()
 
@@ -18,12 +18,20 @@ def sse(event: str, data: dict) -> str:
 async def search(request: SearchRequest):
     async def generate():
         try:
+            # 第一步：判断意图
+            intent = await classify_intent(request.query, request.api_key)
+
+            if intent.get("intent") == "chat":
+                yield sse("chat", {"message": intent.get("reply", "请问有什么可以帮您？")})
+                return
+
+            # 搜索意图：走完整 pipeline
             yield sse("progress", {"message": "正在理解您的需求..."})
             parsed = await parse_query(request.query, request.api_key)
 
             kw_str = "、".join(parsed.keywords)
             yield sse("progress", {"message": f"正在搜索关键词：{kw_str}..."})
-            papers = await search_all_sources(parsed, limit_per_source=SEARCH_RAW_LIMIT // 3)
+            papers = await search_all_sources(parsed, limit_per_source=SEARCH_LIMIT_PER_SOURCE)
 
             if not papers:
                 yield sse("done", {"papers": [], "message": "未找到相关论文，请尝试换个描述方式。"})
@@ -40,7 +48,7 @@ async def search(request: SearchRequest):
             })
 
         except Exception as e:
-            yield sse("error", {"message": f"搜索出错：{str(e)}"})
+            yield sse("error", {"message": f"出错了：{str(e)}"})
 
     return StreamingResponse(
         generate(),
