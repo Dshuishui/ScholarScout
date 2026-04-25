@@ -5,7 +5,6 @@ from models import SearchRequest
 from services.llm_service import classify_intent, parse_query, validate_papers
 from services.search_service import search_all_sources
 from services.download_service import fetch_pdf_bytes
-from config import SEARCH_LIMIT_PER_SOURCE, VALIDATED_LIMIT
 
 router = APIRouter()
 
@@ -32,14 +31,14 @@ async def search(request: SearchRequest):
 
             kw_str = "、".join(parsed.keywords)
             yield sse("progress", {"message": f"正在搜索关键词：{kw_str}..."})
-            papers = await search_all_sources(parsed, limit_per_source=SEARCH_LIMIT_PER_SOURCE)
+            papers = await search_all_sources(parsed, limit_per_source=request.limit_per_source)
             if not papers:
                 yield sse("done", {"papers": [], "message": "未找到相关论文，请尝试换个描述方式。"})
                 return
 
             yield sse("progress", {"message": f"找到 {len(papers)} 篇论文，正在验证相关性..."})
             validated = await validate_papers(papers, request.query, request.api_key)
-            final = validated[:VALIDATED_LIMIT]
+            final = validated[:request.validated_limit]
 
             papers_dict = [p.model_dump() for p in final]
             yield sse("done", {

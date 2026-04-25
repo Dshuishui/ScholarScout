@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { searchPapers } from '../api/client'
 import type { Message, Paper } from '../types'
+import type { SearchSettings } from './useSettings'
 
 const WELCOME: Message = {
   id: '0',
@@ -8,7 +9,7 @@ const WELCOME: Message = {
   content: '您好！请描述您想搜索的论文，例如：\n\n"找2023年后关于大模型幻觉问题的论文"\n"diffusion model 在医学图像生成的应用综述"',
 }
 
-export function useSearch(apiKey: string) {
+export function useSearch(apiKey: string, settings: SearchSettings) {
   const [messages, setMessages] = useState<Message[]>([WELCOME])
   const [papers, setPapers] = useState<Paper[]>([])
   const [isLoading, setIsLoading] = useState(false)
@@ -36,7 +37,7 @@ export function useSearch(apiKey: string) {
         .slice(-8)
         .map(m => ({ role: m.role, content: m.content }))
 
-      for await (const event of searchPapers(query, apiKey, history)) {
+      for await (const event of searchPapers(query, apiKey, history, settings)) {
         if (event.type === 'progress') {
           // 第一个 progress 说明是搜索意图，清空旧论文
           setPapers([])

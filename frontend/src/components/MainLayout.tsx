@@ -1,6 +1,7 @@
 import { ChatPanel } from './ChatPanel'
 import { ResultsPanel } from './ResultsPanel'
 import { useSearch } from '../hooks/useSearch'
+import { useSettings } from '../hooks/useSettings'
 
 interface Props {
   apiKey: string
@@ -8,7 +9,8 @@ interface Props {
 }
 
 export function MainLayout({ apiKey, onClearKey }: Props) {
-  const { messages, papers, isLoading, statusMessage, search } = useSearch(apiKey)
+  const { settings, updateSettings } = useSettings()
+  const { messages, papers, isLoading, statusMessage, search } = useSearch(apiKey, settings)
 
   return (
     <div className="h-screen flex overflow-hidden">
@@ -25,6 +27,8 @@ export function MainLayout({ apiKey, onClearKey }: Props) {
           papers={papers}
           isLoading={isLoading}
           statusMessage={statusMessage}
+          settings={settings}
+          onSettingsChange={updateSettings}
         />
       </div>
     </div>

@@ -3,6 +3,7 @@ import xml.etree.ElementTree as ET
 import feedparser
 import httpx
 from models import Paper, ParsedQuery
+from config import CORE_API_KEY
 
 
 async def _search_arxiv(parsed: ParsedQuery, limit: int) -> list[Paper]:
@@ -243,6 +244,49 @@ async def _search_pubmed(parsed: ParsedQuery, limit: int) -> list[Paper]:
         return []
 
 
+async def _search_core(parsed: ParsedQuery, limit: int) -> list[Paper]:
+    if not CORE_API_KEY:
+        return []
+    try:
+        body: dict = {"q": " ".join(parsed.keywords), "limit": limit}
+        if parsed.date_from:
+            body["filters"] = {"yearPublished": {"gte": int(parsed.date_from[:4])}}
+
+        async with httpx.AsyncClient(timeout=20) as client:
+            resp = await client.post(
+                "https://api.core.ac.uk/v3/search/works",
+                json=body,
+                headers={"Authorization": f"Bearer {CORE_API_KEY}"},
+            )
+            resp.raise_for_status()
+            data = resp.json()
+
+        papers = []
+        for item in data.get("results", []):
+            work_id = str(item.get("id", ""))
+            year = item.get("yearPublished")
+            authors = [a.get("name", "") for a in (item.get("authors") or [])]
+            pdf_url = item.get("downloadUrl") or (
+                (item.get("sourceFulltextUrls") or [None])[0]
+            )
+            papers.append(Paper(
+                paper_id=f"core_{work_id}",
+                title=(item.get("title") or "").strip(),
+                authors=authors,
+                abstract=item.get("abstract"),
+                published_date=f"{year}-01-01" if year else None,
+                doi=item.get("doi"),
+                pdf_url=pdf_url,
+                url=f"https://core.ac.uk/works/{work_id}",
+                source="CORE",
+                citations=0,
+            ))
+        return papers
+    except Exception as e:
+        print(f"CORE search error: {e}")
+        return []
+
+
 def deduplicate(papers: list[Paper]) -> list[Paper]:
     seen_dois: set[str] = set()
     seen_titles: set[str] = set()
@@ -266,6 +310,7 @@ async def search_all_sources(parsed: ParsedQuery, limit_per_source: int = 10) ->
         _search_semantic_scholar(parsed, limit_per_source),
         _search_openalex(parsed, limit_per_source),
         _search_pubmed(parsed, limit_per_source),
+        _search_core(parsed, limit_per_source),
     )
     all_papers = [p for source_results in results for p in source_results]
     return deduplicate(all_papers)

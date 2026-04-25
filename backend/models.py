@@ -1,5 +1,6 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional
+from config import SEARCH_LIMIT_PER_SOURCE, VALIDATED_LIMIT
 
 
 class HistoryMessage(BaseModel):
@@ -10,6 +11,8 @@ class SearchRequest(BaseModel):
     query: str
     api_key: str
     messages: list[HistoryMessage] = []
+    limit_per_source: int = Field(default=SEARCH_LIMIT_PER_SOURCE, ge=5, le=200)
+    validated_limit: int = Field(default=VALIDATED_LIMIT, ge=5, le=500)
 
 
 class Paper(BaseModel):

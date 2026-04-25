@@ -144,9 +144,17 @@ bash deploy/deploy.sh
 
 ## 搜索层说明
 
-论文搜索目前基于 [openags/paper-search-mcp](https://github.com/openags/paper-search-mcp) 提供的 arXiv 连接器，以及直接调用 Semantic Scholar 和 OpenAlex 的开放 API。感谢 openags 的工作。
+论文搜索同时检索以下五个学术数据源，全部通过官方开放 API 自行实现：
 
-后续计划自己实现完整的多源搜索链路，进一步提升搜索质量和覆盖范围。
+| 数据源 | 特点 | API |
+|--------|------|-----|
+| **arXiv** | CS / 物理 / 数学预印本，覆盖最新研究 | 官方 Atom Feed API，自由使用 |
+| **Semantic Scholar** | 综合学术数据库，语义搜索能力强 | 免费开放 API |
+| **OpenAlex** | 2 亿+ 论文，开放获取友好 | 免费开放 API |
+| **PubMed** | 医学 / 生物 / 生命科学权威数据库 | NCBI E-utilities，自由使用 |
+| **CORE** | 1.7 亿+ 开放获取全文 | 免费注册后可用（见下方说明） |
+
+> **CORE 启用方式**：在 [core.ac.uk/services/api](https://core.ac.uk/services/api) 免费注册获取 API Key，填入 `backend/config.py` 的 `CORE_API_KEY` 字段即可启用第五个搜索源。
 
 ---
 
@@ -154,12 +162,14 @@ bash deploy/deploy.sh
 
 当前已知问题和计划改进见 [docs/backlog.md](docs/backlog.md)，主要包括：
 
-- [ ] 提升特定年份和小众领域的搜索召回率
+- [x] 提升搜索召回率（自实现 arXiv API，支持日期精确过滤）
 - [x] 加入对话上下文记忆，支持追问和多轮搜索
-- [ ] 自研多源搜索链路，替换对 paper-search-mcp 的依赖
-- [ ] HTTPS 支持（依赖 ICP 备案）
-- [x] 批量选择并打包下载 PDF（ZIP）
+- [x] 自研多源搜索链路（arXiv / Semantic Scholar / OpenAlex / PubMed / CORE）
+- [x] 批量选择并打包下载 PDF（ZIP），失败明细自动写入压缩包
 - [x] 搜索结果分页展示 + 导出 CSV
+- [x] 前端动态调整每源抓取数量和展示上限
+- [ ] HTTPS 支持（依赖 ICP 备案）
+- [ ] 关键词可视化确认与编辑
 
 ---
 
@@ -173,9 +183,8 @@ bash deploy/deploy.sh
 
 ## 致谢
 
-- [openags/paper-search-mcp](https://github.com/openags/paper-search-mcp) — 提供了多源学术搜索的基础实现思路和 arXiv 连接器
 - [DeepSeek](https://www.deepseek.com) — 提供 AI 推理能力
-- [Semantic Scholar](https://www.semanticscholar.org) 和 [OpenAlex](https://openalex.org) — 提供免费开放的学术数据 API
+- [Semantic Scholar](https://www.semanticscholar.org)、[OpenAlex](https://openalex.org)、[PubMed](https://pubmed.ncbi.nlm.nih.gov)、[CORE](https://core.ac.uk) — 提供免费开放的学术数据 API
 - [astral-sh/uv](https://github.com/astral-sh/uv) — 极速 Python 包管理工具
 
 ---

@@ -5,12 +5,19 @@ const API_BASE = '/api'
 export async function* searchPapers(
   query: string,
   apiKey: string,
-  history: { role: string; content: string }[] = []
+  history: { role: string; content: string }[] = [],
+  settings: { limitPerSource?: number; validatedLimit?: number } = {}
 ): AsyncGenerator<SearchEvent> {
   const response = await fetch(`${API_BASE}/search`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ query, api_key: apiKey, messages: history }),
+    body: JSON.stringify({
+      query,
+      api_key: apiKey,
+      messages: history,
+      limit_per_source: settings.limitPerSource,
+      validated_limit: settings.validatedLimit,
+    }),
   })
 
   if (!response.ok) throw new Error(`请求失败: ${response.status}`)
