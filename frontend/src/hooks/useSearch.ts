@@ -30,7 +30,13 @@ export function useSearch(apiKey: string) {
     setStatusMessage('')
 
     try {
-      for await (const event of searchPapers(query, apiKey)) {
+      // 把当前对话历史格式化后传给后端（过滤欢迎语、加载中、空内容）
+      const history = messages
+        .filter(m => m.id !== '0' && !m.isLoading && m.content)
+        .slice(-8)
+        .map(m => ({ role: m.role, content: m.content }))
+
+      for await (const event of searchPapers(query, apiKey, history)) {
         if (event.type === 'progress') {
           // 第一个 progress 说明是搜索意图，清空旧论文
           setPapers([])

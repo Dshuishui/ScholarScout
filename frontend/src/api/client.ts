@@ -4,12 +4,13 @@ const API_BASE = '/api'
 
 export async function* searchPapers(
   query: string,
-  apiKey: string
+  apiKey: string,
+  history: { role: string; content: string }[] = []
 ): AsyncGenerator<SearchEvent> {
   const response = await fetch(`${API_BASE}/search`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ query, api_key: apiKey }),
+    body: JSON.stringify({ query, api_key: apiKey, messages: history }),
   })
 
   if (!response.ok) throw new Error(`请求失败: ${response.status}`)

@@ -2,9 +2,14 @@ from pydantic import BaseModel
 from typing import Optional
 
 
+class HistoryMessage(BaseModel):
+    role: str
+    content: str
+
 class SearchRequest(BaseModel):
     query: str
     api_key: str
+    messages: list[HistoryMessage] = []
 
 
 class Paper(BaseModel):

@@ -18,8 +18,9 @@ def sse(event: str, data: dict) -> str:
 async def search(request: SearchRequest):
     async def generate():
         try:
-            # 第一步：判断意图
-            intent = await classify_intent(request.query, request.api_key)
+            # 第一步：判断意图（携带历史上下文）
+            history = [{"role": m.role, "content": m.content} for m in request.messages]
+            intent = await classify_intent(request.query, request.api_key, history)
 
             if intent.get("intent") == "chat":
                 yield sse("chat", {"message": intent.get("reply", "请问有什么可以帮您？")})
@@ -27,7 +28,7 @@ async def search(request: SearchRequest):
 
             # 搜索意图：走完整 pipeline
             yield sse("progress", {"message": "正在理解您的需求..."})
-            parsed = await parse_query(request.query, request.api_key)
+            parsed = await parse_query(request.query, request.api_key, history)
 
             kw_str = "、".join(parsed.keywords)
             yield sse("progress", {"message": f"正在搜索关键词：{kw_str}..."})

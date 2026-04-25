@@ -3,34 +3,31 @@ from openai import AsyncOpenAI
 from models import ParsedQuery, Paper
 from config import DEEPSEEK_BASE_URL, DEEPSEEK_MODEL
 
-INTENT_PROMPT = """判断用户输入的意图。
+INTENT_SYSTEM = """你是学术论文搜索助手。结合对话历史判断用户最新输入的意图。
 
-搜索论文的例子：找2023年后RAG相关的论文、帮我搜transformer综述、有没有关于RAFT的最新研究
-普通对话的例子：只有一篇吗、你好、帮我解释一下RAFT算法、谢谢、这篇论文讲的是什么
-
-用户输入：{query}
+搜索意图示例：找2023年后RAG相关的论文、帮我再搜、找更多、找这个领域2022年的、换个关键词搜
+对话意图示例：只有一篇吗、你好、帮我解释一下这篇、谢谢、这是什么意思、第一篇讲的是什么
 
 返回 JSON（不要额外文字）：
-{{"intent": "search"}}
+{"intent": "search"}
 或
-{{"intent": "chat", "reply": "直接回答用户的话"}}"""
+{"intent": "chat", "reply": "结合上下文直接回答用户"}"""
 
-PARSE_PROMPT = """你是学术搜索助手。将用户的中文需求转为结构化搜索参数。
-
-用户需求：{query}
+PARSE_SYSTEM = """你是学术搜索助手。结合对话历史，将用户的最新需求转为结构化搜索参数。
 
 返回 JSON（不要有任何额外文字）：
-{{
+{
   "keywords": ["英文关键词1", "英文关键词2"],
   "date_from": "YYYY-01-01 或 null",
   "date_to": "YYYY-12-31 或 null",
   "max_results": 30
-}}
+}
 
 规则：
 - keywords 必须是英文学术术语，2-4 个，从宽到窄排列
 - 用户未提时间则 date_from/date_to 为 null
-- "最近两年" 相对今天计算"""
+- "最近两年" 相对今天计算
+- 若用户说"找更多"或"换个方向"，结合历史推断搜索主题"""
 
 VALIDATE_PROMPT = """用户的原始需求：{query}
 
@@ -45,23 +42,33 @@ VALIDATE_PROMPT = """用户的原始需求：{query}
 ]"""
 
 
-async def classify_intent(user_query: str, api_key: str) -> dict:
+async def classify_intent(user_query: str, api_key: str, history: list[dict] = []) -> dict:
     """返回 {"intent": "search"} 或 {"intent": "chat", "reply": "..."}"""
     client = AsyncOpenAI(api_key=api_key, base_url=DEEPSEEK_BASE_URL)
+    messages = (
+        [{"role": "system", "content": INTENT_SYSTEM}]
+        + history[-8:]
+        + [{"role": "user", "content": user_query}]
+    )
     response = await client.chat.completions.create(
         model=DEEPSEEK_MODEL,
-        messages=[{"role": "user", "content": INTENT_PROMPT.format(query=user_query)}],
+        messages=messages,
         response_format={"type": "json_object"},
         temperature=0.1,
     )
     return json.loads(response.choices[0].message.content)
 
 
-async def parse_query(user_query: str, api_key: str) -> ParsedQuery:
+async def parse_query(user_query: str, api_key: str, history: list[dict] = []) -> ParsedQuery:
     client = AsyncOpenAI(api_key=api_key, base_url=DEEPSEEK_BASE_URL)
+    messages = (
+        [{"role": "system", "content": PARSE_SYSTEM}]
+        + history[-8:]
+        + [{"role": "user", "content": user_query}]
+    )
     response = await client.chat.completions.create(
         model=DEEPSEEK_MODEL,
-        messages=[{"role": "user", "content": PARSE_PROMPT.format(query=user_query)}],
+        messages=messages,
         response_format={"type": "json_object"},
         temperature=0.1,
     )
