@@ -74,7 +74,9 @@ sudo nginx -t
 sudo systemctl enable nginx
 sudo systemctl reload nginx
 
-sudo cp "$REPO_DIR/deploy/scholarscout-backend.service" /etc/systemd/system/
+# 将 service 文件里的占位符替换为实际路径后再安装
+sed "s|__REPO_DIR__|$REPO_DIR|g" "$REPO_DIR/deploy/scholarscout-backend.service" \
+    | sudo tee /etc/systemd/system/scholarscout-backend.service > /dev/null
 sudo systemctl daemon-reload
 sudo systemctl enable scholarscout-backend
 sudo systemctl restart scholarscout-backend
