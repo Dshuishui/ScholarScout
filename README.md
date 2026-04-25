@@ -56,9 +56,62 @@ diffusion model 在医学图像分割方面的应用，最近两年的
 
 ---
 
-## 本地部署
+## 本地运行（个人电脑）
 
-如果你想自己部署一份，克隆仓库后执行：
+如果你不想依赖演示站，想在自己的电脑上本地运行，按以下步骤操作。整个过程不需要服务器，不需要 Nginx，在自己浏览器里打开即可使用。
+
+**环境要求**：Python 3.11+、[uv](https://github.com/astral-sh/uv)、Node.js 18+、npm
+
+**第一步：安装 uv（Python 包管理器）**
+
+```bash
+# macOS / Linux
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Windows（PowerShell）
+powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+```
+
+**第二步：克隆仓库**
+
+```bash
+git clone https://github.com/Dshuishui/ScholarScout.git
+cd ScholarScout
+```
+
+**第三步：启动后端**（新开一个终端窗口）
+
+```bash
+cd backend
+uv sync          # 自动创建虚拟环境并安装依赖（首次运行需要一点时间）
+uv run uvicorn main:app --reload --port 8000
+```
+
+看到 `Uvicorn running on http://127.0.0.1:8000` 说明后端启动成功。
+
+**第四步：启动前端**（再开一个终端窗口）
+
+```bash
+cd frontend
+npm install      # 安装前端依赖（首次运行需要一点时间）
+npm run dev
+```
+
+看到 `Local: http://localhost:5173` 说明前端启动成功。
+
+**第五步：打开浏览器**
+
+访问 [http://localhost:5173](http://localhost:5173)，输入你的 DeepSeek API Key 即可开始使用。
+
+> 前端的 API 请求会自动代理到本地后端，无需任何额外配置。
+
+**后续每次使用**，只需重新执行第三步和第四步启动两个服务即可。
+
+---
+
+## 服务器部署
+
+如果你想把 ScholarScout 部署到云服务器，供他人通过公网访问，克隆仓库后执行：
 
 ```bash
 git clone https://github.com/Dshuishui/ScholarScout.git
@@ -102,9 +155,11 @@ bash deploy/deploy.sh
 当前已知问题和计划改进见 [docs/backlog.md](docs/backlog.md)，主要包括：
 
 - [ ] 提升特定年份和小众领域的搜索召回率
-- [ ] 加入对话上下文记忆，支持追问和多轮搜索
+- [x] 加入对话上下文记忆，支持追问和多轮搜索
 - [ ] 自研多源搜索链路，替换对 paper-search-mcp 的依赖
-- [ ] HTTPS 支持
+- [ ] HTTPS 支持（依赖 ICP 备案）
+- [x] 批量选择并打包下载 PDF（ZIP）
+- [x] 搜索结果分页展示 + 导出 CSV
 
 ---
 
