@@ -3,7 +3,7 @@ import xml.etree.ElementTree as ET
 import feedparser
 import httpx
 from models import Paper, ParsedQuery
-from config import CORE_API_KEY
+from config import CORE_API_KEY, NASA_ADS_API_KEY
 
 
 async def _search_arxiv(parsed: ParsedQuery, limit: int) -> list[Paper]:
@@ -287,6 +287,163 @@ async def _search_core(parsed: ParsedQuery, limit: int) -> list[Paper]:
         return []
 
 
+async def _search_inspire(parsed: ParsedQuery, limit: int) -> list[Paper]:
+    """INSPIRE-HEP：高能物理 / 粒子物理 / 理论物理，无需 Key"""
+    try:
+        kw = " ".join(parsed.keywords)
+        query = f"({kw})"
+        if parsed.date_from:
+            query += f" AND date>{parsed.date_from[:4]}"
+
+        async with httpx.AsyncClient(timeout=20) as client:
+            resp = await client.get(
+                "https://inspirehep.net/api/literature",
+                params={"q": query, "size": limit, "sort": "mostrecent",
+                        "fields": "titles,authors,abstracts,earliest_date,dois,arxiv_eprints"},
+                headers={"Accept": "application/json"},
+            )
+            resp.raise_for_status()
+            data = resp.json()
+
+        papers = []
+        for hit in data.get("hits", {}).get("hits", []):
+            meta = hit.get("metadata", {})
+            inspire_id = str(hit.get("id", ""))
+            title = (meta.get("titles") or [{}])[0].get("title", "").strip()
+            if not title:
+                continue
+            abstract_val = (meta.get("abstracts") or [{}])[0].get("value", "") or None
+            authors = [a.get("full_name", "") for a in (meta.get("authors") or [])[:10]]
+            doi = ((meta.get("dois") or [{}])[0].get("value") or None)
+            arxiv_id = ((meta.get("arxiv_eprints") or [{}])[0].get("value") or None)
+            pdf_url = f"https://arxiv.org/pdf/{arxiv_id}.pdf" if arxiv_id else None
+            published_date = (meta.get("earliest_date") or "")[:10] or None
+
+            papers.append(Paper(
+                paper_id=f"inspire_{inspire_id}",
+                title=title,
+                authors=authors,
+                abstract=abstract_val,
+                published_date=published_date,
+                doi=doi,
+                pdf_url=pdf_url,
+                url=f"https://inspirehep.net/literature/{inspire_id}",
+                source="INSPIRE-HEP",
+                citations=0,
+            ))
+        return papers
+    except Exception as e:
+        print(f"INSPIRE-HEP search error: {e}")
+        return []
+
+
+async def _search_europepmc(parsed: ParsedQuery, limit: int) -> list[Paper]:
+    """Europe PMC：生命科学 / 生化 / 医学，无需 Key，同时收录 bioRxiv/medRxiv 预印本"""
+    try:
+        kw = " ".join(parsed.keywords)
+        query = kw
+        if parsed.date_from:
+            query += f" AND FIRST_PDATE:[{parsed.date_from[:4]} TO *]"
+
+        async with httpx.AsyncClient(timeout=20) as client:
+            resp = await client.get(
+                "https://www.ebi.ac.uk/europepmc/webservices/rest/search",
+                params={"query": query, "pageSize": limit,
+                        "format": "json", "resultType": "core"},
+            )
+            resp.raise_for_status()
+            data = resp.json()
+
+        papers = []
+        for item in data.get("resultList", {}).get("result", []):
+            title = (item.get("title") or "").strip()
+            if not title:
+                continue
+            pmcid = item.get("pmcid")
+            pdf_url = None
+            if pmcid:
+                for fu in (item.get("fullTextUrlList") or {}).get("fullTextUrl", []):
+                    if fu.get("availabilityCode") == "OA" and "pdf" in fu.get("url", "").lower():
+                        pdf_url = fu["url"]
+                        break
+                if not pdf_url:
+                    pdf_url = f"https://europepmc.org/backend/ptpmcrender.fcgi?accid={pmcid}&blobtype=pdf"
+
+            papers.append(Paper(
+                paper_id=f"epmc_{item.get('id', '')}",
+                title=title,
+                authors=[a.get("fullName", "") for a in
+                         (item.get("authorList") or {}).get("author", [])],
+                abstract=item.get("abstractText"),
+                published_date=item.get("firstPublicationDate"),
+                doi=item.get("doi"),
+                pdf_url=pdf_url,
+                url=f"https://europepmc.org/article/{item.get('source','')}/{item.get('id','')}",
+                source="Europe PMC",
+                citations=item.get("citedByCount", 0) or 0,
+            ))
+        return papers
+    except Exception as e:
+        print(f"Europe PMC search error: {e}")
+        return []
+
+
+async def _search_nasa_ads(parsed: ParsedQuery, limit: int) -> list[Paper]:
+    """NASA ADS：天文 / 天体物理 / 地球科学，需免费注册 Key"""
+    if not NASA_ADS_API_KEY:
+        return []
+    try:
+        kw = " ".join(parsed.keywords)
+        query = kw
+        if parsed.date_from:
+            query += f" pubdate:[{parsed.date_from[:4]} TO 9999]"
+
+        async with httpx.AsyncClient(timeout=20) as client:
+            resp = await client.get(
+                "https://api.adsabs.harvard.edu/v1/search/query",
+                params={"q": query, "rows": limit,
+                        "fl": "title,author,abstract,pubdate,doi,identifier,bibcode",
+                        "sort": "date desc"},
+                headers={"Authorization": f"Bearer {NASA_ADS_API_KEY}"},
+            )
+            resp.raise_for_status()
+            data = resp.json()
+
+        papers = []
+        for doc in data.get("response", {}).get("docs", []):
+            titles = doc.get("title") or []
+            title = titles[0].strip() if titles else ""
+            if not title:
+                continue
+            doi = ((doc.get("doi") or [None])[0])
+            # 从 identifier 里找 arXiv ID 构造 PDF 链接
+            arxiv_id = next(
+                (i.replace("arXiv:", "") for i in (doc.get("identifier") or []) if i.startswith("arXiv:")),
+                None,
+            )
+            pdf_url = f"https://arxiv.org/pdf/{arxiv_id}.pdf" if arxiv_id else None
+            bibcode = doc.get("bibcode", "")
+            pubdate = (doc.get("pubdate") or "")[:7]  # "2023-01"
+            published_date = f"{pubdate}-01" if len(pubdate) == 7 else None
+
+            papers.append(Paper(
+                paper_id=f"ads_{bibcode}",
+                title=title,
+                authors=doc.get("author") or [],
+                abstract=doc.get("abstract"),
+                published_date=published_date,
+                doi=doi,
+                pdf_url=pdf_url,
+                url=f"https://ui.adsabs.harvard.edu/abs/{bibcode}",
+                source="NASA ADS",
+                citations=0,
+            ))
+        return papers
+    except Exception as e:
+        print(f"NASA ADS search error: {e}")
+        return []
+
+
 def deduplicate(papers: list[Paper]) -> list[Paper]:
     seen_dois: set[str] = set()
     seen_titles: set[str] = set()
@@ -311,6 +468,9 @@ async def search_all_sources(parsed: ParsedQuery, limit_per_source: int = 10) ->
         _search_openalex(parsed, limit_per_source),
         _search_pubmed(parsed, limit_per_source),
         _search_core(parsed, limit_per_source),
+        _search_inspire(parsed, limit_per_source),
+        _search_europepmc(parsed, limit_per_source),
+        _search_nasa_ads(parsed, limit_per_source),
     )
     all_papers = [p for source_results in results for p in source_results]
     return deduplicate(all_papers)

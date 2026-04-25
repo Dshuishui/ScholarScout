@@ -146,15 +146,20 @@ bash deploy/deploy.sh
 
 论文搜索同时检索以下五个学术数据源，全部通过官方开放 API 自行实现：
 
-| 数据源 | 特点 | API |
-|--------|------|-----|
-| **arXiv** | CS / 物理 / 数学预印本，覆盖最新研究 | 官方 Atom Feed API，自由使用 |
-| **Semantic Scholar** | 综合学术数据库，语义搜索能力强 | 免费开放 API |
-| **OpenAlex** | 2 亿+ 论文，开放获取友好 | 免费开放 API |
-| **PubMed** | 医学 / 生物 / 生命科学权威数据库 | NCBI E-utilities，自由使用 |
-| **CORE** | 1.7 亿+ 开放获取全文 | 免费注册后可用（见下方说明） |
+| 数据源 | 擅长领域 | 需要 Key |
+|--------|---------|---------|
+| **arXiv** | CS / 物理 / 数学 / 经济，覆盖最新预印本 | 否 |
+| **Semantic Scholar** | 综合，语义搜索能力强 | 否（有 Key 可提升限速） |
+| **OpenAlex** | 综合，2 亿+ 论文，开放获取友好 | 否 |
+| **PubMed** | 医学 / 生物 / 生命科学 | 否 |
+| **Europe PMC** | 生命科学 / 生化 / 医学，同时收录 bioRxiv / medRxiv 预印本 | 否 |
+| **INSPIRE-HEP** | 高能物理 / 粒子物理 / 理论物理（CERN 运营） | 否 |
+| **CORE** | 1.7 亿+ 开放获取全文，覆盖面极广 | 是（免费） |
+| **NASA ADS** | 天文 / 天体物理 / 地球科学 | 是（免费） |
 
-> **CORE 启用方式**：在 [core.ac.uk/services/api](https://core.ac.uk/services/api) 免费注册获取 API Key，填入 `backend/config.py` 的 `CORE_API_KEY` 字段即可启用第五个搜索源。
+**启用 CORE / NASA ADS**：在 `backend/config.py` 中填入对应 API Key 即可激活，留空则跳过该源。
+- CORE Key：[core.ac.uk/services/api](https://core.ac.uk/services/api)
+- NASA ADS Key：[ui.adsabs.harvard.edu/user/settings/token](https://ui.adsabs.harvard.edu/user/settings/token)
 
 ---
 
