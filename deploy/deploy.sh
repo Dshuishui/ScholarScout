@@ -1,35 +1,52 @@
 #!/bin/bash
-# 在云服务器上执行此脚本完成部署
+# ScholarScout 更新部署脚本（首次部署请用 setup.sh）
 # 使用方式：bash deploy/deploy.sh
 
 set -e
 
-REPO_DIR="/home/ubuntu/ScholarScout"
+REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 STATIC_DIR="/var/www/scholarscout"
+UV="$HOME/.local/bin/uv"
 
-echo "=== 1. 拉取最新代码 ==="
+echo "=========================================="
+echo "  ScholarScout 更新部署"
+echo "=========================================="
+
+echo ""
+echo ">>> [1/5] 拉取最新代码..."
 cd "$REPO_DIR"
 git pull origin master
 
-echo "=== 2. 安装/更新后端依赖 ==="
+echo ""
+echo ">>> [2/5] 更新后端依赖..."
 cd "$REPO_DIR/backend"
-uv sync
-
-echo "=== 3. 构建前端 ==="
-cd "$REPO_DIR/frontend"
-npm install
-npm run build
-
-echo "=== 4. 更新前端静态文件 ==="
-sudo mkdir -p "$STATIC_DIR"
-sudo rsync -av --delete dist/ "$STATIC_DIR/"
-
-echo "=== 5. 重启后端服务 ==="
-sudo systemctl restart scholarscout-backend
-sudo systemctl status scholarscout-backend --no-pager
-
-echo "=== 6. 重载 Nginx ==="
-sudo nginx -t && sudo systemctl reload nginx
+"$UV" sync --no-dev
 
 echo ""
-echo "✓ 部署完成！访问 http://118.25.192.117"
+echo ">>> [3/5] 构建前端..."
+cd "$REPO_DIR/frontend"
+npm install --silent
+npm run build
+
+echo ""
+echo ">>> [4/5] 更新静态文件..."
+sudo rsync -a --delete "$REPO_DIR/frontend/dist/" "$STATIC_DIR/"
+
+echo ""
+echo ">>> [5/5] 重启服务..."
+sudo systemctl restart scholarscout-backend
+sudo nginx -t && sudo systemctl reload nginx
+
+sleep 1
+if sudo systemctl is-active --quiet scholarscout-backend; then
+    echo "    后端服务运行中 ✓"
+else
+    echo "    ⚠ 后端服务启动失败，查看日志：sudo journalctl -u scholarscout-backend -n 30"
+    exit 1
+fi
+
+echo ""
+echo "=========================================="
+echo "  ✓ 更新完成！"
+echo "  访问 http://118.25.192.117"
+echo "=========================================="
