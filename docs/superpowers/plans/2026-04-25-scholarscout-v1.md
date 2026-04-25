@@ -85,8 +85,8 @@ dependencies = [
     "python-dotenv==1.0.1",
 ]
 
-[project.optional-dependencies]
-dev = [
+[tool.uv]
+dev-dependencies = [
     "pytest==8.3.3",
     "pytest-asyncio==0.24.0",
     "pytest-mock==3.14.0",
@@ -97,21 +97,21 @@ asyncio_mode = "auto"
 testpaths = ["tests"]
 ```
 
-> 创建虚拟环境并安装依赖：
+> 初始化并安装依赖（现代 uv 工作流）：
 > ```bash
 > cd backend
-> uv venv --python 3.11        # 创建隔离的虚拟环境 .venv/
-> uv pip install fastapi "uvicorn[standard]" openai paper-search-mcp httpx python-dotenv
-> uv pip install --dev pytest pytest-asyncio pytest-mock
-> uv lock                      # 生成 uv.lock，锁定所有包版本
+> uv init .                    # 初始化 uv 项目，自动创建 .venv/
+> uv add fastapi "uvicorn[standard]" openai paper-search-mcp httpx python-dotenv
+> uv add --dev pytest pytest-asyncio pytest-mock
+> # ↑ uv add 会自动更新 pyproject.toml + 生成 uv.lock，无需手动 uv lock
 > ```
 >
-> 云服务器部署时只需：
+> 云服务器生产部署（跳过 dev 依赖）：
 > ```bash
-> uv sync                      # 按 uv.lock 精确复现环境
+> uv sync --no-dev             # 按 uv.lock 精确复现环境，不装测试工具
 > ```
 >
-> 运行命令（无需激活 venv）：
+> 运行命令（无需手动激活 venv）：
 > ```bash
 > uv run uvicorn main:app --reload --port 8000
 > uv run pytest
