@@ -111,8 +111,8 @@ export function ResultsPanel({ papers, isLoading, statusMessage }: Props) {
       </div>
 
       {statusMessage && (
-        <div className="px-5 py-2 bg-blue-50 border-b border-blue-100">
-          <p className="text-xs text-blue-600">{statusMessage}</p>
+        <div className="px-5 py-2.5 bg-blue-50 border-b border-blue-100">
+          <p className="text-xs text-blue-600 break-words leading-relaxed">{statusMessage}</p>
         </div>
       )}
 
