@@ -21,15 +21,15 @@ def _arxiv_to_paper(raw) -> Paper:
 
 async def _search_arxiv(parsed: ParsedQuery, limit: int) -> list[Paper]:
     try:
-        # OR 连接关键词，扩大召回；日期直接传入查询，而非事后过滤
-        kw_part = " OR ".join(f'all:{kw}' for kw in parsed.keywords)
+        # OR 连接关键词扩大召回；submittedDate 会导致库解析失败，改回客户端过滤
+        kw_part = " OR ".join(f'all:"{kw}"' for kw in parsed.keywords)
         query = f'({kw_part})'
-        if parsed.date_from:
-            date_str = parsed.date_from.replace("-", "")  # "2023-01-01" -> "20230101"
-            query += f' AND submittedDate:[{date_str}000000 TO *]'
         searcher = ArxivSearcher()
         results = searcher.search(query, max_results=limit)
-        return [_arxiv_to_paper(r) for r in results]
+        papers = [_arxiv_to_paper(r) for r in results]
+        if parsed.date_from:
+            papers = [p for p in papers if p.published_date and p.published_date >= parsed.date_from]
+        return papers
     except Exception as e:
         print(f"arXiv search error: {e}")
         return []
@@ -96,7 +96,7 @@ async def _search_openalex(parsed: ParsedQuery, limit: int) -> list[Paper]:
 
         papers = []
         for item in data.get("results", []):
-            doi = item.get("doi", "").replace("https://doi.org/", "") or None
+            doi = (item.get("doi") or "").replace("https://doi.org/", "") or None
             oa = item.get("open_access", {})
             pdf_url = oa.get("oa_url") if oa.get("is_oa") else None
             work_id = item.get("id", "").replace("https://openalex.org/", "")
