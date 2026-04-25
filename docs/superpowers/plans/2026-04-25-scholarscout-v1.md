@@ -65,28 +65,56 @@ ScholarScout/
 ## ✅ Task 1: 后端项目初始化 (已完成)
 
 **Files:**
-- Create: `backend/requirements.txt`
+- Create: `backend/pyproject.toml`
 - Create: `backend/config.py`
 - Create: `backend/main.py`
 
-- [ ] **Step 1: 创建 requirements.txt**
+- [ ] **Step 1: 创建 pyproject.toml 并初始化 uv 环境**
 
-```
-fastapi==0.115.0
-uvicorn[standard]==0.30.6
-openai==1.51.0
-paper-search-mcp==0.1.0
-httpx==0.27.2
-python-dotenv==1.0.1
-pytest==8.3.3
-pytest-asyncio==0.24.0
-pytest-mock==3.14.0
+```toml
+[project]
+name = "scholarscout-backend"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi==0.115.0",
+    "uvicorn[standard]==0.30.6",
+    "openai==1.51.0",
+    "paper-search-mcp",
+    "httpx==0.27.2",
+    "python-dotenv==1.0.1",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest==8.3.3",
+    "pytest-asyncio==0.24.0",
+    "pytest-mock==3.14.0",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
 ```
 
-> 安装依赖：
+> 创建虚拟环境并安装依赖：
 > ```bash
-> cd backend && python -m venv venv && source venv/bin/activate
-> pip install -r requirements.txt
+> cd backend
+> uv venv --python 3.11        # 创建隔离的虚拟环境 .venv/
+> uv pip install fastapi "uvicorn[standard]" openai paper-search-mcp httpx python-dotenv
+> uv pip install --dev pytest pytest-asyncio pytest-mock
+> uv lock                      # 生成 uv.lock，锁定所有包版本
+> ```
+>
+> 云服务器部署时只需：
+> ```bash
+> uv sync                      # 按 uv.lock 精确复现环境
+> ```
+>
+> 运行命令（无需激活 venv）：
+> ```bash
+> uv run uvicorn main:app --reload --port 8000
+> uv run pytest
 > ```
 
 - [ ] **Step 2: 创建 config.py**
