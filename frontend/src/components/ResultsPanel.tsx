@@ -126,6 +126,7 @@ export function ResultsPanel({ papers, isLoading, statusMessage }: Props) {
 
     const zip = new JSZip()
     let completed = 0
+    const failed: { title: string; authors: string; year: string; url: string; reason: string }[] = []
 
     setDownloadProgress({ current: 0, total: selectedWithPdf.length, status: '准备中...', done: false })
 
@@ -133,8 +134,7 @@ export function ResultsPanel({ papers, isLoading, statusMessage }: Props) {
       const batch = selectedWithPdf.slice(i, i + DOWNLOAD_CONCURRENCY)
       await Promise.all(batch.map(async paper => {
         const year = paper.published_date?.slice(0, 4) ?? 'unknown'
-        const name = sanitizeFilename(paper.title)
-        const filename = `${year}_${name}.pdf`
+        const filename = `${year}_${sanitizeFilename(paper.title)}.pdf`
 
         setDownloadProgress(prev => prev && ({
           ...prev,
@@ -145,15 +145,31 @@ export function ResultsPanel({ papers, isLoading, statusMessage }: Props) {
           const resp = await fetch(getDownloadUrl(paper.pdf_url!))
           if (resp.ok) {
             zip.file(filename, await resp.arrayBuffer())
+          } else {
+            failed.push({ title: paper.title, authors: paper.authors.join('; '), year, url: paper.pdf_url!, reason: `HTTP ${resp.status}` })
           }
         } catch {
-          // 跳过下载失败的论文
+          failed.push({ title: paper.title, authors: paper.authors.join('; '), year, url: paper.pdf_url!, reason: '网络错误' })
         } finally {
           completed++
           setDownloadProgress(prev => prev && ({ ...prev, current: completed }))
         }
       }))
     }
+
+    // 失败明细写入 CSV 一起放进 ZIP
+    if (failed.length > 0) {
+      const headers = ['标题', '作者', '年份', 'PDF链接', '失败原因']
+      const csvRows = [headers, ...failed.map(f => [f.title, f.authors, f.year, f.url, f.reason])]
+        .map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
+        .join('\n')
+      zip.file('failed_downloads.csv', '﻿' + csvRows)
+    }
+
+    const successCount = selectedWithPdf.length - failed.length
+    const doneStatus = failed.length > 0
+      ? `${successCount} 篇成功，${failed.length} 篇失败（详见 failed_downloads.csv）`
+      : '全部下载完成！'
 
     setDownloadProgress(prev => prev && ({ ...prev, status: '正在压缩打包...', current: selectedWithPdf.length }))
     const blob = await zip.generateAsync({ type: 'blob' })
@@ -164,8 +180,8 @@ export function ResultsPanel({ papers, isLoading, statusMessage }: Props) {
     a.click()
     URL.revokeObjectURL(url)
 
-    setDownloadProgress(prev => prev && ({ ...prev, status: '下载完成！', done: true }))
-    setTimeout(() => setDownloadProgress(null), 2500)
+    setDownloadProgress(prev => prev && ({ ...prev, status: doneStatus, done: true }))
+    setTimeout(() => setDownloadProgress(null), 3500)
   }
 
   return (
