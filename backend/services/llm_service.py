@@ -1,4 +1,5 @@
 import json
+import asyncio
 from openai import AsyncOpenAI
 from models import ParsedQuery, Paper
 from config import DEEPSEEK_BASE_URL, DEEPSEEK_MODEL
@@ -80,30 +81,37 @@ async def validate_papers(papers: list[Paper], user_query: str, api_key: str) ->
     if not papers:
         return []
 
-    papers_text = "\n\n".join(
-        f"ID: {p.paper_id}\n标题: {p.title}\n摘要: {(p.abstract or '')[:200]}"
-        for p in papers
-    )
+    BATCH_SIZE = 20
 
-    client = AsyncOpenAI(api_key=api_key, base_url=DEEPSEEK_BASE_URL)
-    response = await client.chat.completions.create(
-        model=DEEPSEEK_MODEL,
-        messages=[{"role": "user", "content": VALIDATE_PROMPT.format(
-            query=user_query, papers_text=papers_text
-        )}],
-        response_format={"type": "json_object"},
-        temperature=0.1,
-    )
+    async def _validate_batch(batch: list[Paper]) -> list[Paper]:
+        papers_text = "\n\n".join(
+            f"ID: {p.paper_id}\n标题: {p.title}\n摘要: {(p.abstract or '')[:200]}"
+            for p in batch
+        )
+        client = AsyncOpenAI(api_key=api_key, base_url=DEEPSEEK_BASE_URL)
+        response = await client.chat.completions.create(
+            model=DEEPSEEK_MODEL,
+            messages=[{"role": "user", "content": VALIDATE_PROMPT.format(
+                query=user_query, papers_text=papers_text
+            )}],
+            response_format={"type": "json_object"},
+            temperature=0.1,
+        )
+        raw = json.loads(response.choices[0].message.content)
+        verdicts = raw if isinstance(raw, list) else raw.get("results", raw.get("papers", list(raw.values())[0] if raw else []))
+        verdict_map = {v["id"]: v for v in verdicts if v.get("relevant")}
+        result = []
+        for p in batch:
+            if p.paper_id in verdict_map:
+                p.relevance_reason = verdict_map[p.paper_id].get("reason")
+                result.append(p)
+        return result
 
-    raw = json.loads(response.choices[0].message.content)
-    # DeepSeek 可能返回 {"results": [...]} 或直接 [...]
-    verdicts = raw if isinstance(raw, list) else raw.get("results", raw.get("papers", list(raw.values())[0] if raw else []))
-
-    verdict_map = {v["id"]: v for v in verdicts if v.get("relevant")}
+    batches = [papers[i:i + BATCH_SIZE] for i in range(0, len(papers), BATCH_SIZE)]
+    batch_results = await asyncio.gather(*[_validate_batch(b) for b in batches], return_exceptions=True)
 
     result = []
-    for p in papers:
-        if p.paper_id in verdict_map:
-            p.relevance_reason = verdict_map[p.paper_id].get("reason")
-            result.append(p)
+    for r in batch_results:
+        if not isinstance(r, Exception):
+            result.extend(r)
     return result
