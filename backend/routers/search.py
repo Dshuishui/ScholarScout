@@ -33,14 +33,13 @@ async def search(request: SearchRequest):
             kw_str = "、".join(parsed.keywords)
             yield sse("progress", {"message": f"正在搜索关键词：{kw_str}..."})
             papers = await search_all_sources(parsed, limit_per_source=SEARCH_LIMIT_PER_SOURCE)
-            print(f"[DEBUG] query={request.query} | keywords={parsed.keywords} | date_from={parsed.date_from} | total={len(papers)}")
-
             if not papers:
                 yield sse("done", {"papers": [], "message": "未找到相关论文，请尝试换个描述方式。"})
                 return
 
-            # validate_papers 暂时跳过，直接返回搜索结果便于排查
-            final = papers[:VALIDATED_LIMIT]
+            yield sse("progress", {"message": f"找到 {len(papers)} 篇论文，正在验证相关性..."})
+            validated = await validate_papers(papers, request.query, request.api_key)
+            final = validated[:VALIDATED_LIMIT]
 
             papers_dict = [p.model_dump() for p in final]
             yield sse("done", {
