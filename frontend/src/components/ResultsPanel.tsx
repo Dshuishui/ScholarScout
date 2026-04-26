@@ -104,26 +104,35 @@ export function ResultsPanel({ papers, rejectedPapers = [], isLoading, statusMes
   const [editKeywords, setEditKeywords] = useState<string[]>([])
   const [newKw, setNewKw] = useState('')
   const [sortBy, setSortBy] = useState<SortOption>('relevance')
-  const [showRejected, setShowRejected] = useState(false)
+  const [activeTab, setActiveTab] = useState<'filtered' | 'all'>('filtered')
 
+  // 新搜索完成时重置到筛选后视图
   useEffect(() => {
     setCurrentPage(1)
     setSelectedIds(new Set())
     setAppliedSettings(settings)
+    setActiveTab('filtered')
   }, [papers]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // 排序变化时回到第一页
-  useEffect(() => { setCurrentPage(1) }, [sortBy])
+  // 切换 tab 或排序时回到第一页
+  useEffect(() => { setCurrentPage(1) }, [sortBy, activeTab])
+
+  const rejectedIds = useMemo(() => new Set(rejectedPapers.map(p => p.paper_id)), [rejectedPapers])
+
+  const activePapers = useMemo(
+    () => activeTab === 'filtered' ? papers : [...papers, ...rejectedPapers],
+    [activeTab, papers, rejectedPapers]
+  )
 
   const sortedPapers = useMemo(() => {
-    if (sortBy === 'relevance') return papers
-    return [...papers].sort((a, b) => {
+    if (sortBy === 'relevance') return activePapers
+    return [...activePapers].sort((a, b) => {
       if (sortBy === 'citations') return b.citations - a.citations
       const da = a.published_date ?? ''
       const db = b.published_date ?? ''
       return sortBy === 'date_desc' ? db.localeCompare(da) : da.localeCompare(db)
     })
-  }, [papers, sortBy])
+  }, [activePapers, sortBy])
 
   // Sync keyword editor when a new search completes
   useEffect(() => {
@@ -247,19 +256,8 @@ export function ResultsPanel({ papers, rejectedPapers = [], isLoading, statusMes
         {papers.length > 0 && (
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-xs text-gray-400">
-              {totalPages > 1 ? `${start}–${end} / ${papers.length} 篇` : `${papers.length} 篇`}
+              {totalPages > 1 ? `${start}–${end} / ${sortedPapers.length} 篇` : `${sortedPapers.length} 篇`}
             </span>
-
-            <select
-              value={sortBy}
-              onChange={e => setSortBy(e.target.value as SortOption)}
-              className="text-xs text-gray-600 border border-gray-200 rounded-lg px-2 py-1 bg-white cursor-pointer hover:border-gray-300 transition-colors"
-            >
-              <option value="relevance">相关性优先</option>
-              <option value="citations">引用数最高</option>
-              <option value="date_desc">最新发表</option>
-              <option value="date_asc">最早发表</option>
-            </select>
 
             <div className="flex items-center gap-1">
               <button
@@ -331,6 +329,55 @@ export function ResultsPanel({ papers, rejectedPapers = [], isLoading, statusMes
             placeholder="+ 添加"
             className="text-xs border border-dashed border-gray-300 rounded-full px-2.5 py-1 outline-none focus:border-blue-400 bg-transparent text-gray-600 placeholder-gray-300 w-20"
           />
+        </div>
+      )}
+
+      {/* Tab 栏 + 排序 */}
+      {(papers.length > 0 || rejectedPapers.length > 0) && (
+        <div className="px-5 py-0 bg-white border-b border-gray-200 flex items-center justify-between">
+          <div className="flex">
+            <button
+              onClick={() => setActiveTab('filtered')}
+              className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+                activeTab === 'filtered'
+                  ? 'border-blue-600 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              AI 筛选后
+              <span className={`ml-1.5 text-xs rounded-full px-1.5 py-0.5 ${
+                activeTab === 'filtered' ? 'bg-blue-100 text-blue-600' : 'bg-gray-100 text-gray-500'
+              }`}>
+                {papers.length}
+              </span>
+            </button>
+            <button
+              onClick={() => setActiveTab('all')}
+              className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+                activeTab === 'all'
+                  ? 'border-blue-600 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              全部结果
+              <span className={`ml-1.5 text-xs rounded-full px-1.5 py-0.5 ${
+                activeTab === 'all' ? 'bg-blue-100 text-blue-600' : 'bg-gray-100 text-gray-500'
+              }`}>
+                {papers.length + rejectedPapers.length}
+              </span>
+            </button>
+          </div>
+
+          <select
+            value={sortBy}
+            onChange={e => setSortBy(e.target.value as SortOption)}
+            className="text-xs text-gray-600 border border-gray-200 rounded-lg px-2.5 py-1.5 bg-white cursor-pointer hover:border-gray-300 transition-colors"
+          >
+            <option value="relevance">相关性优先</option>
+            <option value="citations">引用数最高</option>
+            <option value="date_desc">最新发表</option>
+            <option value="date_asc">最早发表</option>
+          </select>
         </div>
       )}
 
@@ -413,31 +460,12 @@ export function ResultsPanel({ papers, rejectedPapers = [], isLoading, statusMes
             key={paper.paper_id}
             paper={paper}
             selected={selectedIds.has(paper.paper_id)}
-            onToggle={() => togglePaper(paper.paper_id)}
+            onToggle={activeTab === 'filtered' || !rejectedIds.has(paper.paper_id) ? () => togglePaper(paper.paper_id) : undefined}
+            isRejected={rejectedIds.has(paper.paper_id)}
           />
         ))}
 
         <Pagination current={currentPage} total={totalPages} onChange={p => { setCurrentPage(p) }} />
-
-        {/* AI 过滤掉的论文：折叠区 */}
-        {rejectedPapers.length > 0 && (
-          <div className="mt-4 border border-gray-200 rounded-xl overflow-hidden">
-            <button
-              onClick={() => setShowRejected(v => !v)}
-              className="w-full flex items-center justify-between px-4 py-2.5 bg-gray-50 hover:bg-gray-100 transition-colors text-xs font-medium text-gray-500"
-            >
-              <span>AI 认为不相关（{rejectedPapers.length} 篇）— 可能存在误判，点击查看</span>
-              <span className="text-gray-400">{showRejected ? '▲' : '▼'}</span>
-            </button>
-            {showRejected && (
-              <div className="divide-y divide-gray-100 p-3 space-y-2.5 bg-white">
-                {rejectedPapers.map(paper => (
-                  <PaperCard key={paper.paper_id} paper={paper} />
-                ))}
-              </div>
-            )}
-          </div>
-        )}
       </div>
 
       {/* 下载进度浮层 */}

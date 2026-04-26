@@ -5,9 +5,10 @@ interface Props {
   paper: Paper
   selected?: boolean
   onToggle?: () => void
+  isRejected?: boolean
 }
 
-export function PaperCard({ paper, selected = false, onToggle }: Props) {
+export function PaperCard({ paper, selected = false, onToggle, isRejected = false }: Props) {
   const year = paper.published_date?.slice(0, 4) ?? '未知年份'
   const authorStr =
     paper.authors.slice(0, 3).join(', ') +
@@ -15,8 +16,10 @@ export function PaperCard({ paper, selected = false, onToggle }: Props) {
 
   return (
     <div
-      className={`bg-white border rounded-xl p-4 hover:shadow-md transition-all flex gap-3 ${
-        selected ? 'border-blue-400 shadow-sm bg-blue-50/30' : 'border-gray-200 hover:border-gray-300'
+      className={`border rounded-xl p-4 hover:shadow-md transition-all flex gap-3 ${
+        selected ? 'border-blue-400 shadow-sm bg-blue-50/30' :
+        isRejected ? 'border-gray-200 bg-gray-50/60 hover:border-gray-300' :
+        'bg-white border-gray-200 hover:border-gray-300'
       }`}
     >
       {onToggle && (
@@ -55,6 +58,9 @@ export function PaperCard({ paper, selected = false, onToggle }: Props) {
           )}
           {paper.citations > 0 && (
             <span className="ml-2 text-gray-400">被引 {paper.citations}</span>
+          )}
+          {isRejected && (
+            <span className="ml-2 text-orange-500 bg-orange-50 border border-orange-100 rounded px-1.5 py-0.5 text-xs">AI 认为不相关</span>
           )}
         </p>
 
