@@ -3,7 +3,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse, Response
 from models import SearchRequest, ParseRequest, ParsedQuery
 from services.llm_service import classify_intent, parse_query, validate_papers
-from services.search_service import search_all_sources
+from services.search_service import search_all_sources, enhance_with_unpaywall
 from services.download_service import fetch_pdf_bytes
 
 router = APIRouter()
@@ -61,7 +61,10 @@ async def search(request: SearchRequest):
                 yield sse("done", {"papers": [], "message": "未找到相关论文，请尝试换个描述方式。"})
                 return
 
-            yield sse("progress", {"message": f"找到 {len(papers)} 篇论文，正在验证相关性..."})
+            yield sse("progress", {"message": f"找到 {len(papers)} 篇论文，正在补全 PDF 链接..."})
+            papers = await enhance_with_unpaywall(papers)
+
+            yield sse("progress", {"message": f"正在验证相关性..."})
             validated = await validate_papers(papers, request.query, request.api_key)
             final = validated[:request.validated_limit]
 

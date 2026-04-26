@@ -1,9 +1,10 @@
 import asyncio
+import re
 import xml.etree.ElementTree as ET
 import feedparser
 import httpx
 from models import Paper, ParsedQuery
-from config import CORE_API_KEY, NASA_ADS_API_KEY
+from config import CORE_API_KEY, NASA_ADS_API_KEY, POLITE_EMAIL
 
 
 async def _search_arxiv(parsed: ParsedQuery, limit: int) -> list[Paper]:
@@ -108,7 +109,7 @@ async def _search_openalex(parsed: ParsedQuery, limit: int) -> list[Paper]:
             resp = await client.get(
                 "https://api.openalex.org/works",
                 params=params,
-                headers={"User-Agent": "ScholarScout/1.0 (mailto:user@example.com)"},
+                headers={"User-Agent": "ScholarScout/1.0 (mailto:sasakinakamura9@gmail.com)"},
             )
             resp.raise_for_status()
             data = resp.json()
@@ -164,7 +165,7 @@ async def _search_pubmed(parsed: ParsedQuery, limit: int) -> list[Paper]:
             search_params["mindate"] = parsed.date_from[:4]
             search_params["maxdate"] = "3000"
 
-        headers = {"User-Agent": "ScholarScout/1.0 (mailto:user@example.com)"}
+        headers = {"User-Agent": "ScholarScout/1.0 (mailto:sasakinakamura9@gmail.com)"}
         async with httpx.AsyncClient(timeout=20) as client:
             search_resp = await client.get(
                 "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi",
@@ -444,6 +445,122 @@ async def _search_nasa_ads(parsed: ParsedQuery, limit: int) -> list[Paper]:
         return []
 
 
+async def _search_crossref(parsed: ParsedQuery, limit: int) -> list[Paper]:
+    """CrossRef：1.5亿+ 文献元数据，无需 Key，覆盖人文 / 工程 / 自然科学"""
+    try:
+        params: dict = {
+            "query": " ".join(parsed.keywords),
+            "rows": limit,
+            "mailto": POLITE_EMAIL,
+            "select": "DOI,title,author,published-print,published-online,abstract,is-referenced-by-count,URL,link",
+        }
+        if parsed.date_from:
+            params["filter"] = f"from-pub-date:{parsed.date_from[:4]}"
+
+        async with httpx.AsyncClient(timeout=20) as client:
+            resp = await client.get(
+                "https://api.crossref.org/works",
+                params=params,
+                headers={"User-Agent": f"ScholarScout/1.0 (mailto:{POLITE_EMAIL})"},
+            )
+            resp.raise_for_status()
+            data = resp.json()
+
+        papers = []
+        for item in data.get("message", {}).get("items", []):
+            titles = item.get("title") or []
+            title = titles[0].strip() if titles else ""
+            if not title:
+                continue
+
+            doi = item.get("DOI")
+
+            # 日期：优先 published-print，其次 published-online
+            pub_date = None
+            for date_key in ("published-print", "published-online", "created"):
+                parts_wrap = (item.get(date_key) or {}).get("date-parts", [[]])
+                if parts_wrap and parts_wrap[0]:
+                    parts = parts_wrap[0]
+                    year = parts[0] if len(parts) > 0 else None
+                    month = parts[1] if len(parts) > 1 else 1
+                    day = parts[2] if len(parts) > 2 else 1
+                    if year:
+                        pub_date = f"{year}-{month:02d}-{day:02d}"
+                        break
+
+            authors = []
+            for a in (item.get("author") or [])[:10]:
+                given = a.get("given", "")
+                family = a.get("family", "")
+                name = f"{given} {family}".strip() if given else family
+                if name:
+                    authors.append(name)
+
+            # 摘要去除 JATS XML 标签
+            abstract_raw = item.get("abstract") or ""
+            abstract: str | None = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", abstract_raw)).strip() or None
+
+            # 从 link 数组找 PDF
+            pdf_url = None
+            for link in (item.get("link") or []):
+                if "pdf" in (link.get("content-type") or "").lower():
+                    pdf_url = link.get("URL")
+                    break
+
+            url = item.get("URL") or (f"https://doi.org/{doi}" if doi else None)
+            paper_id = f"crossref_{doi.replace('/', '_')}" if doi else f"crossref_{abs(hash(title))}"
+
+            papers.append(Paper(
+                paper_id=paper_id,
+                title=title,
+                authors=authors,
+                abstract=abstract,
+                published_date=pub_date,
+                doi=doi,
+                pdf_url=pdf_url,
+                url=url,
+                source="CrossRef",
+                citations=item.get("is-referenced-by-count", 0) or 0,
+            ))
+        return papers
+    except Exception as e:
+        print(f"CrossRef search error: {e}")
+        return []
+
+
+async def enhance_with_unpaywall(papers: list[Paper]) -> list[Paper]:
+    """为有 DOI 但无 PDF 的论文查询 Unpaywall，尝试补全开放获取 PDF 链接。"""
+    to_enhance = [p for p in papers if p.doi and not p.pdf_url]
+    if not to_enhance:
+        return papers
+
+    sem = asyncio.Semaphore(5)
+
+    async def fetch_pdf(paper: Paper) -> tuple[str, str | None]:
+        async with sem:
+            try:
+                async with httpx.AsyncClient(timeout=6) as client:
+                    resp = await client.get(
+                        f"https://api.unpaywall.org/v2/{paper.doi}",
+                        params={"email": POLITE_EMAIL},
+                    )
+                    if resp.status_code == 200:
+                        loc = resp.json().get("best_oa_location") or {}
+                        pdf_url = loc.get("url_for_pdf") or loc.get("url")
+                        return paper.paper_id, pdf_url
+            except Exception:
+                pass
+        return paper.paper_id, None
+
+    results = await asyncio.gather(*[fetch_pdf(p) for p in to_enhance])
+    pdf_map = {pid: url for pid, url in results if url}
+
+    return [
+        p.model_copy(update={"pdf_url": pdf_map[p.paper_id]}) if p.paper_id in pdf_map else p
+        for p in papers
+    ]
+
+
 def deduplicate(papers: list[Paper]) -> list[Paper]:
     seen_dois: set[str] = set()
     seen_titles: set[str] = set()
@@ -471,6 +588,7 @@ async def search_all_sources(parsed: ParsedQuery, limit_per_source: int = 10) ->
         _search_inspire(parsed, limit_per_source),
         _search_europepmc(parsed, limit_per_source),
         _search_nasa_ads(parsed, limit_per_source),
+        _search_crossref(parsed, limit_per_source),
     )
     all_papers = [p for source_results in results for p in source_results]
     return deduplicate(all_papers)
