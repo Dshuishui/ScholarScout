@@ -13,9 +13,11 @@
 - **前端参数配置**：右侧常驻参数栏可调整每源抓取数 / 验证后展示数（精度 1 篇），持久化到 localStorage，修改后出现"重新搜索"按钮
 - **关键词可视化确认与编辑**：AI 提取关键词后在左侧展示可编辑 Tag，用户确认后再搜索；结果页右侧持续显示关键词，支持增删及重新搜索（Issue B）
 - **移除 paper-search-mcp**：改为直接依赖 feedparser，自实现所有搜索源
-- **搜索源扩展至 8 个**：
-  - 无需 Key：arXiv、Semantic Scholar、OpenAlex、PubMed、Europe PMC、INSPIRE-HEP
-  - 需免费 Key：CORE、NASA ADS
+- **搜索源扩展至 10 个**：
+  - 无需 Key：arXiv、Semantic Scholar、OpenAlex、PubMed、Europe PMC、INSPIRE-HEP、CrossRef
+  - 需免费 Key：CORE、NASA ADS、Google Scholar（SerpAPI）
+- **Unpaywall PDF 补全**：搜索后自动为有 DOI 但缺 PDF 的论文查找开放获取版本
+- **智能去重合并**：DOI 精确匹配 + 标题规范化（Unicode/标点）双重判断，重复时合并最优字段（PDF、摘要取更长、引用数取最大）
 - **API Key 安全管理**：通过环境变量 + python-dotenv 加载，不写入代码
 - **本地开发**：`backend/.env` 文件配置 Key，`.gitignore` 已排除
 - **服务器部署**：`/etc/scholarscout/env` 文件配置 Key，systemd EnvironmentFile 读取
@@ -113,6 +115,5 @@ docker compose up
 
 1. **Issue E**（Semantic Scholar Key）— Key 到了直接加，10 分钟
 2. **Issue F**（CI）— 工程质量保障，改动不大
-3. **Issue B**（关键词编辑）— 交互改动最复杂
-4. **Issue G/H**（日志 + 健康检查）— 小改动，生产质量提升
-5. **Issue I**（Docker）— 有需求再做
+3. **Issue G/H**（日志 + 健康检查）— 小改动，生产质量提升
+4. **Issue I**（Docker）— 有需求再做
