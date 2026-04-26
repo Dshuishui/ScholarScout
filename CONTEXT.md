@@ -22,6 +22,7 @@
 LLM  DeepSeek API（用户自带 Key，前端 localStorage 存储）
 搜索 10 个数据源并发 + Unpaywall PDF 补全
 部署 Nginx + systemd，ubuntu 用户
+CI   GitHub Actions（backend pytest + frontend tsc build）
 ```
 
 ### 搜索源（10 个）
@@ -41,17 +42,16 @@ LLM  DeepSeek API（用户自带 Key，前端 localStorage 存储）
 
 **Unpaywall**：搜索后对有 DOI 但无 PDF 的论文自动查找开放获取 PDF（无需 Key）。
 
-**Google Scholar 双保险**：scholarly + 服务器代理优先，失败自动回退 SerpAPI。服务器代理通过 `PROXY_URL` 或 `HTTP_PROXY`/`http_proxy` 环境变量读取。
+**Google Scholar 双保险**：scholarly + 服务器代理优先，失败自动回退 SerpAPI。
 
 ### 核心流程（两阶段）
 
-1. 用户发消息 → `POST /api/parse`：`classify_intent()` 判断意图 + `parse_query()` 提取关键词，返回普通 JSON
-2. 前端展示可编辑关键词 Tag（左侧输入区），用户确认/增删后提交
-3. `POST /api/search`（携带确认后的 keywords）→ 10 源并发搜索，每源最多 N 篇
-4. 去重（DOI精确 + 标题规范化双重判断，重复时合并最优字段）→ Unpaywall 补全 PDF
-5. `validate_papers()` 并行分批（每批 20 篇）LLM 过滤相关性
-6. SSE 流式返回进度和结果，前端展示（分页 20 篇/页）
-7. 右侧结果区持续显示关键词，用户可随时调整关键词或参数，一键重新搜索
+1. 用户发消息 → `POST /api/parse`：`classify_intent()` 判断意图 + `parse_query()` 提取关键词
+2. 前端展示可编辑关键词 Tag（左侧），用户确认/增删后提交
+3. `POST /api/search`（携带确认后的 keywords）→ 10 源并发搜索
+4. 去重 → Unpaywall 补全 PDF → `validate_papers()` 并行分批 LLM 过滤
+5. SSE 流式返回 `{ papers, rejected_papers, message }`
+6. 前端 Tab 切换"AI 筛选后 / 全部结果"展示，支持排序、分页、批量下载
 
 ---
 
@@ -59,82 +59,71 @@ LLM  DeepSeek API（用户自带 Key，前端 localStorage 存储）
 
 ```
 backend/
-├── config.py              # Key + PROXY_URL + POLITE_EMAIL 等配置，从环境变量读取
-├── models.py              # Paper（含 source_links）, ParseRequest, SearchRequest, ParsedQuery
+├── config.py              # Key + PROXY_URL + POLITE_EMAIL 等配置
+├── models.py              # Paper（含 source_links, venue）, ParseRequest, SearchRequest
+├── main.py                # FastAPI 入口，配置结构化日志
 ├── .env.example           # Key 配置模板
 ├── services/
-│   ├── llm_service.py     # classify_intent, parse_query, validate_papers（并行分批）
-│   ├── search_service.py  # 10 源 + Unpaywall + 智能去重合并（_normalize_title/_merge/deduplicate）
-│   └── download_service.py# PDF 代理下载，域名白名单
-└── routers/search.py      # POST /api/parse, SSE /api/search, /api/download
+│   ├── llm_service.py     # classify_intent, parse_query, validate_papers → (accepted, rejected)
+│   ├── search_service.py  # 10 源 + Unpaywall + 智能去重（venue 从各源提取）
+│   └── download_service.py
+├── routers/search.py      # POST /api/parse, SSE /api/search, GET /api/health, /api/download
+└── tests/                 # 21 个单元测试（dedup, merge, normalize, validate, parse）
 
 frontend/src/
 ├── hooks/
-│   ├── useSearch.ts       # 两阶段搜索（pendingKeywords, confirmedKeywords, confirmSearch, reSearch）
-│   ├── useApiKey.ts       # localStorage Key 管理
-│   └── useSettings.ts     # 搜索参数（每源最多200篇/展示上限500篇），持久化 localStorage
-├── api/client.ts          # parseQuery(), searchPapers()（支持 confirmed keywords）, getDownloadUrl()
-├── types/index.ts         # Paper（含 source_links）, Message, SearchEvent, ParseResult 类型
+│   ├── useSearch.ts       # 两阶段搜索 + rejectedPapers + searchFromHistory
+│   ├── useSearchHistory.ts# localStorage 搜索历史（最近 10 条，去重）
+│   ├── useApiKey.ts
+│   └── useSettings.ts
+├── api/client.ts
+├── types/index.ts         # Paper（venue, source_links）, SearchDoneEvent（rejected_papers）
 └── components/
-    ├── KeySetupScreen.tsx  # 首次 Key 输入页
-    ├── MainLayout.tsx      # 左右分栏容器，串联 confirmedKeywords/reSearch
-    ├── ChatPanel.tsx       # 左侧对话区（含关键词确认编辑器）
-    ├── ResultsPanel.tsx    # 右侧（关键词行、参数栏、排序、分页、批量下载、导出 CSV）
-    ├── PaperCard.tsx       # 单篇论文卡片（多来源链接、checkbox 批量选择）
-    └── MessageBubble.tsx   # 对话气泡
+    ├── MainLayout.tsx
+    ├── ChatPanel.tsx      # 对话 + 关键词确认 + 搜索历史（时钟图标，一键复用）
+    ├── ResultsPanel.tsx   # Tab(筛选后/全部) + 参数折叠面板 + 排序 + 分页 + 批量下载
+    └── PaperCard.tsx      # 左侧彩色竖条(按源) + 作者行右侧显示 venue + 来源圆角徽章
+
+.github/workflows/ci.yml  # backend pytest + frontend tsc build
 
 deploy/
-├── setup.sh               # 首次部署
-├── deploy.sh              # 后续更新（pull → uv sync → npm build → 重启）
-├── nginx.conf             # server_name 目前是 IP
-└── scholarscout-backend.service  # EnvironmentFile=-/etc/scholarscout/env
+├── setup.sh / deploy.sh
+├── nginx.conf
+└── scholarscout-backend.service
 ```
+
+---
+
+## 前端 UI 设计要点
+
+- **论文卡片**：左侧 3px 竖条按来源着色（10 色），来源 badge 圆角彩色，作者行左侧截断 + 右侧 venue
+- **Tab 栏**："AI 筛选后（N）/ 全部结果（N+M）"+ 右侧排序下拉 + 参数折叠按钮（显示当前值）
+- **关键词行**：实心蓝色 pill tags + 右端"重新搜索"按钮（有变更时出现）
+- **空状态**：书本 SVG + 描述 + 3 个示例查询
+- **加载状态**：旋转圆环 + 实时进度文字
+- **搜索历史**：时钟图标 + hover 显示 ✕ 删除
 
 ---
 
 ## API Key 管理
 
-- **本地开发**：`backend/.env`（已加入 .gitignore），参考 `.env.example`
-- **服务器**：`/etc/scholarscout/env`，chmod 600，systemd EnvironmentFile 读取
+- **本地开发**：`backend/.env`（已加入 .gitignore）
+- **服务器**：`/etc/scholarscout/env`，systemd EnvironmentFile 读取
 - **当前服务器已配置**：NASA_ADS_API_KEY、SERPAPI_KEY、PROXY_URL（http://127.0.0.1:7890）
-- **待配置**：CORE_API_KEY（注册中）、SEMANTIC_SCHOLAR_API_KEY（申请中）
+- **待配置**：CORE_API_KEY（注册中）
 
 ---
 
-## 功能清单
+## 待做
 
-### 已完成
-- [x] 自然语言搜索（DeepSeek 意图识别 + 关键词提取）
-- [x] 关键词可视化确认与编辑（两阶段流程，左侧 Tag 编辑器）
-- [x] 结果页关键词持久显示，支持增删及重新搜索
-- [x] 多源并发搜索（10 源，自实现）
-- [x] Unpaywall 自动补全 PDF 链接
-- [x] 智能去重合并（DOI + 标题规范化，重复时合并最优字段）
-- [x] 多来源链接展示（同一论文被多个源命中，卡片显示所有来源按钮）
-- [x] AI 相关性过滤（并行分批验证，20 篇/批）
-- [x] 对话上下文（最近 8 条历史携带给 LLM）
-- [x] 排序功能（相关性 / 引用数 / 最新 / 最早）
-- [x] 分页展示（20 篇/页）+ 导出 CSV
-- [x] 批量选择下载 PDF（ZIP 打包，失败明细写入 failed_downloads.csv）
-- [x] 前端动态配置搜索参数（每源最多 200 篇 / 展示上限 500 篇）
-- [x] 部署脚本（setup.sh 首次 + deploy.sh 更新）
-- [x] .gitignore 清理（移除 __pycache__，补全 .DS_Store）
-
-### 待做（详见 docs/backlog.md）
-- [ ] Issue E：Semantic Scholar API Key（申请中）
-- [ ] Issue F：CI/CD（GitHub Actions 自动跑测试）
-- [ ] Issue G：结构化日志（替换 print）
-- [ ] Issue H：健康检查接口 GET /api/health
-- [ ] Issue I：Docker 支持
-- [ ] 期刊/会议标注（venue 字段，从 S2/CrossRef/OpenAlex 提取）
-- [ ] AI 筛选前后分开展示（已过滤论文可折叠查看，防止误判）
+- Issue I：Docker 支持（暂缓，有需求再做）
+- README 截图更新（需手动截图后放入 `docs/screenshots/`）
 
 ---
 
 ## 开发约定
 
 - 后端用 `uv`（`uv add` 装包，`uv sync --no-dev` 生产部署）
-- 服务器更新：`bash deploy/deploy.sh`（自动 pull + uv sync + npm build + 重启）
+- 服务器更新：`bash deploy/deploy.sh`
 - 前端改动后跑 `npm run build` 确认 TypeScript 无错误
-- API Key 不写入代码，通过环境变量或 .env 文件配置
-- Google Scholar：scholarly + 代理优先，SerpAPI 兜底，不在 README 中公开说明
+- API Key 不写入代码
