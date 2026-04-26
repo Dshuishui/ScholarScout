@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { ChatPanel } from './ChatPanel'
 import { ResultsPanel } from './ResultsPanel'
 import { useSearch } from '../hooks/useSearch'
@@ -11,6 +12,12 @@ interface Props {
 export function MainLayout({ apiKey, onClearKey }: Props) {
   const { settings, updateSettings } = useSettings()
   const { messages, papers, isLoading, statusMessage, search } = useSearch(apiKey, settings)
+  const [lastQuery, setLastQuery] = useState('')
+
+  const handleSearch = (query: string) => {
+    setLastQuery(query)
+    search(query)
+  }
 
   return (
     <div className="h-screen flex overflow-hidden">
@@ -18,7 +25,7 @@ export function MainLayout({ apiKey, onClearKey }: Props) {
         <ChatPanel
           messages={messages}
           isLoading={isLoading}
-          onSearch={search}
+          onSearch={handleSearch}
           onClearKey={onClearKey}
         />
       </div>
@@ -29,6 +36,7 @@ export function MainLayout({ apiKey, onClearKey }: Props) {
           statusMessage={statusMessage}
           settings={settings}
           onSettingsChange={updateSettings}
+          onReSearch={lastQuery ? () => search(lastQuery) : undefined}
         />
       </div>
     </div>

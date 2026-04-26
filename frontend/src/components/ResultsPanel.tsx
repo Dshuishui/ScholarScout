@@ -13,6 +13,7 @@ interface Props {
   isLoading: boolean
   settings: SearchSettings
   onSettingsChange: (patch: Partial<SearchSettings>) => void
+  onReSearch?: () => void
   statusMessage: string
 }
 
@@ -91,13 +92,22 @@ function Pagination({ current, total, onChange }: {
   )
 }
 
-export function ResultsPanel({ papers, isLoading, statusMessage, settings, onSettingsChange }: Props) {
+export function ResultsPanel({ papers, isLoading, statusMessage, settings, onSettingsChange, onReSearch }: Props) {
   const [currentPage, setCurrentPage] = useState(1)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [downloadProgress, setDownloadProgress] = useState<DownloadProgress | null>(null)
-  const [showSettings, setShowSettings] = useState(false)
+  const [appliedSettings, setAppliedSettings] = useState(settings)
 
-  useEffect(() => { setCurrentPage(1); setSelectedIds(new Set()) }, [papers])
+  useEffect(() => {
+    setCurrentPage(1)
+    setSelectedIds(new Set())
+    setAppliedSettings(settings)
+  }, [papers]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const settingsChanged = papers.length > 0 && (
+    appliedSettings.limitPerSource !== settings.limitPerSource ||
+    appliedSettings.validatedLimit !== settings.validatedLimit
+  )
 
   const totalPages = Math.ceil(papers.length / ITEMS_PER_PAGE)
   const pagePapers = papers.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE)
@@ -192,28 +202,14 @@ export function ResultsPanel({ papers, isLoading, statusMessage, settings, onSet
     <div className="flex flex-col h-full bg-gray-50">
       {/* 顶部标题栏 */}
       <div className="px-5 py-3 border-b border-gray-200 bg-white flex items-center justify-between gap-3 flex-wrap">
-        <div className="flex items-center gap-2 flex-shrink-0">
-          <h2 className="text-sm font-semibold text-gray-700">搜索结果</h2>
-          <button
-            onClick={() => setShowSettings(v => !v)}
-            title="搜索参数设置"
-            className={`p-1 rounded-md transition-colors ${showSettings ? 'text-blue-600 bg-blue-50' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'}`}
-          >
-            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-            </svg>
-          </button>
-        </div>
+        <h2 className="text-sm font-semibold text-gray-700 flex-shrink-0">搜索结果</h2>
 
         {papers.length > 0 && (
           <div className="flex items-center gap-2 flex-wrap">
-            {/* 计数 */}
             <span className="text-xs text-gray-400">
               {totalPages > 1 ? `${start}–${end} / ${papers.length} 篇` : `${papers.length} 篇`}
             </span>
 
-            {/* 全选操作 */}
             <div className="flex items-center gap-1">
               <button
                 onClick={allPageSelected ? clearSelection : selectPage}
@@ -229,7 +225,6 @@ export function ResultsPanel({ papers, isLoading, statusMessage, settings, onSet
               </button>
             </div>
 
-            {/* 已选提示 + 下载 */}
             {selectedIds.size > 0 && (
               <button
                 onClick={downloadSelected}
@@ -246,7 +241,6 @@ export function ResultsPanel({ papers, isLoading, statusMessage, settings, onSet
               </button>
             )}
 
-            {/* 导出 CSV */}
             <button
               onClick={() => exportCSV(papers)}
               className="flex items-center gap-1 text-xs text-gray-500 hover:text-blue-600 border border-gray-200 hover:border-blue-300 bg-white hover:bg-blue-50 rounded-lg px-2.5 py-1 transition-all"
@@ -260,45 +254,51 @@ export function ResultsPanel({ papers, isLoading, statusMessage, settings, onSet
         )}
       </div>
 
-      {/* 设置面板 */}
-      {showSettings && (
-        <div className="px-5 py-4 bg-gray-50 border-b border-gray-200">
-          <p className="text-xs font-medium text-gray-500 mb-3">搜索参数</p>
-          <div className="space-y-3">
-            <div>
-              <div className="flex justify-between items-center mb-1.5">
-                <label className="text-xs text-gray-600">每个数据源抓取论文数</label>
-                <span className="text-xs font-mono text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded">{settings.limitPerSource} 篇</span>
-              </div>
-              <input
-                type="range" min={10} max={100} step={5}
-                value={settings.limitPerSource}
-                onChange={e => onSettingsChange({ limitPerSource: Number(e.target.value) })}
-                className="w-full accent-blue-600"
-              />
-              <div className="flex justify-between text-xs text-gray-300 mt-0.5">
-                <span>10</span><span>少而精</span><span>↔</span><span>多而广</span><span>100</span>
-              </div>
-            </div>
-            <div>
-              <div className="flex justify-between items-center mb-1.5">
-                <label className="text-xs text-gray-600">AI 验证后最多展示</label>
-                <span className="text-xs font-mono text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded">{settings.validatedLimit} 篇</span>
-              </div>
-              <input
-                type="range" min={10} max={200} step={10}
-                value={settings.validatedLimit}
-                onChange={e => onSettingsChange({ validatedLimit: Number(e.target.value) })}
-                className="w-full accent-blue-600"
-              />
-              <div className="flex justify-between text-xs text-gray-300 mt-0.5">
-                <span>10</span><span>100</span><span>200</span>
-              </div>
-            </div>
-          </div>
-          <p className="text-xs text-gray-400 mt-3">设置自动保存，下次搜索生效</p>
+      {/* 搜索参数栏 - 始终可见 */}
+      <div className="px-5 py-2.5 bg-white border-b border-gray-200 flex items-center gap-5 flex-wrap">
+        <span className="text-xs font-semibold text-gray-600 shrink-0">搜索参数</span>
+
+        <div className="flex items-center gap-2 shrink-0">
+          <label className="text-xs font-medium text-gray-700">每源抓取</label>
+          <input
+            type="range" min={10} max={100} step={5}
+            value={settings.limitPerSource}
+            onChange={e => onSettingsChange({ limitPerSource: Number(e.target.value) })}
+            className="w-28 accent-blue-600 cursor-pointer"
+          />
+          <span className="text-xs font-bold text-blue-600 w-10 text-right tabular-nums">
+            {settings.limitPerSource} 篇
+          </span>
         </div>
-      )}
+
+        <div className="flex items-center gap-2 shrink-0">
+          <label className="text-xs font-medium text-gray-700">展示上限</label>
+          <input
+            type="range" min={10} max={200} step={10}
+            value={settings.validatedLimit}
+            onChange={e => onSettingsChange({ validatedLimit: Number(e.target.value) })}
+            className="w-28 accent-blue-600 cursor-pointer"
+          />
+          <span className="text-xs font-bold text-blue-600 w-10 text-right tabular-nums">
+            {settings.validatedLimit} 篇
+          </span>
+        </div>
+
+        {settingsChanged && onReSearch ? (
+          <button
+            onClick={onReSearch}
+            disabled={isLoading}
+            className="flex items-center gap-1.5 text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg px-3 py-1.5 transition-all shadow-sm"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+            重新搜索
+          </button>
+        ) : (
+          <span className="text-xs text-gray-400">调整参数后可重新搜索</span>
+        )}
+      </div>
 
       {/* 状态栏 */}
       {statusMessage && (
