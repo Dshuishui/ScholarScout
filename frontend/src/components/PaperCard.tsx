@@ -49,7 +49,7 @@ export function PaperCard({ paper, selected = false, onToggle }: Props) {
             {paper.source}
           </span>
           {paper.venue && (
-            <span className="ml-1.5 inline-flex items-center bg-purple-50 text-purple-600 border border-purple-100 rounded px-1.5 py-0.5 max-w-[160px] truncate" title={paper.venue}>
+            <span className="ml-1.5 inline-block align-middle bg-purple-50 text-purple-600 border border-purple-100 rounded px-1.5 py-0.5 max-w-[160px] truncate" title={paper.venue}>
               {paper.venue}
             </span>
           )}
