@@ -48,6 +48,11 @@ export function PaperCard({ paper, selected = false, onToggle }: Props) {
           <span className="inline-flex items-center bg-gray-100 text-gray-600 rounded px-1.5 py-0.5">
             {paper.source}
           </span>
+          {paper.venue && (
+            <span className="ml-1.5 inline-flex items-center bg-purple-50 text-purple-600 border border-purple-100 rounded px-1.5 py-0.5 max-w-[160px] truncate" title={paper.venue}>
+              {paper.venue}
+            </span>
+          )}
           {paper.citations > 0 && (
             <span className="ml-2 text-gray-400">被引 {paper.citations}</span>
           )}

@@ -11,7 +11,7 @@ interface Props {
 export function MainLayout({ apiKey, onClearKey }: Props) {
   const { settings, updateSettings } = useSettings()
   const {
-    messages, papers, isLoading, statusMessage,
+    messages, papers, rejectedPapers, isLoading, statusMessage,
     search, pendingKeywords, confirmedKeywords, confirmSearch, cancelSearch, reSearch,
   } = useSearch(apiKey, settings)
 
@@ -31,6 +31,7 @@ export function MainLayout({ apiKey, onClearKey }: Props) {
       <div className="flex-1 min-w-0 relative">
         <ResultsPanel
           papers={papers}
+          rejectedPapers={rejectedPapers}
           isLoading={isLoading}
           statusMessage={statusMessage}
           settings={settings}

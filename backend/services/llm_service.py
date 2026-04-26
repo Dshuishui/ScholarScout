@@ -77,13 +77,16 @@ async def parse_query(user_query: str, api_key: str, history: list[dict] = []) -
     return ParsedQuery(**data)
 
 
-async def validate_papers(papers: list[Paper], user_query: str, api_key: str) -> list[Paper]:
+async def validate_papers(
+    papers: list[Paper], user_query: str, api_key: str
+) -> tuple[list[Paper], list[Paper]]:
+    """返回 (accepted, rejected) 两个列表。"""
     if not papers:
-        return []
+        return [], []
 
     BATCH_SIZE = 20
 
-    async def _validate_batch(batch: list[Paper]) -> list[Paper]:
+    async def _validate_batch(batch: list[Paper]) -> tuple[list[Paper], list[Paper]]:
         papers_text = "\n\n".join(
             f"ID: {p.paper_id}\n标题: {p.title}\n摘要: {(p.abstract or '')[:200]}"
             for p in batch
@@ -99,19 +102,25 @@ async def validate_papers(papers: list[Paper], user_query: str, api_key: str) ->
         )
         raw = json.loads(response.choices[0].message.content)
         verdicts = raw if isinstance(raw, list) else raw.get("results", raw.get("papers", list(raw.values())[0] if raw else []))
-        verdict_map = {v["id"]: v for v in verdicts if v.get("relevant")}
-        result = []
+        verdict_map = {v["id"]: v for v in verdicts}
+        accepted, rejected = [], []
         for p in batch:
-            if p.paper_id in verdict_map:
-                p.relevance_reason = verdict_map[p.paper_id].get("reason")
-                result.append(p)
-        return result
+            v = verdict_map.get(p.paper_id)
+            if v and v.get("relevant"):
+                p.relevance_reason = v.get("reason")
+                accepted.append(p)
+            else:
+                rejected.append(p)
+        return accepted, rejected
 
     batches = [papers[i:i + BATCH_SIZE] for i in range(0, len(papers), BATCH_SIZE)]
     batch_results = await asyncio.gather(*[_validate_batch(b) for b in batches], return_exceptions=True)
 
-    result = []
+    accepted: list[Paper] = []
+    rejected: list[Paper] = []
     for r in batch_results:
         if not isinstance(r, Exception):
-            result.extend(r)
-    return result
+            a, rej = r
+            accepted.extend(a)
+            rejected.extend(rej)
+    return accepted, rejected

@@ -11,6 +11,7 @@ export interface Paper {
   citations: number
   relevance_reason?: string
   source_links?: { source: string; url: string }[]
+  venue?: string
 }
 
 export interface Message {
@@ -29,6 +30,7 @@ export type SearchProgressEvent = {
 export type SearchDoneEvent = {
   type: 'done'
   papers: Paper[]
+  rejected_papers?: Paper[]
   message: string
 }
 

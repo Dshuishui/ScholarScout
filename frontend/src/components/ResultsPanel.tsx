@@ -12,6 +12,7 @@ type SortOption = 'relevance' | 'citations' | 'date_desc' | 'date_asc'
 
 interface Props {
   papers: Paper[]
+  rejectedPapers?: Paper[]
   isLoading: boolean
   settings: SearchSettings
   onSettingsChange: (patch: Partial<SearchSettings>) => void
@@ -95,7 +96,7 @@ function Pagination({ current, total, onChange }: {
   )
 }
 
-export function ResultsPanel({ papers, isLoading, statusMessage, settings, onSettingsChange, onReSearch, confirmedKeywords }: Props) {
+export function ResultsPanel({ papers, rejectedPapers = [], isLoading, statusMessage, settings, onSettingsChange, onReSearch, confirmedKeywords }: Props) {
   const [currentPage, setCurrentPage] = useState(1)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [downloadProgress, setDownloadProgress] = useState<DownloadProgress | null>(null)
@@ -103,6 +104,7 @@ export function ResultsPanel({ papers, isLoading, statusMessage, settings, onSet
   const [editKeywords, setEditKeywords] = useState<string[]>([])
   const [newKw, setNewKw] = useState('')
   const [sortBy, setSortBy] = useState<SortOption>('relevance')
+  const [showRejected, setShowRejected] = useState(false)
 
   useEffect(() => {
     setCurrentPage(1)
@@ -416,6 +418,26 @@ export function ResultsPanel({ papers, isLoading, statusMessage, settings, onSet
         ))}
 
         <Pagination current={currentPage} total={totalPages} onChange={p => { setCurrentPage(p) }} />
+
+        {/* AI 过滤掉的论文：折叠区 */}
+        {rejectedPapers.length > 0 && (
+          <div className="mt-4 border border-gray-200 rounded-xl overflow-hidden">
+            <button
+              onClick={() => setShowRejected(v => !v)}
+              className="w-full flex items-center justify-between px-4 py-2.5 bg-gray-50 hover:bg-gray-100 transition-colors text-xs font-medium text-gray-500"
+            >
+              <span>AI 认为不相关（{rejectedPapers.length} 篇）— 可能存在误判，点击查看</span>
+              <span className="text-gray-400">{showRejected ? '▲' : '▼'}</span>
+            </button>
+            {showRejected && (
+              <div className="divide-y divide-gray-100 p-3 space-y-2.5 bg-white">
+                {rejectedPapers.map(paper => (
+                  <PaperCard key={paper.paper_id} paper={paper} />
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* 下载进度浮层 */}

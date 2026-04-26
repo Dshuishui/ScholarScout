@@ -37,6 +37,7 @@ class Paper(BaseModel):
     citations: int = 0
     relevance_reason: Optional[str] = None
     source_links: list[dict] = []  # [{"source": "arXiv", "url": "..."}]
+    venue: Optional[str] = None
 
 
 class ParsedQuery(BaseModel):

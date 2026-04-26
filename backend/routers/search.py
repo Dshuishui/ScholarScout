@@ -5,6 +5,7 @@ from models import SearchRequest, ParseRequest, ParsedQuery
 from services.llm_service import classify_intent, parse_query, validate_papers
 from services.search_service import search_all_sources, enhance_with_unpaywall
 from services.download_service import fetch_pdf_bytes
+from config import CORE_API_KEY, NASA_ADS_API_KEY, SERPAPI_KEY
 
 router = APIRouter()
 
@@ -65,12 +66,14 @@ async def search(request: SearchRequest):
             papers = await enhance_with_unpaywall(papers)
 
             yield sse("progress", {"message": f"正在验证相关性..."})
-            validated = await validate_papers(papers, request.query, request.api_key)
-            final = validated[:request.validated_limit]
+            accepted, rejected = await validate_papers(papers, request.query, request.api_key)
+            final = accepted[:request.validated_limit]
 
             papers_dict = [p.model_dump() for p in final]
+            rejected_dict = [p.model_dump() for p in rejected]
             yield sse("done", {
                 "papers": papers_dict,
+                "rejected_papers": rejected_dict,
                 "message": f"为您找到 {len(final)} 篇相关论文。"
             })
 
@@ -82,6 +85,25 @@ async def search(request: SearchRequest):
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
+
+
+@router.get("/health")
+async def health():
+    return {
+        "status": "ok",
+        "sources": {
+            "arxiv": True,
+            "semantic_scholar": True,
+            "openalex": True,
+            "pubmed": True,
+            "europe_pmc": True,
+            "inspire_hep": True,
+            "crossref": True,
+            "core": bool(CORE_API_KEY),
+            "nasa_ads": bool(NASA_ADS_API_KEY),
+            "google_scholar_serpapi": bool(SERPAPI_KEY),
+        },
+    }
 
 
 @router.get("/download")

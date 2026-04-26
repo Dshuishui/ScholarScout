@@ -21,6 +21,7 @@ interface PendingSearch {
 export function useSearch(apiKey: string, settings: SearchSettings) {
   const [messages, setMessages] = useState<Message[]>([WELCOME])
   const [papers, setPapers] = useState<Paper[]>([])
+  const [rejectedPapers, setRejectedPapers] = useState<Paper[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [statusMessage, setStatusMessage] = useState('')
   const [pendingSearch, setPendingSearch] = useState<PendingSearch | null>(null)
@@ -36,6 +37,7 @@ export function useSearch(apiKey: string, settings: SearchSettings) {
   ) => {
     setIsLoading(true)
     setPapers([])
+    setRejectedPapers([])
     setStatusMessage('')
     updateAssistant(assistantId, { content: '正在搜索...', isLoading: true })
 
@@ -49,6 +51,7 @@ export function useSearch(apiKey: string, settings: SearchSettings) {
           updateAssistant(assistantId, { content: event.message })
         } else if (event.type === 'done') {
           setPapers(event.papers)
+          setRejectedPapers(event.rejected_papers ?? [])
           setStatusMessage(event.message)
           updateAssistant(assistantId, { content: event.message, isLoading: false, papers: event.papers })
         } else if (event.type === 'error') {
@@ -146,6 +149,7 @@ export function useSearch(apiKey: string, settings: SearchSettings) {
   return {
     messages,
     papers,
+    rejectedPapers,
     isLoading,
     statusMessage,
     search,

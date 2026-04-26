@@ -1,5 +1,6 @@
 import asyncio
 import functools
+import logging
 import re
 import unicodedata
 import xml.etree.ElementTree as ET
@@ -7,6 +8,8 @@ import feedparser
 import httpx
 from models import Paper, ParsedQuery
 from config import CORE_API_KEY, NASA_ADS_API_KEY, SERPAPI_KEY, PROXY_URL, POLITE_EMAIL
+
+logger = logging.getLogger(__name__)
 
 
 async def _search_arxiv(parsed: ParsedQuery, limit: int) -> list[Paper]:
@@ -53,7 +56,7 @@ async def _search_arxiv(parsed: ParsedQuery, limit: int) -> list[Paper]:
                 continue
         return papers
     except Exception as e:
-        print(f"arXiv search error: {e}")
+        logger.warning("arXiv search error: %s", e)
         return []
 
 
@@ -63,7 +66,7 @@ async def _search_semantic_scholar(parsed: ParsedQuery, limit: int) -> list[Pape
         params = {
             "query": query,
             "limit": limit,
-            "fields": "paperId,title,authors,abstract,year,externalIds,openAccessPdf,citationCount",
+            "fields": "paperId,title,authors,abstract,year,externalIds,openAccessPdf,citationCount,venue,publicationVenue",
         }
         if parsed.date_from:
             params["year"] = f"{parsed.date_from[:4]}-"
@@ -79,6 +82,7 @@ async def _search_semantic_scholar(parsed: ParsedQuery, limit: int) -> list[Pape
             year = item.get("year")
             doi = (item.get("externalIds") or {}).get("DOI")
             oa = item.get("openAccessPdf") or {}
+            venue = (item.get("publicationVenue") or {}).get("name") or item.get("venue") or None
             papers.append(Paper(
                 paper_id=item.get("paperId", ""),
                 title=item.get("title", ""),
@@ -90,10 +94,11 @@ async def _search_semantic_scholar(parsed: ParsedQuery, limit: int) -> list[Pape
                 url=f"https://www.semanticscholar.org/paper/{item.get('paperId', '')}",
                 source="Semantic Scholar",
                 citations=item.get("citationCount", 0) or 0,
+                venue=venue,
             ))
         return papers
     except Exception as e:
-        print(f"Semantic Scholar search error: {e}")
+        logger.warning("Semantic Scholar search error: %s", e)
         return []
 
 
@@ -102,7 +107,7 @@ async def _search_openalex(parsed: ParsedQuery, limit: int) -> list[Paper]:
         params = {
             "search": " ".join(parsed.keywords),
             "per_page": limit,
-            "select": "id,title,authorships,abstract_inverted_index,publication_date,doi,open_access,cited_by_count",
+            "select": "id,title,authorships,abstract_inverted_index,publication_date,doi,open_access,cited_by_count,primary_location",
         }
         if parsed.date_from:
             params["filter"] = f"publication_date:>{parsed.date_from}"
@@ -132,6 +137,7 @@ async def _search_openalex(parsed: ParsedQuery, limit: int) -> list[Paper]:
                         words[pos] = word
                 abstract = " ".join(words[i] for i in sorted(words))
 
+            venue = ((item.get("primary_location") or {}).get("source") or {}).get("display_name")
             papers.append(Paper(
                 paper_id=work_id,
                 title=item.get("title", ""),
@@ -146,10 +152,11 @@ async def _search_openalex(parsed: ParsedQuery, limit: int) -> list[Paper]:
                 url=item.get("id"),
                 source="OpenAlex",
                 citations=item.get("cited_by_count", 0) or 0,
+                venue=venue,
             ))
         return papers
     except Exception as e:
-        print(f"OpenAlex search error: {e}")
+        logger.warning("OpenAlex search error: %s", e)
         return []
 
 
@@ -227,6 +234,9 @@ async def _search_pubmed(parsed: ParsedQuery, limit: int) -> list[Paper]:
                         break
                 pdf_url = f"https://www.ncbi.nlm.nih.gov/pmc/articles/{pmc_id}/pdf/" if pmc_id else None
 
+                journal = art.find("Journal")
+                venue = journal.findtext("Title") if journal is not None else None
+
                 papers.append(Paper(
                     paper_id=f"pubmed_{pmid}",
                     title=title,
@@ -238,12 +248,13 @@ async def _search_pubmed(parsed: ParsedQuery, limit: int) -> list[Paper]:
                     url=f"https://pubmed.ncbi.nlm.nih.gov/{pmid}/",
                     source="PubMed",
                     citations=0,
+                    venue=venue,
                 ))
             except Exception:
                 continue
         return papers
     except Exception as e:
-        print(f"PubMed search error: {e}")
+        logger.warning("PubMed search error: %s", e)
         return []
 
 
@@ -286,7 +297,7 @@ async def _search_core(parsed: ParsedQuery, limit: int) -> list[Paper]:
             ))
         return papers
     except Exception as e:
-        print(f"CORE search error: {e}")
+        logger.warning("CORE search error: %s", e)
         return []
 
 
@@ -322,6 +333,9 @@ async def _search_inspire(parsed: ParsedQuery, limit: int) -> list[Paper]:
             pdf_url = f"https://arxiv.org/pdf/{arxiv_id}.pdf" if arxiv_id else None
             published_date = (meta.get("earliest_date") or "")[:10] or None
 
+            pub_info = (meta.get("publication_info") or [{}])[0]
+            venue = pub_info.get("journal_title") or None
+
             papers.append(Paper(
                 paper_id=f"inspire_{inspire_id}",
                 title=title,
@@ -333,10 +347,11 @@ async def _search_inspire(parsed: ParsedQuery, limit: int) -> list[Paper]:
                 url=f"https://inspirehep.net/literature/{inspire_id}",
                 source="INSPIRE-HEP",
                 citations=0,
+                venue=venue,
             ))
         return papers
     except Exception as e:
-        print(f"INSPIRE-HEP search error: {e}")
+        logger.warning("INSPIRE-HEP search error: %s", e)
         return []
 
 
@@ -384,10 +399,11 @@ async def _search_europepmc(parsed: ParsedQuery, limit: int) -> list[Paper]:
                 url=f"https://europepmc.org/article/{item.get('source','')}/{item.get('id','')}",
                 source="Europe PMC",
                 citations=item.get("citedByCount", 0) or 0,
+                venue=item.get("journalTitle") or None,
             ))
         return papers
     except Exception as e:
-        print(f"Europe PMC search error: {e}")
+        logger.warning("Europe PMC search error: %s", e)
         return []
 
 
@@ -405,7 +421,7 @@ async def _search_nasa_ads(parsed: ParsedQuery, limit: int) -> list[Paper]:
             resp = await client.get(
                 "https://api.adsabs.harvard.edu/v1/search/query",
                 params={"q": query, "rows": limit,
-                        "fl": "title,author,abstract,pubdate,doi,identifier,bibcode",
+                        "fl": "title,author,abstract,pubdate,doi,identifier,bibcode,pub",
                         "sort": "date desc"},
                 headers={"Authorization": f"Bearer {NASA_ADS_API_KEY}"},
             )
@@ -440,10 +456,11 @@ async def _search_nasa_ads(parsed: ParsedQuery, limit: int) -> list[Paper]:
                 url=f"https://ui.adsabs.harvard.edu/abs/{bibcode}",
                 source="NASA ADS",
                 citations=0,
+                venue=doc.get("pub") or None,
             ))
         return papers
     except Exception as e:
-        print(f"NASA ADS search error: {e}")
+        logger.warning("NASA ADS search error: %s", e)
         return []
 
 
@@ -512,6 +529,7 @@ async def _search_crossref(parsed: ParsedQuery, limit: int) -> list[Paper]:
             url = item.get("URL") or (f"https://doi.org/{doi}" if doi else None)
             paper_id = f"crossref_{doi.replace('/', '_')}" if doi else f"crossref_{abs(hash(title))}"
 
+            venue = (item.get("container-title") or [None])[0]
             papers.append(Paper(
                 paper_id=paper_id,
                 title=title,
@@ -523,10 +541,11 @@ async def _search_crossref(parsed: ParsedQuery, limit: int) -> list[Paper]:
                 url=url,
                 source="CrossRef",
                 citations=item.get("is-referenced-by-count", 0) or 0,
+                venue=venue,
             ))
         return papers
     except Exception as e:
-        print(f"CrossRef search error: {e}")
+        logger.warning("CrossRef search error: %s", e)
         return []
 
 
@@ -571,6 +590,7 @@ def _scholarly_search_sync(parsed: ParsedQuery, limit: int) -> list[Paper]:
             url=pub.get("pub_url"),
             source="Google Scholar",
             citations=pub.get("num_citations", 0) or 0,
+            venue=bib.get("venue") or None,
         ))
     return papers
 
@@ -631,7 +651,7 @@ async def _search_google_scholar_serpapi(parsed: ParsedQuery, limit: int) -> lis
             ))
         return papers
     except Exception as e:
-        print(f"Google Scholar (SerpAPI) error: {e}")
+        logger.warning("Google Scholar (SerpAPI) error: %s", e)
         return []
 
 
@@ -648,7 +668,7 @@ async def _search_google_scholar(parsed: ParsedQuery, limit: int) -> list[Paper]
         if results:
             return results
     except Exception as e:
-        print(f"scholarly failed, falling back to SerpAPI: {e}")
+        logger.warning("scholarly failed, falling back to SerpAPI: %s", e)
 
     # 方案二：SerpAPI（付费/免费额度，稳定兜底）
     return await _search_google_scholar_serpapi(parsed, limit)
@@ -716,6 +736,7 @@ def _merge(existing: Paper, newcomer: Paper) -> Paper:
         "citations":    max(existing.citations, newcomer.citations),
         "doi":          existing.doi or newcomer.doi,
         "source_links": source_links,
+        "venue":        existing.venue or newcomer.venue,
     })
 
 
