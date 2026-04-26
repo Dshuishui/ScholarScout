@@ -1,5 +1,6 @@
 import asyncio
 import re
+import unicodedata
 import xml.etree.ElementTree as ET
 import feedparser
 import httpx
@@ -561,20 +562,61 @@ async def enhance_with_unpaywall(papers: list[Paper]) -> list[Paper]:
     ]
 
 
+def _normalize_title(title: str) -> str:
+    """标题规范化：Unicode 归一化 → ASCII → 小写 → 去首尾标点 → 压缩空白。"""
+    t = unicodedata.normalize("NFKD", title).encode("ascii", "ignore").decode("ascii")
+    t = t.lower().rstrip(".,;:!?。，；：！？").strip()
+    return re.sub(r"\s+", " ", t)
+
+
+def _merge(existing: Paper, newcomer: Paper) -> Paper:
+    """用后来的论文补全现有版本的空字段，引用数取最大值，摘要取更长的。"""
+    abstract = existing.abstract
+    if newcomer.abstract and (not abstract or len(newcomer.abstract) > len(abstract)):
+        abstract = newcomer.abstract
+    return existing.model_copy(update={
+        "pdf_url":   existing.pdf_url or newcomer.pdf_url,
+        "abstract":  abstract,
+        "citations": max(existing.citations, newcomer.citations),
+        "doi":       existing.doi or newcomer.doi,
+    })
+
+
 def deduplicate(papers: list[Paper]) -> list[Paper]:
-    seen_dois: set[str] = set()
-    seen_titles: set[str] = set()
-    result = []
+    """去重并合并：DOI 精确匹配优先，标题规范化兜底；重复时合并最优字段而非丢弃。"""
+    seen_dois: dict[str, int] = {}    # doi → result 中的下标
+    seen_titles: dict[str, int] = {}  # 规范化标题 → result 中的下标
+    result: list[Paper] = []
+
     for p in papers:
-        title_key = p.title.strip().lower()
-        if p.doi and p.doi in seen_dois:
+        doi_key = p.doi.lower().strip() if p.doi else None
+        title_key = _normalize_title(p.title)
+        if not title_key:
             continue
+
+        # DOI 命中 → 合并
+        if doi_key and doi_key in seen_dois:
+            idx = seen_dois[doi_key]
+            result[idx] = _merge(result[idx], p)
+            if title_key not in seen_titles:
+                seen_titles[title_key] = idx
+            continue
+
+        # 标题命中 → 合并
         if title_key in seen_titles:
+            idx = seen_titles[title_key]
+            result[idx] = _merge(result[idx], p)
+            if doi_key and doi_key not in seen_dois:
+                seen_dois[doi_key] = idx
             continue
-        if p.doi:
-            seen_dois.add(p.doi)
-        seen_titles.add(title_key)
+
+        # 新论文 → 加入
+        idx = len(result)
         result.append(p)
+        if doi_key:
+            seen_dois[doi_key] = idx
+        seen_titles[title_key] = idx
+
     return result
 
 
