@@ -42,3 +42,7 @@ export type SearchChatEvent = {
 }
 
 export type SearchEvent = SearchProgressEvent | SearchDoneEvent | SearchErrorEvent | SearchChatEvent
+
+export type ParseResult =
+  | { intent: 'chat'; reply: string }
+  | { intent: 'search'; keywords: string[]; date_from: string | null; date_to: string | null }

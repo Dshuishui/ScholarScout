@@ -1,7 +1,7 @@
 import json
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse, Response
-from models import SearchRequest
+from models import SearchRequest, ParseRequest, ParsedQuery
 from services.llm_service import classify_intent, parse_query, validate_papers
 from services.search_service import search_all_sources
 from services.download_service import fetch_pdf_bytes
@@ -13,21 +13,46 @@ def sse(event: str, data: dict) -> str:
     return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
 
 
+@router.post("/parse")
+async def parse(request: ParseRequest):
+    """Phase 1: 意图识别 + 关键词提取，返回普通 JSON 供前端展示确认。"""
+    history = [{"role": m.role, "content": m.content} for m in request.messages]
+    intent = await classify_intent(request.query, request.api_key, history)
+    if intent.get("intent") == "chat":
+        return {"intent": "chat", "reply": intent.get("reply", "请问有什么可以帮您？")}
+    parsed = await parse_query(request.query, request.api_key, history)
+    return {
+        "intent": "search",
+        "keywords": parsed.keywords,
+        "date_from": parsed.date_from,
+        "date_to": parsed.date_to,
+    }
+
+
 @router.post("/search")
 async def search(request: SearchRequest):
+    """Phase 2: 执行搜索 + 验证，SSE 流式推送进度和结果。
+    若 request.keywords 已提供，跳过意图识别和关键词解析。"""
     async def generate():
         try:
-            # 第一步：判断意图（携带历史上下文）
             history = [{"role": m.role, "content": m.content} for m in request.messages]
-            intent = await classify_intent(request.query, request.api_key, history)
 
-            if intent.get("intent") == "chat":
-                yield sse("chat", {"message": intent.get("reply", "请问有什么可以帮您？")})
-                return
-
-            # 搜索意图：走完整 pipeline
-            yield sse("progress", {"message": "正在理解您的需求..."})
-            parsed = await parse_query(request.query, request.api_key, history)
+            if request.keywords:
+                # 前端已确认关键词，直接构造 ParsedQuery
+                parsed = ParsedQuery(
+                    keywords=request.keywords,
+                    date_from=request.date_from,
+                    date_to=request.date_to,
+                    max_results=request.limit_per_source,
+                )
+            else:
+                # 旧路径：兼容不带关键词的调用
+                intent = await classify_intent(request.query, request.api_key, history)
+                if intent.get("intent") == "chat":
+                    yield sse("chat", {"message": intent.get("reply", "请问有什么可以帮您？")})
+                    return
+                yield sse("progress", {"message": "正在理解您的需求..."})
+                parsed = await parse_query(request.query, request.api_key, history)
 
             kw_str = "、".join(parsed.keywords)
             yield sse("progress", {"message": f"正在搜索关键词：{kw_str}..."})

@@ -7,20 +7,36 @@ interface Props {
   isLoading: boolean
   onSearch: (query: string) => void
   onClearKey: () => void
+  pendingKeywords: string[] | null
+  onConfirmKeywords: (keywords: string[]) => void
+  onCancelSearch: () => void
 }
 
-export function ChatPanel({ messages, isLoading, onSearch, onClearKey }: Props) {
+export function ChatPanel({
+  messages, isLoading, onSearch, onClearKey,
+  pendingKeywords, onConfirmKeywords, onCancelSearch,
+}: Props) {
   const [input, setInput] = useState('')
+  const [editKeywords, setEditKeywords] = useState<string[]>([])
+  const [newKw, setNewKw] = useState('')
   const bottomRef = useRef<HTMLDivElement>(null)
-  const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const newKwRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages])
+  }, [messages, pendingKeywords])
+
+  // Sync local edit state when pendingKeywords arrives
+  useEffect(() => {
+    if (pendingKeywords) {
+      setEditKeywords([...pendingKeywords])
+      setNewKw('')
+    }
+  }, [pendingKeywords])
 
   const handleSend = () => {
     const q = input.trim()
-    if (!q || isLoading) return
+    if (!q || isLoading || pendingKeywords) return
     setInput('')
     onSearch(q)
   }
@@ -29,6 +45,25 @@ export function ChatPanel({ messages, isLoading, onSearch, onClearKey }: Props) 
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
       handleSend()
+    }
+  }
+
+  const removeKeyword = (index: number) => {
+    setEditKeywords(prev => prev.filter((_, i) => i !== index))
+  }
+
+  const addKeyword = () => {
+    const kw = newKw.trim()
+    if (!kw || editKeywords.includes(kw)) return
+    setEditKeywords(prev => [...prev, kw])
+    setNewKw('')
+    newKwRef.current?.focus()
+  }
+
+  const handleNewKwKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      addKeyword()
     }
   }
 
@@ -56,22 +91,79 @@ export function ChatPanel({ messages, isLoading, onSearch, onClearKey }: Props) 
         <div ref={bottomRef} />
       </div>
 
+      {/* Keyword editor — shown when pendingKeywords is set */}
+      {pendingKeywords && (
+        <div className="px-4 pb-3">
+          <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 space-y-2.5">
+            <p className="text-xs font-semibold text-blue-700">确认关键词后开始搜索</p>
+
+            {/* Tag list */}
+            <div className="flex flex-wrap gap-1.5">
+              {editKeywords.map((kw, i) => (
+                <span
+                  key={i}
+                  className="flex items-center gap-1 bg-white border border-blue-300 text-blue-700 text-xs rounded-full px-2.5 py-1 font-medium"
+                >
+                  {kw}
+                  <button
+                    onClick={() => removeKeyword(i)}
+                    className="text-blue-300 hover:text-blue-600 transition-colors leading-none"
+                  >
+                    ✕
+                  </button>
+                </span>
+              ))}
+
+              {/* Inline add input */}
+              <input
+                ref={newKwRef}
+                value={newKw}
+                onChange={e => setNewKw(e.target.value)}
+                onKeyDown={handleNewKwKeyDown}
+                onBlur={addKeyword}
+                placeholder="+ 添加关键词"
+                className="text-xs border border-dashed border-blue-300 rounded-full px-2.5 py-1 outline-none focus:border-blue-500 bg-transparent text-blue-700 placeholder-blue-300 min-w-24 w-28"
+              />
+            </div>
+
+            {/* Actions */}
+            <div className="flex items-center justify-between">
+              <p className="text-xs text-blue-400">回车添加，点 ✕ 删除关键词</p>
+              <div className="flex gap-2">
+                <button
+                  onClick={onCancelSearch}
+                  className="text-xs text-gray-500 hover:text-gray-700 px-3 py-1.5 rounded-lg hover:bg-gray-100 transition-colors"
+                >
+                  取消
+                </button>
+                <button
+                  onClick={() => onConfirmKeywords(editKeywords)}
+                  disabled={editKeywords.length === 0}
+                  className="text-xs text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed px-4 py-1.5 rounded-lg font-medium transition-colors"
+                >
+                  开始搜索 →
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Input */}
       <div className="px-4 py-3 border-t border-gray-200">
         <div className="flex gap-2 items-end">
           <textarea
-            ref={textareaRef}
             value={input}
             onChange={e => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="描述您想找的论文，Enter 发送，Shift+Enter 换行"
-            disabled={isLoading}
+            placeholder={pendingKeywords ? '请先确认或取消关键词' : '描述您想找的论文，Enter 发送，Shift+Enter 换行'}
+            disabled={isLoading || !!pendingKeywords}
             rows={2}
             className="flex-1 border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none disabled:bg-gray-50 disabled:text-gray-400 leading-relaxed"
           />
           <button
             onClick={handleSend}
-            disabled={isLoading || !input.trim()}
+            disabled={isLoading || !input.trim() || !!pendingKeywords}
             className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-200 disabled:cursor-not-allowed text-white rounded-xl px-4 py-2.5 text-sm font-medium transition-colors whitespace-nowrap self-end"
           >
             {isLoading ? '搜索中' : '搜索'}

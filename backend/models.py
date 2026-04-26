@@ -7,12 +7,21 @@ class HistoryMessage(BaseModel):
     role: str
     content: str
 
+class ParseRequest(BaseModel):
+    query: str
+    api_key: str
+    messages: list[HistoryMessage] = []
+
 class SearchRequest(BaseModel):
     query: str
     api_key: str
     messages: list[HistoryMessage] = []
     limit_per_source: int = Field(default=SEARCH_LIMIT_PER_SOURCE, ge=5, le=200)
     validated_limit: int = Field(default=VALIDATED_LIMIT, ge=5, le=500)
+    # 若前端传入已确认的关键词，跳过 parse_query
+    keywords: Optional[list[str]] = None
+    date_from: Optional[str] = None
+    date_to: Optional[str] = None
 
 
 class Paper(BaseModel):

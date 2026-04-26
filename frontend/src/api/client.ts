@@ -1,12 +1,27 @@
-import type { SearchEvent } from '../types'
+import type { SearchEvent, ParseResult } from '../types'
 
 const API_BASE = '/api'
+
+export async function parseQuery(
+  query: string,
+  apiKey: string,
+  history: { role: string; content: string }[] = []
+): Promise<ParseResult> {
+  const response = await fetch(`${API_BASE}/parse`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ query, api_key: apiKey, messages: history }),
+  })
+  if (!response.ok) throw new Error(`请求失败: ${response.status}`)
+  return response.json()
+}
 
 export async function* searchPapers(
   query: string,
   apiKey: string,
   history: { role: string; content: string }[] = [],
-  settings: { limitPerSource?: number; validatedLimit?: number } = {}
+  settings: { limitPerSource?: number; validatedLimit?: number } = {},
+  confirmed?: { keywords: string[]; date_from?: string | null; date_to?: string | null }
 ): AsyncGenerator<SearchEvent> {
   const response = await fetch(`${API_BASE}/search`, {
     method: 'POST',
@@ -17,6 +32,11 @@ export async function* searchPapers(
       messages: history,
       limit_per_source: settings.limitPerSource,
       validated_limit: settings.validatedLimit,
+      ...(confirmed && {
+        keywords: confirmed.keywords,
+        date_from: confirmed.date_from ?? null,
+        date_to: confirmed.date_to ?? null,
+      }),
     }),
   })
 
