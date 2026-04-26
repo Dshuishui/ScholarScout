@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import JSZip from 'jszip'
 import type { Paper } from '../types'
 import type { SearchSettings } from '../hooks/useSettings'
@@ -7,6 +7,8 @@ import { getDownloadUrl } from '../api/client'
 
 const ITEMS_PER_PAGE = 20
 const DOWNLOAD_CONCURRENCY = 3
+
+type SortOption = 'relevance' | 'citations' | 'date_desc' | 'date_asc'
 
 interface Props {
   papers: Paper[]
@@ -100,12 +102,26 @@ export function ResultsPanel({ papers, isLoading, statusMessage, settings, onSet
   const [appliedSettings, setAppliedSettings] = useState(settings)
   const [editKeywords, setEditKeywords] = useState<string[]>([])
   const [newKw, setNewKw] = useState('')
+  const [sortBy, setSortBy] = useState<SortOption>('relevance')
 
   useEffect(() => {
     setCurrentPage(1)
     setSelectedIds(new Set())
     setAppliedSettings(settings)
   }, [papers]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // 排序变化时回到第一页
+  useEffect(() => { setCurrentPage(1) }, [sortBy])
+
+  const sortedPapers = useMemo(() => {
+    if (sortBy === 'relevance') return papers
+    return [...papers].sort((a, b) => {
+      if (sortBy === 'citations') return b.citations - a.citations
+      const da = a.published_date ?? ''
+      const db = b.published_date ?? ''
+      return sortBy === 'date_desc' ? db.localeCompare(da) : da.localeCompare(db)
+    })
+  }, [papers, sortBy])
 
   // Sync keyword editor when a new search completes
   useEffect(() => {
@@ -131,10 +147,10 @@ export function ResultsPanel({ papers, isLoading, statusMessage, settings, onSet
     setNewKw('')
   }
 
-  const totalPages = Math.ceil(papers.length / ITEMS_PER_PAGE)
-  const pagePapers = papers.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE)
+  const totalPages = Math.ceil(sortedPapers.length / ITEMS_PER_PAGE)
+  const pagePapers = sortedPapers.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE)
   const start = (currentPage - 1) * ITEMS_PER_PAGE + 1
-  const end = Math.min(currentPage * ITEMS_PER_PAGE, papers.length)
+  const end = Math.min(currentPage * ITEMS_PER_PAGE, sortedPapers.length)
 
   const selectedWithPdf = papers.filter(p => selectedIds.has(p.paper_id) && p.pdf_url)
   const allPageSelected = pagePapers.length > 0 && pagePapers.every(p => selectedIds.has(p.paper_id))
@@ -232,6 +248,17 @@ export function ResultsPanel({ papers, isLoading, statusMessage, settings, onSet
               {totalPages > 1 ? `${start}–${end} / ${papers.length} 篇` : `${papers.length} 篇`}
             </span>
 
+            <select
+              value={sortBy}
+              onChange={e => setSortBy(e.target.value as SortOption)}
+              className="text-xs text-gray-600 border border-gray-200 rounded-lg px-2 py-1 bg-white cursor-pointer hover:border-gray-300 transition-colors"
+            >
+              <option value="relevance">相关性优先</option>
+              <option value="citations">引用数最高</option>
+              <option value="date_desc">最新发表</option>
+              <option value="date_asc">最早发表</option>
+            </select>
+
             <div className="flex items-center gap-1">
               <button
                 onClick={allPageSelected ? clearSelection : selectPage}
@@ -312,7 +339,7 @@ export function ResultsPanel({ papers, isLoading, statusMessage, settings, onSet
         <div className="flex items-center gap-2 shrink-0">
           <label className="text-xs font-medium text-gray-700">每源抓取</label>
           <input
-            type="range" min={10} max={100} step={1}
+            type="range" min={10} max={200} step={1}
             value={settings.limitPerSource}
             onChange={e => onSettingsChange({ limitPerSource: Number(e.target.value) })}
             className="w-28 accent-blue-600 cursor-pointer"
@@ -325,7 +352,7 @@ export function ResultsPanel({ papers, isLoading, statusMessage, settings, onSet
         <div className="flex items-center gap-2 shrink-0">
           <label className="text-xs font-medium text-gray-700">展示上限</label>
           <input
-            type="range" min={10} max={200} step={1}
+            type="range" min={10} max={500} step={1}
             value={settings.validatedLimit}
             onChange={e => onSettingsChange({ validatedLimit: Number(e.target.value) })}
             className="w-28 accent-blue-600 cursor-pointer"
