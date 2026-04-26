@@ -69,24 +69,26 @@ export function PaperCard({ paper, selected = false, onToggle, isRejected = fals
             {paper.title}
           </h3>
 
-          {/* Authors */}
-          <p className="text-xs text-gray-400 truncate mb-2">{authorStr}</p>
+          {/* Authors + Venue */}
+          <div className="flex items-baseline justify-between gap-3 mb-2">
+            <p className="text-xs text-gray-400 truncate">{authorStr}</p>
+            {paper.venue && (
+              <span
+                className="text-xs text-slate-500 font-medium whitespace-nowrap flex-shrink-0 max-w-[45%] truncate"
+                title={paper.venue}
+              >
+                {paper.venue}
+              </span>
+            )}
+          </div>
 
-          {/* Meta row: year · source · venue · citations */}
+          {/* Meta row: year · source · citations */}
           <div className="flex items-center gap-1.5 flex-wrap mb-3">
             <span className="text-xs text-gray-400 tabular-nums">{year}</span>
             <span className="text-gray-200 select-none">·</span>
             <span className={`text-xs border rounded-full px-2 py-0.5 font-medium ${style.badge}`}>
               {paper.source}
             </span>
-            {paper.venue && (
-              <span
-                className="text-xs text-gray-500 bg-gray-50 border border-gray-200 rounded-full px-2 py-0.5 max-w-[200px] truncate"
-                title={paper.venue}
-              >
-                {paper.venue}
-              </span>
-            )}
             {paper.citations > 0 && (
               <span className="text-xs text-gray-400">
                 引用&nbsp;{paper.citations.toLocaleString()}
