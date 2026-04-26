@@ -298,7 +298,7 @@ export function ResultsPanel({ papers, rejectedPapers = [], isLoading, statusMes
               <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
               </svg>
-              CSV
+              导出为 CSV
             </button>
           </div>
         )}
@@ -384,18 +384,17 @@ export function ResultsPanel({ papers, rejectedPapers = [], isLoading, statusMes
 
               <button
                 onClick={() => setShowSettings(v => !v)}
-                title="搜索参数"
-                className={`flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-lg border transition-colors ${
+                className={`flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg border transition-colors ${
                   showSettings || settingsChanged
                     ? 'border-blue-300 bg-blue-50 text-blue-600'
                     : 'border-gray-200 bg-white text-gray-500 hover:border-gray-300 hover:text-gray-700'
                 }`}
               >
-                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
                     d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
                 </svg>
-                参数
+                <span className="tabular-nums">每源 {settings.limitPerSource} · 展示 {settings.validatedLimit}</span>
                 {settingsChanged && <span className="w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0" />}
               </button>
             </div>
