@@ -128,16 +128,19 @@ export function useSearch(apiKey: string, settings: SearchSettings) {
     setIsLoading(false)
   }
 
-  const reSearch = async () => {
+  const reSearch = async (keywords: string[]) => {
     if (!lastConfirmed) return
+    const newConfirmed = { ...lastConfirmed, keywords }
+    setLastConfirmed(newConfirmed)
+
     const assistantId = Date.now().toString()
     const userMsgId = (Date.now() - 1).toString()
     setMessages(prev => [
       ...prev,
-      { id: userMsgId, role: 'user', content: '重新搜索（已调整参数）' },
+      { id: userMsgId, role: 'user', content: `重新搜索：${keywords.join('、')}` },
       { id: assistantId, role: 'assistant', content: '', isLoading: true },
     ])
-    await runSearchStream(assistantId, lastConfirmed, lastConfirmed.keywords)
+    await runSearchStream(assistantId, newConfirmed, keywords)
   }
 
   return {
@@ -147,6 +150,7 @@ export function useSearch(apiKey: string, settings: SearchSettings) {
     statusMessage,
     search,
     pendingKeywords: pendingSearch?.keywords ?? null,
+    confirmedKeywords: lastConfirmed?.keywords ?? null,
     confirmSearch,
     cancelSearch,
     reSearch: lastConfirmed ? reSearch : undefined,

@@ -13,7 +13,8 @@ interface Props {
   isLoading: boolean
   settings: SearchSettings
   onSettingsChange: (patch: Partial<SearchSettings>) => void
-  onReSearch?: () => void
+  onReSearch?: (keywords: string[]) => void
+  confirmedKeywords?: string[] | null
   statusMessage: string
 }
 
@@ -92,11 +93,13 @@ function Pagination({ current, total, onChange }: {
   )
 }
 
-export function ResultsPanel({ papers, isLoading, statusMessage, settings, onSettingsChange, onReSearch }: Props) {
+export function ResultsPanel({ papers, isLoading, statusMessage, settings, onSettingsChange, onReSearch, confirmedKeywords }: Props) {
   const [currentPage, setCurrentPage] = useState(1)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [downloadProgress, setDownloadProgress] = useState<DownloadProgress | null>(null)
   const [appliedSettings, setAppliedSettings] = useState(settings)
+  const [editKeywords, setEditKeywords] = useState<string[]>([])
+  const [newKw, setNewKw] = useState('')
 
   useEffect(() => {
     setCurrentPage(1)
@@ -104,10 +107,29 @@ export function ResultsPanel({ papers, isLoading, statusMessage, settings, onSet
     setAppliedSettings(settings)
   }, [papers]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Sync keyword editor when a new search completes
+  useEffect(() => {
+    if (confirmedKeywords) {
+      setEditKeywords([...confirmedKeywords])
+      setNewKw('')
+    }
+  }, [confirmedKeywords])
+
+  const keywordsChanged = confirmedKeywords != null && (
+    editKeywords.join(',') !== confirmedKeywords.join(',')
+  )
   const settingsChanged = papers.length > 0 && (
     appliedSettings.limitPerSource !== settings.limitPerSource ||
     appliedSettings.validatedLimit !== settings.validatedLimit
   )
+  const needsReSearch = (keywordsChanged || settingsChanged) && papers.length > 0 && !!onReSearch
+
+  const addKeyword = () => {
+    const kw = newKw.trim()
+    if (!kw || editKeywords.includes(kw)) { setNewKw(''); return }
+    setEditKeywords(prev => [...prev, kw])
+    setNewKw('')
+  }
 
   const totalPages = Math.ceil(papers.length / ITEMS_PER_PAGE)
   const pagePapers = papers.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE)
@@ -254,7 +276,36 @@ export function ResultsPanel({ papers, isLoading, statusMessage, settings, onSet
         )}
       </div>
 
-      {/* 搜索参数栏 - 始终可见 */}
+      {/* 关键词行 - 有搜索结果后显示 */}
+      {confirmedKeywords != null && (
+        <div className="px-5 py-2.5 bg-white border-b border-gray-100 flex items-center gap-2 flex-wrap">
+          <span className="text-xs font-semibold text-gray-600 shrink-0">搜索词</span>
+          {editKeywords.map((kw, i) => (
+            <span
+              key={i}
+              className="flex items-center gap-1 bg-blue-50 border border-blue-200 text-blue-700 text-xs rounded-full px-2.5 py-1 font-medium"
+            >
+              {kw}
+              <button
+                onClick={() => setEditKeywords(prev => prev.filter((_, j) => j !== i))}
+                className="text-blue-300 hover:text-blue-600 transition-colors leading-none ml-0.5"
+              >
+                ✕
+              </button>
+            </span>
+          ))}
+          <input
+            value={newKw}
+            onChange={e => setNewKw(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addKeyword() } }}
+            onBlur={addKeyword}
+            placeholder="+ 添加"
+            className="text-xs border border-dashed border-gray-300 rounded-full px-2.5 py-1 outline-none focus:border-blue-400 bg-transparent text-gray-600 placeholder-gray-300 w-20"
+          />
+        </div>
+      )}
+
+      {/* 搜索参数栏 */}
       <div className="px-5 py-2.5 bg-white border-b border-gray-200 flex items-center gap-5 flex-wrap">
         <span className="text-xs font-semibold text-gray-600 shrink-0">搜索参数</span>
 
@@ -284,10 +335,10 @@ export function ResultsPanel({ papers, isLoading, statusMessage, settings, onSet
           </span>
         </div>
 
-        {settingsChanged && onReSearch ? (
+        {needsReSearch ? (
           <button
-            onClick={onReSearch}
-            disabled={isLoading}
+            onClick={() => onReSearch!(editKeywords)}
+            disabled={isLoading || editKeywords.length === 0}
             className="flex items-center gap-1.5 text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg px-3 py-1.5 transition-all shadow-sm"
           >
             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -296,7 +347,7 @@ export function ResultsPanel({ papers, isLoading, statusMessage, settings, onSet
             重新搜索
           </button>
         ) : (
-          <span className="text-xs text-gray-400">调整参数后可重新搜索</span>
+          <span className="text-xs text-gray-400">调整关键词或参数后可重新搜索</span>
         )}
       </div>
 

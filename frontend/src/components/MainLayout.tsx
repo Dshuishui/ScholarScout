@@ -12,7 +12,7 @@ export function MainLayout({ apiKey, onClearKey }: Props) {
   const { settings, updateSettings } = useSettings()
   const {
     messages, papers, isLoading, statusMessage,
-    search, pendingKeywords, confirmSearch, cancelSearch, reSearch,
+    search, pendingKeywords, confirmedKeywords, confirmSearch, cancelSearch, reSearch,
   } = useSearch(apiKey, settings)
 
   return (
@@ -36,6 +36,7 @@ export function MainLayout({ apiKey, onClearKey }: Props) {
           settings={settings}
           onSettingsChange={updateSettings}
           onReSearch={reSearch}
+          confirmedKeywords={confirmedKeywords}
         />
       </div>
     </div>
