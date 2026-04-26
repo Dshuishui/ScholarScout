@@ -1,6 +1,20 @@
 import type { Paper } from '../types'
 import { getDownloadUrl } from '../api/client'
 
+const SOURCE_STYLES: Record<string, { bar: string; badge: string }> = {
+  'arXiv':            { bar: 'bg-orange-400',  badge: 'bg-orange-50 text-orange-700 border-orange-200' },
+  'Semantic Scholar': { bar: 'bg-blue-500',    badge: 'bg-blue-50 text-blue-700 border-blue-200' },
+  'OpenAlex':         { bar: 'bg-violet-500',  badge: 'bg-violet-50 text-violet-700 border-violet-200' },
+  'PubMed':           { bar: 'bg-emerald-500', badge: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
+  'Europe PMC':       { bar: 'bg-teal-500',    badge: 'bg-teal-50 text-teal-700 border-teal-200' },
+  'INSPIRE-HEP':      { bar: 'bg-red-400',     badge: 'bg-red-50 text-red-700 border-red-200' },
+  'CrossRef':         { bar: 'bg-indigo-500',  badge: 'bg-indigo-50 text-indigo-700 border-indigo-200' },
+  'CORE':             { bar: 'bg-cyan-500',    badge: 'bg-cyan-50 text-cyan-700 border-cyan-200' },
+  'NASA ADS':         { bar: 'bg-sky-500',     badge: 'bg-sky-50 text-sky-700 border-sky-200' },
+  'Google Scholar':   { bar: 'bg-amber-400',   badge: 'bg-amber-50 text-amber-700 border-amber-200' },
+}
+const DEFAULT_STYLE = { bar: 'bg-gray-300', badge: 'bg-gray-50 text-gray-600 border-gray-200' }
+
 interface Props {
   paper: Paper
   selected?: boolean
@@ -9,102 +23,128 @@ interface Props {
 }
 
 export function PaperCard({ paper, selected = false, onToggle, isRejected = false }: Props) {
-  const year = paper.published_date?.slice(0, 4) ?? '未知年份'
-  const authorStr =
-    paper.authors.slice(0, 3).join(', ') +
-    (paper.authors.length > 3 ? ` 等 ${paper.authors.length} 人` : '')
+  const year = paper.published_date?.slice(0, 4) ?? '—'
+  const authorStr = paper.authors.length === 0
+    ? '作者未知'
+    : paper.authors.slice(0, 3).join(', ') + (paper.authors.length > 3 ? ` 等 ${paper.authors.length} 人` : '')
+  const style = SOURCE_STYLES[paper.source] ?? DEFAULT_STYLE
+
+  const links = paper.source_links && paper.source_links.length > 0
+    ? paper.source_links
+    : paper.url ? [{ source: paper.source, url: paper.url }] : []
 
   return (
-    <div
-      className={`border rounded-xl p-4 hover:shadow-md transition-all flex gap-3 ${
-        selected ? 'border-blue-400 shadow-sm bg-blue-50/30' :
-        isRejected ? 'border-gray-200 bg-gray-50/60 hover:border-gray-300' :
-        'bg-white border-gray-200 hover:border-gray-300'
-      }`}
-    >
-      {onToggle && (
-        <div className="flex-shrink-0 pt-0.5" onClick={e => e.stopPropagation()}>
-          <button
-            onClick={onToggle}
-            className={`w-4 h-4 rounded border-2 flex items-center justify-center transition-all ${
-              selected
-                ? 'bg-blue-600 border-blue-600'
-                : 'bg-white border-gray-300 hover:border-blue-400'
-            }`}
-          >
-            {selected && (
-              <svg className="w-2.5 h-2.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-              </svg>
-            )}
-          </button>
-        </div>
-      )}
+    <div className={`relative bg-white border rounded-xl overflow-hidden transition-all duration-200 ${
+      selected
+        ? 'border-blue-400 shadow-md ring-1 ring-blue-100'
+        : isRejected
+        ? 'border-gray-200 opacity-60 hover:opacity-80'
+        : 'border-gray-200 hover:border-gray-300 hover:shadow-md'
+    }`}>
+      {/* Left accent bar — colored per source */}
+      <div className={`absolute inset-y-0 left-0 w-[3px] ${isRejected ? 'bg-gray-300' : style.bar}`} />
 
-      <div className="flex-1 min-w-0">
-        <h3 className="text-sm font-semibold text-gray-900 leading-snug line-clamp-2 mb-1">
-          {paper.title}
-        </h3>
+      <div className="pl-5 pr-4 py-4 flex gap-3">
+        {/* Checkbox */}
+        {onToggle && (
+          <div className="flex-shrink-0 pt-0.5" onClick={e => e.stopPropagation()}>
+            <button
+              onClick={onToggle}
+              className={`w-4 h-4 rounded border-2 flex items-center justify-center transition-all ${
+                selected ? 'bg-blue-600 border-blue-600' : 'bg-white border-gray-300 hover:border-blue-400'
+              }`}
+            >
+              {selected && (
+                <svg className="w-2.5 h-2.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                </svg>
+              )}
+            </button>
+          </div>
+        )}
 
-        <p className="text-xs text-gray-500 mb-2">
-          {authorStr} · {year} ·{' '}
-          <span className="inline-flex items-center bg-gray-100 text-gray-600 rounded px-1.5 py-0.5">
-            {paper.source}
-          </span>
-          {paper.venue && (
-            <span className="ml-1.5 inline-block align-middle bg-purple-50 text-purple-600 border border-purple-100 rounded px-1.5 py-0.5 max-w-[160px] truncate" title={paper.venue}>
-              {paper.venue}
+        <div className="flex-1 min-w-0">
+          {/* Title */}
+          <h3 className="text-sm font-semibold text-gray-900 leading-snug line-clamp-2 mb-1.5">
+            {paper.title}
+          </h3>
+
+          {/* Authors */}
+          <p className="text-xs text-gray-400 truncate mb-2">{authorStr}</p>
+
+          {/* Meta row: year · source · venue · citations */}
+          <div className="flex items-center gap-1.5 flex-wrap mb-3">
+            <span className="text-xs text-gray-400 tabular-nums">{year}</span>
+            <span className="text-gray-200 select-none">·</span>
+            <span className={`text-xs border rounded-full px-2 py-0.5 font-medium ${style.badge}`}>
+              {paper.source}
             </span>
-          )}
-          {paper.citations > 0 && (
-            <span className="ml-2 text-gray-400">被引 {paper.citations}</span>
-          )}
-          {isRejected && (
-            <span className="ml-2 text-orange-500 bg-orange-50 border border-orange-100 rounded px-1.5 py-0.5 text-xs">AI 认为不相关</span>
-          )}
-        </p>
+            {paper.venue && (
+              <span
+                className="text-xs text-gray-500 bg-gray-50 border border-gray-200 rounded-full px-2 py-0.5 max-w-[200px] truncate"
+                title={paper.venue}
+              >
+                {paper.venue}
+              </span>
+            )}
+            {paper.citations > 0 && (
+              <span className="text-xs text-gray-400">
+                引用&nbsp;{paper.citations.toLocaleString()}
+              </span>
+            )}
+            {isRejected && (
+              <span className="text-xs text-orange-500 bg-orange-50 border border-orange-100 rounded-full px-2 py-0.5">
+                AI 认为不相关
+              </span>
+            )}
+          </div>
 
-        {paper.abstract && (
-          <p className="text-xs text-gray-600 leading-relaxed line-clamp-3 mb-2">
-            {paper.abstract}
-          </p>
-        )}
-
-        {paper.relevance_reason && (
-          <p className="text-xs text-blue-700 bg-blue-50 rounded-md px-2.5 py-1.5 mb-2">
-            ✦ {paper.relevance_reason}
-          </p>
-        )}
-
-        <div className="flex flex-wrap gap-2 mt-3">
-          {/* 多来源链接：有 source_links 就按来源展示，否则回退到单个 url */}
-          {(paper.source_links && paper.source_links.length > 0
-            ? paper.source_links
-            : paper.url ? [{ source: paper.source, url: paper.url }] : []
-          ).map(link => (
-            <a
-              key={link.source}
-              href={link.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-xs text-blue-600 hover:text-blue-800 border border-blue-200 hover:border-blue-400 bg-white hover:bg-blue-50 rounded-md px-3 py-1 transition-colors"
-            >
-              {link.source} ↗
-            </a>
-          ))}
-
-          {paper.pdf_url && (
-            <a
-              href={getDownloadUrl(paper.pdf_url)}
-              download="paper.pdf"
-              className="text-xs text-white bg-blue-600 hover:bg-blue-700 rounded-md px-3 py-1 transition-colors"
-            >
-              下载 PDF
-            </a>
+          {/* Abstract */}
+          {paper.abstract && (
+            <p className="text-xs text-gray-600 leading-relaxed line-clamp-3 mb-3">
+              {paper.abstract}
+            </p>
           )}
-          {!paper.pdf_url && (paper.url || (paper.source_links && paper.source_links.length > 0)) && (
-            <span className="text-xs text-gray-400 py-1">无开放获取 PDF</span>
+
+          {/* AI relevance reason */}
+          {paper.relevance_reason && (
+            <div className="flex items-start gap-1.5 bg-blue-50 border border-blue-100 rounded-lg px-2.5 py-2 mb-3">
+              <span className="text-blue-400 flex-shrink-0 mt-px text-xs">✦</span>
+              <p className="text-xs text-blue-700 leading-relaxed">{paper.relevance_reason}</p>
+            </div>
           )}
+
+          {/* Actions */}
+          <div className="flex flex-wrap gap-1.5 mt-1">
+            {links.map(link => (
+              <a
+                key={link.source}
+                href={link.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-xs text-gray-500 hover:text-gray-800 border border-gray-200 hover:border-gray-300 bg-white hover:bg-gray-50 rounded-lg px-2.5 py-1 transition-all"
+              >
+                {link.source}
+                <svg className="w-3 h-3 opacity-60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                </svg>
+              </a>
+            ))}
+            {paper.pdf_url ? (
+              <a
+                href={getDownloadUrl(paper.pdf_url)}
+                download="paper.pdf"
+                className="inline-flex items-center gap-1 text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 active:bg-blue-800 rounded-lg px-2.5 py-1 transition-colors"
+              >
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                </svg>
+                PDF
+              </a>
+            ) : links.length > 0 ? (
+              <span className="text-xs text-gray-300 py-1">无开放获取 PDF</span>
+            ) : null}
+          </div>
         </div>
       </div>
     </div>

@@ -248,7 +248,7 @@ export function ResultsPanel({ papers, rejectedPapers = [], isLoading, statusMes
   }
 
   return (
-    <div className="flex flex-col h-full bg-gray-50">
+    <div className="flex flex-col h-full bg-slate-50">
       {/* 顶部标题栏 */}
       <div className="px-5 py-3 border-b border-gray-200 bg-white flex items-center justify-between gap-3 flex-wrap">
         <h2 className="text-sm font-semibold text-gray-700 flex-shrink-0">搜索结果</h2>
@@ -427,9 +427,9 @@ export function ResultsPanel({ papers, rejectedPapers = [], isLoading, statusMes
         )}
       </div>
 
-      {/* 状态栏 */}
-      {statusMessage && (
-        <div className="px-5 py-2.5 bg-blue-50 border-b border-blue-100">
+      {/* 状态栏 — 有结果后才显示进度（加载中且无结果时进度已在列表区展示） */}
+      {statusMessage && papers.length > 0 && (
+        <div className="px-5 py-2 bg-blue-50 border-b border-blue-100">
           <p className="text-xs text-blue-600 break-words leading-relaxed">{statusMessage}</p>
         </div>
       )}
@@ -437,21 +437,46 @@ export function ResultsPanel({ papers, rejectedPapers = [], isLoading, statusMes
       {/* 论文列表 */}
       <div className="flex-1 overflow-y-auto p-4 space-y-3">
         {isLoading && papers.length === 0 && (
-          <div className="flex flex-col items-center justify-center h-40 gap-3">
-            <div className="flex gap-1">
-              {[0, 1, 2].map(i => (
-                <div key={i} className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: `${i * 150}ms` }} />
-              ))}
+          <div className="flex flex-col items-center justify-center h-56 gap-4">
+            <div className="relative w-12 h-12">
+              <div className="absolute inset-0 rounded-full border-4 border-blue-100" />
+              <div className="absolute inset-0 rounded-full border-4 border-transparent border-t-blue-500 animate-spin" />
             </div>
-            <p className="text-sm text-gray-400">正在搜索...</p>
+            <div className="text-center">
+              <p className="text-sm font-medium text-gray-600">正在搜索</p>
+              {statusMessage && (
+                <p className="text-xs text-gray-400 mt-1 max-w-xs">{statusMessage}</p>
+              )}
+            </div>
           </div>
         )}
 
         {!isLoading && papers.length === 0 && !statusMessage && (
-          <div className="flex flex-col items-center justify-center h-40 text-center gap-2">
-            <p className="text-2xl">🔍</p>
-            <p className="text-sm text-gray-400">在左侧描述您想找的论文</p>
-            <p className="text-xs text-gray-300">例如：找2023年后关于RAG的综述</p>
+          <div className="flex flex-col items-center justify-center h-full min-h-[360px] text-center gap-5 px-8">
+            <div className="w-16 h-16 rounded-2xl bg-white border border-gray-200 shadow-sm flex items-center justify-center">
+              <svg className="w-8 h-8 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
+                  d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+              </svg>
+            </div>
+            <div>
+              <p className="text-base font-semibold text-gray-700 mb-1.5">开始探索学术文献</p>
+              <p className="text-sm text-gray-400 leading-relaxed">
+                在左侧用自然语言描述你想找的论文<br />
+                AI 将自动提取关键词并搜索 10 个学术数据库
+              </p>
+            </div>
+            <div className="flex flex-col gap-2 w-full max-w-xs">
+              {[
+                '找 2023 年后关于大模型幻觉问题的论文',
+                'diffusion model 在医学图像的应用综述',
+                '图神经网络用于药物发现的最新进展',
+              ].map(example => (
+                <div key={example} className="text-xs text-gray-400 bg-white border border-gray-200 rounded-lg px-3 py-2 text-left">
+                  "{example}"
+                </div>
+              ))}
+            </div>
           </div>
         )}
 

@@ -75,14 +75,22 @@ export function ChatPanel({
   return (
     <div className="flex flex-col h-full bg-white border-r border-gray-200">
       {/* Header */}
-      <div className="flex items-center justify-between px-5 py-3.5 border-b border-gray-200">
-        <div>
-          <h1 className="text-base font-bold text-gray-900">ScholarScout</h1>
-          <p className="text-xs text-gray-400">AI 学术论文搜索</p>
+      <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center flex-shrink-0">
+            <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+          </div>
+          <div>
+            <h1 className="text-sm font-bold text-gray-900 leading-none mb-0.5">ScholarScout</h1>
+            <p className="text-xs text-gray-400 leading-none">AI 学术论文搜索</p>
+          </div>
         </div>
         <button
           onClick={onClearKey}
-          className="text-xs text-gray-400 hover:text-gray-600 transition-colors px-2 py-1 rounded hover:bg-gray-100"
+          className="text-xs text-gray-400 hover:text-gray-600 transition-colors px-2.5 py-1.5 rounded-lg hover:bg-gray-100"
         >
           更换 Key
         </button>
