@@ -261,7 +261,7 @@ export function ResultsPanel({ papers, isLoading, statusMessage, settings, onSet
         <div className="flex items-center gap-2 shrink-0">
           <label className="text-xs font-medium text-gray-700">每源抓取</label>
           <input
-            type="range" min={10} max={100} step={5}
+            type="range" min={10} max={100} step={1}
             value={settings.limitPerSource}
             onChange={e => onSettingsChange({ limitPerSource: Number(e.target.value) })}
             className="w-28 accent-blue-600 cursor-pointer"
@@ -274,7 +274,7 @@ export function ResultsPanel({ papers, isLoading, statusMessage, settings, onSet
         <div className="flex items-center gap-2 shrink-0">
           <label className="text-xs font-medium text-gray-700">展示上限</label>
           <input
-            type="range" min={10} max={200} step={10}
+            type="range" min={10} max={200} step={1}
             value={settings.validatedLimit}
             onChange={e => onSettingsChange({ validatedLimit: Number(e.target.value) })}
             className="w-28 accent-blue-600 cursor-pointer"
