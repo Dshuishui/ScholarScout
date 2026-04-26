@@ -695,15 +695,27 @@ def _normalize_title(title: str) -> str:
 
 
 def _merge(existing: Paper, newcomer: Paper) -> Paper:
-    """用后来的论文补全现有版本的空字段，引用数取最大值，摘要取更长的。"""
+    """用后来的论文补全现有版本的空字段，引用数取最大值，摘要取更长的，source_links 累积。"""
     abstract = existing.abstract
     if newcomer.abstract and (not abstract or len(newcomer.abstract) > len(abstract)):
         abstract = newcomer.abstract
+
+    # 累积来源链接：已有的 + newcomer 的（同源不重复）
+    existing_links: list[dict] = list(existing.source_links) if existing.source_links else (
+        [{"source": existing.source, "url": existing.url}] if existing.url else []
+    )
+    existing_sources = {l["source"] for l in existing_links}
+    if newcomer.url and newcomer.source not in existing_sources:
+        source_links = existing_links + [{"source": newcomer.source, "url": newcomer.url}]
+    else:
+        source_links = existing_links
+
     return existing.model_copy(update={
-        "pdf_url":   existing.pdf_url or newcomer.pdf_url,
-        "abstract":  abstract,
-        "citations": max(existing.citations, newcomer.citations),
-        "doi":       existing.doi or newcomer.doi,
+        "pdf_url":      existing.pdf_url or newcomer.pdf_url,
+        "abstract":     abstract,
+        "citations":    max(existing.citations, newcomer.citations),
+        "doi":          existing.doi or newcomer.doi,
+        "source_links": source_links,
     })
 
 
@@ -735,8 +747,10 @@ def deduplicate(papers: list[Paper]) -> list[Paper]:
                 seen_dois[doi_key] = idx
             continue
 
-        # 新论文 → 加入
+        # 新论文 → 初始化 source_links 后加入
         idx = len(result)
+        if not p.source_links and p.url:
+            p = p.model_copy(update={"source_links": [{"source": p.source, "url": p.url}]})
         result.append(p)
         if doi_key:
             seen_dois[doi_key] = idx

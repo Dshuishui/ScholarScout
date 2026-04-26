@@ -65,17 +65,23 @@ export function PaperCard({ paper, selected = false, onToggle }: Props) {
           </p>
         )}
 
-        <div className="flex gap-2 mt-3">
-          {paper.url && (
+        <div className="flex flex-wrap gap-2 mt-3">
+          {/* 多来源链接：有 source_links 就按来源展示，否则回退到单个 url */}
+          {(paper.source_links && paper.source_links.length > 0
+            ? paper.source_links
+            : paper.url ? [{ source: paper.source, url: paper.url }] : []
+          ).map(link => (
             <a
-              href={paper.url}
+              key={link.source}
+              href={link.url}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-xs text-blue-600 hover:text-blue-800 border border-blue-200 hover:border-blue-400 rounded-md px-3 py-1 transition-colors"
+              className="text-xs text-blue-600 hover:text-blue-800 border border-blue-200 hover:border-blue-400 bg-white hover:bg-blue-50 rounded-md px-3 py-1 transition-colors"
             >
-              查看原文 ↗
+              {link.source} ↗
             </a>
-          )}
+          ))}
+
           {paper.pdf_url && (
             <a
               href={getDownloadUrl(paper.pdf_url)}
@@ -85,8 +91,8 @@ export function PaperCard({ paper, selected = false, onToggle }: Props) {
               下载 PDF
             </a>
           )}
-          {!paper.pdf_url && paper.doi && (
-            <span className="text-xs text-gray-400 px-1 py-1">无开放获取 PDF</span>
+          {!paper.pdf_url && (paper.url || (paper.source_links && paper.source_links.length > 0)) && (
+            <span className="text-xs text-gray-400 py-1">无开放获取 PDF</span>
           )}
         </div>
       </div>

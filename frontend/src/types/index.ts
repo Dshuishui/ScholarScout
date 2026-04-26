@@ -10,6 +10,7 @@ export interface Paper {
   source: string
   citations: number
   relevance_reason?: string
+  source_links?: { source: string; url: string }[]
 }
 
 export interface Message {
