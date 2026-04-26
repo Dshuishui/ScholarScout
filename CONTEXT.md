@@ -37,13 +37,14 @@ LLM  DeepSeek API（用户自带 Key，前端 localStorage 存储）
 | CORE | 是（免费） | 1.7 亿+ 开放获取 |
 | NASA ADS | 是（免费） | 天文 / 天体物理 |
 
-### 核心流程
+### 核心流程（两阶段）
 
-1. 用户发消息 → `classify_intent()` 判断搜索/对话（携带最近 8 条历史）
-2. 搜索意图 → `parse_query()` 提取关键词 + 时间范围（携带历史）
-3. 8 源并发搜索，每源最多 N 篇（用户可在前端调整，默认 50）
+1. 用户发消息 → `POST /api/parse`：`classify_intent()` 判断意图 + `parse_query()` 提取关键词，返回普通 JSON
+2. 前端展示可编辑关键词 Tag（左侧输入区），用户确认/增删后提交
+3. `POST /api/search`（携带确认后的 keywords）→ 8 源并发搜索，每源最多 N 篇
 4. 去重 → `validate_papers()` 并行分批（每批 20 篇）LLM 过滤相关性
 5. SSE 流式返回进度和结果，前端展示（分页 20 篇/页）
+6. 右侧结果区持续显示关键词，用户可随时调整关键词或参数，一键重新搜索
 
 ---
 
@@ -52,26 +53,26 @@ LLM  DeepSeek API（用户自带 Key，前端 localStorage 存储）
 ```
 backend/
 ├── config.py              # 数据源 Key（从环境变量读取）、默认参数
-├── models.py              # Paper, SearchRequest（含 limit_per_source/validated_limit）, ParsedQuery
+├── models.py              # Paper, ParseRequest, SearchRequest（含 keywords/date_from/date_to）, ParsedQuery
 ├── .env.example           # Key 配置模板，复制为 .env 填入真实 Key
 ├── services/
 │   ├── llm_service.py     # classify_intent, parse_query, validate_papers（并行分批）
 │   ├── search_service.py  # 8 源搜索 + deduplicate（自实现，无外部学术库依赖）
 │   └── download_service.py# PDF 代理下载，域名白名单
-└── routers/search.py      # SSE /api/search, /api/download
+└── routers/search.py      # POST /api/parse（意图+关键词提取）, SSE /api/search, /api/download
 
 frontend/src/
 ├── hooks/
-│   ├── useSearch.ts       # 搜索状态管理
+│   ├── useSearch.ts       # 两阶段搜索状态（pendingKeywords, confirmedKeywords, confirmSearch, reSearch）
 │   ├── useApiKey.ts       # localStorage Key 管理
 │   └── useSettings.ts     # 搜索参数（每源数量/展示上限），持久化 localStorage
-├── api/client.ts          # SSE 客户端，searchPapers(), getDownloadUrl()
-├── types/index.ts         # Paper, Message, SearchEvent 类型
+├── api/client.ts          # parseQuery(), searchPapers()（支持 confirmed keywords）, getDownloadUrl()
+├── types/index.ts         # Paper, Message, SearchEvent, ParseResult 类型
 └── components/
     ├── KeySetupScreen.tsx  # 首次 Key 输入页
-    ├── MainLayout.tsx      # 左右分栏容器，持有 useSettings
-    ├── ChatPanel.tsx       # 左侧对话区
-    ├── ResultsPanel.tsx    # 右侧论文列表（含设置面板、分页、批量下载、导出 CSV）
+    ├── MainLayout.tsx      # 左右分栏容器，串联 confirmedKeywords/reSearch
+    ├── ChatPanel.tsx       # 左侧对话区（含关键词确认编辑器）
+    ├── ResultsPanel.tsx    # 右侧论文列表（含关键词持久行、参数栏、分页、批量下载、导出 CSV）
     ├── PaperCard.tsx       # 单篇论文卡片（含 checkbox 批量选择）
     └── MessageBubble.tsx   # 对话气泡
 
@@ -106,7 +107,7 @@ deploy/
 - [x] 部署脚本（setup.sh 首次 + deploy.sh 更新）
 
 ### 待做（详见 docs/backlog.md）
-- [ ] Issue B：关键词可视化确认与编辑
+- [x] Issue B：关键词可视化确认与编辑（已完成）
 - [ ] Issue E：Semantic Scholar API Key（申请中）
 - [ ] Issue F：CI/CD（GitHub Actions 自动跑测试）
 - [ ] Issue G：结构化日志（替换 print）

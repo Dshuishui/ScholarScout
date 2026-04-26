@@ -10,7 +10,8 @@
 - **批量下载 ZIP**：并发拉取 PDF 打包，失败明细写入 `failed_downloads.csv`
 - **分页展示**：每页 20 篇，跨页选择持久
 - **导出 CSV**：全部结果一键导出
-- **前端参数配置**：右侧齿轮图标可调整每源抓取数 / 验证后展示数，持久化到 localStorage
+- **前端参数配置**：右侧常驻参数栏可调整每源抓取数 / 验证后展示数（精度 1 篇），持久化到 localStorage，修改后出现"重新搜索"按钮
+- **关键词可视化确认与编辑**：AI 提取关键词后在左侧展示可编辑 Tag，用户确认后再搜索；结果页右侧持续显示关键词，支持增删及重新搜索（Issue B）
 - **移除 paper-search-mcp**：改为直接依赖 feedparser，自实现所有搜索源
 - **搜索源扩展至 8 个**：
   - 无需 Key：arXiv、Semantic Scholar、OpenAlex、PubMed、Europe PMC、INSPIRE-HEP
@@ -23,18 +24,6 @@
 ---
 
 ## 🔲 待做事项
-
-### Issue B：关键词可视化确认与编辑 🟡
-
-parse_query 提取关键词后，先推送 `keywords` 事件给前端展示，用户可删除/增加关键词后再确认搜索。
-
-**涉及改动**：
-- 后端：新增 `keywords` SSE 事件类型，等待前端确认后继续搜索
-- 前端：Tag 可编辑组件（每个 Tag 有 ✕），小输入框追加关键词，"开始搜索"按钮
-- `types/index.ts`：新增 `SearchKeywordsEvent`
-- `SearchRequest`：支持直接传入 keywords 跳过 parse_query
-
----
 
 ### Issue E：Semantic Scholar API Key 🟡
 
