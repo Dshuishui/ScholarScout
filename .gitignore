@@ -3,5 +3,5 @@ backend/.venv/
 **/__pycache__/
 **/*.pyc
 **/.DS_Store
-frontend/node_modules/
+node_modules/
 frontend/dist/
