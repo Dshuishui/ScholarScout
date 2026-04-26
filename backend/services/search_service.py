@@ -1,11 +1,12 @@
 import asyncio
+import functools
 import re
 import unicodedata
 import xml.etree.ElementTree as ET
 import feedparser
 import httpx
 from models import Paper, ParsedQuery
-from config import CORE_API_KEY, NASA_ADS_API_KEY, SERPAPI_KEY, POLITE_EMAIL
+from config import CORE_API_KEY, NASA_ADS_API_KEY, SERPAPI_KEY, PROXY_URL, POLITE_EMAIL
 
 
 async def _search_arxiv(parsed: ParsedQuery, limit: int) -> list[Paper]:
@@ -529,8 +530,53 @@ async def _search_crossref(parsed: ParsedQuery, limit: int) -> list[Paper]:
         return []
 
 
-async def _search_google_scholar(parsed: ParsedQuery, limit: int) -> list[Paper]:
-    """Google Scholar via SerpAPI：综合覆盖，需服务器配置 SERPAPI_KEY。"""
+def _scholarly_search_sync(parsed: ParsedQuery, limit: int) -> list[Paper]:
+    """scholarly 同步搜索（在线程池中运行避免阻塞事件循环）。"""
+    from scholarly import scholarly, ProxyGenerator  # 延迟导入，未安装时不崩溃
+
+    if PROXY_URL:
+        pg = ProxyGenerator()
+        pg.SingleProxy(http=PROXY_URL, https=PROXY_URL)
+        scholarly.use_proxy(pg)
+
+    papers = []
+    gen = scholarly.search_pubs(" ".join(parsed.keywords))
+    for i, pub in enumerate(gen):
+        if i >= limit:
+            break
+        bib = pub.get("bib", {})
+        title = (bib.get("title") or "").strip()
+        if not title:
+            continue
+
+        year = bib.get("pub_year")
+        # 日期过滤：跳过早于 date_from 的结果
+        if parsed.date_from and year and str(year) < parsed.date_from[:4]:
+            continue
+
+        raw_authors = bib.get("author", [])
+        if isinstance(raw_authors, str):
+            authors = [a.strip() for a in raw_authors.split(" and ")]
+        else:
+            authors = list(raw_authors)
+
+        papers.append(Paper(
+            paper_id=f"gs_{abs(hash(title))}",
+            title=title,
+            authors=authors,
+            abstract=bib.get("abstract"),
+            published_date=f"{year}-01-01" if year else None,
+            doi=None,
+            pdf_url=pub.get("eprint_url"),
+            url=pub.get("pub_url"),
+            source="Google Scholar",
+            citations=pub.get("num_citations", 0) or 0,
+        ))
+    return papers
+
+
+async def _search_google_scholar_serpapi(parsed: ParsedQuery, limit: int) -> list[Paper]:
+    """Google Scholar via SerpAPI（备用方案）。"""
     if not SERPAPI_KEY:
         return []
     try:
@@ -538,7 +584,7 @@ async def _search_google_scholar(parsed: ParsedQuery, limit: int) -> list[Paper]
             "engine": "google_scholar",
             "q": " ".join(parsed.keywords),
             "api_key": SERPAPI_KEY,
-            "num": min(limit, 20),  # SerpAPI 单页最多 20 条
+            "num": min(limit, 20),
         }
         if parsed.date_from:
             params["as_ylo"] = parsed.date_from[:4]
@@ -555,37 +601,24 @@ async def _search_google_scholar(parsed: ParsedQuery, limit: int) -> list[Paper]
             title = (item.get("title") or "").strip()
             if not title:
                 continue
-
-            result_id = item.get("result_id", "")
-
-            # 作者：优先 publication_info.authors，其次解析 summary
             pub_info = item.get("publication_info") or {}
             author_list = pub_info.get("authors") or []
             if author_list:
                 authors = [a.get("name", "") for a in author_list if a.get("name")]
             else:
-                # summary 格式通常是 "A, B - 2023 - Journal"
                 summary = pub_info.get("summary", "")
                 authors = [p.strip() for p in summary.split("-")[0].split(",")] if summary else []
-
-            # 年份：从 summary 里提取 4 位数字
-            published_date = None
             summary = pub_info.get("summary", "")
             year_match = re.search(r"\b(19|20)\d{2}\b", summary)
-            if year_match:
-                published_date = f"{year_match.group()}-01-01"
-
-            # PDF 链接：从 resources 数组里找 PDF 格式
+            published_date = f"{year_match.group()}-01-01" if year_match else None
             pdf_url = None
             for res in (item.get("resources") or []):
                 if (res.get("file_format") or "").upper() == "PDF":
                     pdf_url = res.get("link")
                     break
-
             citations = (item.get("inline_links") or {}).get("cited_by", {}).get("total", 0) or 0
-
             papers.append(Paper(
-                paper_id=f"gs_{result_id}",
+                paper_id=f"gs_{item.get('result_id', abs(hash(title)))}",
                 title=title,
                 authors=authors,
                 abstract=item.get("snippet"),
@@ -598,8 +631,27 @@ async def _search_google_scholar(parsed: ParsedQuery, limit: int) -> list[Paper]
             ))
         return papers
     except Exception as e:
-        print(f"Google Scholar search error: {e}")
+        print(f"Google Scholar (SerpAPI) error: {e}")
         return []
+
+
+async def _search_google_scholar(parsed: ParsedQuery, limit: int) -> list[Paper]:
+    """Google Scholar：scholarly + 代理优先，失败自动回退到 SerpAPI。"""
+    # 方案一：scholarly（免费，依赖代理质量）
+    try:
+        loop = asyncio.get_running_loop()
+        fn = functools.partial(_scholarly_search_sync, parsed, limit)
+        results = await asyncio.wait_for(
+            loop.run_in_executor(None, fn),
+            timeout=15.0,
+        )
+        if results:
+            return results
+    except Exception as e:
+        print(f"scholarly failed, falling back to SerpAPI: {e}")
+
+    # 方案二：SerpAPI（付费/免费额度，稳定兜底）
+    return await _search_google_scholar_serpapi(parsed, limit)
 
 
 async def enhance_with_unpaywall(papers: list[Paper]) -> list[Paper]:

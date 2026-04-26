@@ -9,6 +9,8 @@ SEARCH_SOURCES = ["arxiv", "semantic_scholar", "openalex", "pubmed", "core", "in
 CORE_API_KEY = os.environ.get("CORE_API_KEY", "")
 NASA_ADS_API_KEY = os.environ.get("NASA_ADS_API_KEY", "")
 SERPAPI_KEY = os.environ.get("SERPAPI_KEY", "")
+# 服务器代理地址，scholarly 用此绕过 Google Scholar 封锁，例如 http://127.0.0.1:7890
+PROXY_URL = os.environ.get("PROXY_URL", os.environ.get("HTTP_PROXY", ""))
 POLITE_EMAIL = "sasakinakamura9@gmail.com"  # 用于 CrossRef / OpenAlex / Unpaywall 礼貌池标识
 SEARCH_LIMIT_PER_SOURCE = 50
 VALIDATED_LIMIT = 50
