@@ -166,19 +166,22 @@ export function ChatPanel({
       {!pendingKeywords && !input.trim() && history.length > 0 && (
         <div className="px-4 pt-2 pb-1 border-t border-gray-100">
           <p className="text-xs text-gray-400 mb-1.5">最近搜索</p>
-          <div className="flex flex-col gap-1">
+          <div className="flex flex-col gap-0.5">
             {history.map(item => (
               <div
                 key={item.timestamp}
-                className="group flex items-center justify-between rounded-lg px-2.5 py-1.5 hover:bg-gray-50 cursor-pointer transition-colors"
+                className="group flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-gray-50 cursor-pointer transition-colors"
                 onClick={() => !isLoading && onSearchFromHistory(item.keywords)}
               >
-                <span className="text-xs text-gray-600 truncate flex-1">
+                <svg className="w-3 h-3 text-gray-300 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span className="text-xs text-gray-500 truncate flex-1 group-hover:text-gray-700 transition-colors">
                   {item.keywords.join(' · ')}
                 </span>
                 <button
                   onClick={e => { e.stopPropagation(); onRemoveHistory(item.timestamp) }}
-                  className="ml-2 text-gray-300 hover:text-gray-500 opacity-0 group-hover:opacity-100 transition-opacity text-xs leading-none flex-shrink-0"
+                  className="text-gray-300 hover:text-gray-500 opacity-0 group-hover:opacity-100 transition-opacity text-xs leading-none flex-shrink-0 px-1"
                 >
                   ✕
                 </button>

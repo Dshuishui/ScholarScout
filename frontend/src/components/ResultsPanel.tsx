@@ -74,17 +74,17 @@ function Pagination({ current, total, onChange }: {
     pages.push(total)
   }
 
-  const base = 'px-3 py-1.5 text-xs rounded-lg transition-colors'
+  const base = 'w-8 h-8 flex items-center justify-center text-xs rounded-full transition-all'
   const activeBtn = `${base} bg-blue-600 text-white font-semibold shadow-sm`
-  const inactiveBtn = `${base} text-gray-600 hover:bg-gray-100 border border-gray-200`
-  const arrowBtn = `${base} text-gray-500 hover:bg-gray-100 border border-gray-200 disabled:opacity-30 disabled:cursor-not-allowed`
+  const inactiveBtn = `${base} text-gray-500 hover:bg-white hover:text-gray-800 hover:shadow-sm`
+  const arrowBtn = `${base} text-gray-400 hover:bg-white hover:text-gray-700 hover:shadow-sm disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:shadow-none`
 
   return (
-    <div className="flex items-center justify-center gap-1.5 py-5 border-t border-gray-100 mt-2">
+    <div className="flex items-center justify-center gap-1 py-6 mt-2">
       <button className={arrowBtn} onClick={() => onChange(current - 1)} disabled={current === 1}>‹</button>
       {pages.map((p, i) =>
         p === '...' ? (
-          <span key={`dots-${i}`} className="px-1 text-gray-300 text-xs select-none">…</span>
+          <span key={`dots-${i}`} className="w-8 text-center text-gray-300 text-xs select-none">…</span>
         ) : (
           <button key={p} className={p === current ? activeBtn : inactiveBtn} onClick={() => onChange(p as number)}>
             {p}
@@ -105,6 +105,7 @@ export function ResultsPanel({ papers, rejectedPapers = [], isLoading, statusMes
   const [newKw, setNewKw] = useState('')
   const [sortBy, setSortBy] = useState<SortOption>('relevance')
   const [activeTab, setActiveTab] = useState<'filtered' | 'all'>('filtered')
+  const [showSettings, setShowSettings] = useState(false)
 
   // 新搜索完成时重置到筛选后视图
   useEffect(() => {
@@ -250,72 +251,72 @@ export function ResultsPanel({ papers, rejectedPapers = [], isLoading, statusMes
   return (
     <div className="flex flex-col h-full bg-slate-50">
       {/* 顶部标题栏 */}
-      <div className="px-5 py-3 border-b border-gray-200 bg-white flex items-center justify-between gap-3 flex-wrap">
-        <h2 className="text-sm font-semibold text-gray-700 flex-shrink-0">搜索结果</h2>
+      <div className="px-5 py-3 border-b border-gray-200 bg-white flex items-center justify-between gap-3">
+        <h2 className="text-sm font-semibold text-gray-800 flex-shrink-0">搜索结果</h2>
 
         {papers.length > 0 && (
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-xs text-gray-400">
-              {totalPages > 1 ? `${start}–${end} / ${sortedPapers.length} 篇` : `${sortedPapers.length} 篇`}
-            </span>
+          <div className="flex items-center gap-1.5 flex-wrap">
+            {totalPages > 1 && (
+              <span className="text-xs text-gray-400 tabular-nums mr-1">
+                {start}–{end} / {sortedPapers.length}
+              </span>
+            )}
 
-            <div className="flex items-center gap-1">
-              <button
-                onClick={allPageSelected ? clearSelection : selectPage}
-                className="text-xs text-gray-500 hover:text-gray-700 border border-gray-200 hover:border-gray-300 bg-white hover:bg-gray-50 rounded-lg px-2.5 py-1 transition-all"
-              >
-                {allPageSelected ? '取消当前页' : '选当前页'}
-              </button>
-              <button
-                onClick={selectedIds.size === papers.length ? clearSelection : selectAll}
-                className="text-xs text-gray-500 hover:text-gray-700 border border-gray-200 hover:border-gray-300 bg-white hover:bg-gray-50 rounded-lg px-2.5 py-1 transition-all"
-              >
-                {selectedIds.size === papers.length ? '取消全选' : '全选所有'}
-              </button>
-            </div>
+            <button
+              onClick={allPageSelected ? clearSelection : selectPage}
+              className="text-xs text-gray-500 hover:text-gray-700 border border-gray-200 hover:border-gray-300 bg-white hover:bg-gray-50 rounded-lg px-2.5 py-1 transition-all"
+            >
+              {allPageSelected ? '取消当前页' : '选当前页'}
+            </button>
+            <button
+              onClick={selectedIds.size === papers.length ? clearSelection : selectAll}
+              className="text-xs text-gray-500 hover:text-gray-700 border border-gray-200 hover:border-gray-300 bg-white hover:bg-gray-50 rounded-lg px-2.5 py-1 transition-all"
+            >
+              {selectedIds.size === papers.length ? '取消全选' : '全选'}
+            </button>
 
             {selectedIds.size > 0 && (
               <button
                 onClick={downloadSelected}
                 disabled={selectedWithPdf.length === 0 || !!downloadProgress}
-                className="flex items-center gap-1.5 text-xs text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg px-3 py-1 transition-all"
+                className="flex items-center gap-1 text-xs text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg px-2.5 py-1 transition-all"
               >
                 <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
                 </svg>
-                下载 {selectedWithPdf.length} 篇 PDF
+                下载 {selectedWithPdf.length} PDF
                 {selectedIds.size !== selectedWithPdf.length && (
-                  <span className="opacity-70">（已选 {selectedIds.size} 篇，{selectedIds.size - selectedWithPdf.length} 篇无 PDF）</span>
+                  <span className="opacity-70 ml-0.5">({selectedIds.size - selectedWithPdf.length} 无 PDF)</span>
                 )}
               </button>
             )}
 
             <button
               onClick={() => exportCSV(papers)}
-              className="flex items-center gap-1 text-xs text-gray-500 hover:text-blue-600 border border-gray-200 hover:border-blue-300 bg-white hover:bg-blue-50 rounded-lg px-2.5 py-1 transition-all"
+              className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700 border border-gray-200 hover:border-gray-300 bg-white hover:bg-gray-50 rounded-lg px-2.5 py-1 transition-all"
             >
               <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
               </svg>
-              导出 CSV
+              CSV
             </button>
           </div>
         )}
       </div>
 
-      {/* 关键词行 - 有搜索结果后显示 */}
+      {/* 关键词行 */}
       {confirmedKeywords != null && (
         <div className="px-5 py-2.5 bg-white border-b border-gray-100 flex items-center gap-2 flex-wrap">
-          <span className="text-xs font-semibold text-gray-600 shrink-0">搜索词</span>
+          <span className="text-xs font-medium text-gray-400 shrink-0">搜索词</span>
           {editKeywords.map((kw, i) => (
             <span
               key={i}
-              className="flex items-center gap-1 bg-blue-50 border border-blue-200 text-blue-700 text-xs rounded-full px-2.5 py-1 font-medium"
+              className="flex items-center gap-1 bg-blue-600 text-white text-xs rounded-full px-2.5 py-1 font-medium shadow-sm"
             >
               {kw}
               <button
                 onClick={() => setEditKeywords(prev => prev.filter((_, j) => j !== i))}
-                className="text-blue-300 hover:text-blue-600 transition-colors leading-none ml-0.5"
+                className="text-blue-200 hover:text-white transition-colors leading-none ml-0.5"
               >
                 ✕
               </button>
@@ -326,106 +327,108 @@ export function ResultsPanel({ papers, rejectedPapers = [], isLoading, statusMes
             onChange={e => setNewKw(e.target.value)}
             onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addKeyword() } }}
             onBlur={addKeyword}
-            placeholder="+ 添加"
-            className="text-xs border border-dashed border-gray-300 rounded-full px-2.5 py-1 outline-none focus:border-blue-400 bg-transparent text-gray-600 placeholder-gray-300 w-20"
+            placeholder="＋ 添加"
+            className="text-xs border border-dashed border-gray-300 rounded-full px-2.5 py-1 outline-none focus:border-blue-400 bg-transparent text-gray-500 placeholder-gray-300 w-20"
           />
+          {needsReSearch && (
+            <button
+              onClick={() => onReSearch!(editKeywords)}
+              disabled={isLoading || editKeywords.length === 0}
+              className="ml-auto flex items-center gap-1.5 text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-full px-3 py-1 transition-all shadow-sm"
+            >
+              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              重新搜索
+            </button>
+          )}
         </div>
       )}
 
-      {/* Tab 栏 + 排序 */}
+      {/* Tab 栏 + 排序 + 设置 */}
       {(papers.length > 0 || rejectedPapers.length > 0) && (
-        <div className="px-5 py-0 bg-white border-b border-gray-200 flex items-center justify-between">
-          <div className="flex">
-            <button
-              onClick={() => setActiveTab('filtered')}
-              className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
-                activeTab === 'filtered'
-                  ? 'border-blue-600 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              AI 筛选后
-              <span className={`ml-1.5 text-xs rounded-full px-1.5 py-0.5 ${
-                activeTab === 'filtered' ? 'bg-blue-100 text-blue-600' : 'bg-gray-100 text-gray-500'
-              }`}>
-                {papers.length}
-              </span>
-            </button>
-            <button
-              onClick={() => setActiveTab('all')}
-              className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
-                activeTab === 'all'
-                  ? 'border-blue-600 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              全部结果
-              <span className={`ml-1.5 text-xs rounded-full px-1.5 py-0.5 ${
-                activeTab === 'all' ? 'bg-blue-100 text-blue-600' : 'bg-gray-100 text-gray-500'
-              }`}>
-                {papers.length + rejectedPapers.length}
-              </span>
-            </button>
+        <>
+          <div className="px-5 py-0 bg-white border-b border-gray-200 flex items-center justify-between">
+            <div className="flex">
+              {(['filtered', 'all'] as const).map(tab => (
+                <button
+                  key={tab}
+                  onClick={() => setActiveTab(tab)}
+                  className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+                    activeTab === tab
+                      ? 'border-blue-600 text-blue-600'
+                      : 'border-transparent text-gray-400 hover:text-gray-600'
+                  }`}
+                >
+                  {tab === 'filtered' ? 'AI 筛选后' : '全部结果'}
+                  <span className={`ml-1.5 text-xs rounded-full px-1.5 py-0.5 tabular-nums ${
+                    activeTab === tab ? 'bg-blue-100 text-blue-600' : 'bg-gray-100 text-gray-400'
+                  }`}>
+                    {tab === 'filtered' ? papers.length : papers.length + rejectedPapers.length}
+                  </span>
+                </button>
+              ))}
+            </div>
+
+            <div className="flex items-center gap-2">
+              <select
+                value={sortBy}
+                onChange={e => setSortBy(e.target.value as SortOption)}
+                className="text-xs text-gray-600 border border-gray-200 rounded-lg px-2.5 py-1.5 bg-white cursor-pointer hover:border-gray-300 transition-colors"
+              >
+                <option value="relevance">相关性优先</option>
+                <option value="citations">引用数最高</option>
+                <option value="date_desc">最新发表</option>
+                <option value="date_asc">最早发表</option>
+              </select>
+
+              <button
+                onClick={() => setShowSettings(v => !v)}
+                title="搜索参数"
+                className={`flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-lg border transition-colors ${
+                  showSettings || settingsChanged
+                    ? 'border-blue-300 bg-blue-50 text-blue-600'
+                    : 'border-gray-200 bg-white text-gray-500 hover:border-gray-300 hover:text-gray-700'
+                }`}
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                    d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
+                </svg>
+                参数
+                {settingsChanged && <span className="w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0" />}
+              </button>
+            </div>
           </div>
 
-          <select
-            value={sortBy}
-            onChange={e => setSortBy(e.target.value as SortOption)}
-            className="text-xs text-gray-600 border border-gray-200 rounded-lg px-2.5 py-1.5 bg-white cursor-pointer hover:border-gray-300 transition-colors"
-          >
-            <option value="relevance">相关性优先</option>
-            <option value="citations">引用数最高</option>
-            <option value="date_desc">最新发表</option>
-            <option value="date_asc">最早发表</option>
-          </select>
-        </div>
+          {/* 折叠设置面板 */}
+          {showSettings && (
+            <div className="px-5 py-3 bg-blue-50/60 border-b border-blue-100 flex items-center gap-6 flex-wrap">
+              <div className="flex items-center gap-2">
+                <label className="text-xs text-gray-500 whitespace-nowrap">每源抓取</label>
+                <input
+                  type="range" min={10} max={200} step={1}
+                  value={settings.limitPerSource}
+                  onChange={e => onSettingsChange({ limitPerSource: Number(e.target.value) })}
+                  className="w-24 accent-blue-600 cursor-pointer"
+                />
+                <span className="text-xs font-semibold text-blue-600 w-10 tabular-nums">{settings.limitPerSource} 篇</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <label className="text-xs text-gray-500 whitespace-nowrap">展示上限</label>
+                <input
+                  type="range" min={10} max={500} step={1}
+                  value={settings.validatedLimit}
+                  onChange={e => onSettingsChange({ validatedLimit: Number(e.target.value) })}
+                  className="w-24 accent-blue-600 cursor-pointer"
+                />
+                <span className="text-xs font-semibold text-blue-600 w-10 tabular-nums">{settings.validatedLimit} 篇</span>
+              </div>
+              <p className="text-xs text-blue-400 ml-auto">调整后点击重新搜索生效</p>
+            </div>
+          )}
+        </>
       )}
-
-      {/* 搜索参数栏 */}
-      <div className="px-5 py-2.5 bg-white border-b border-gray-200 flex items-center gap-5 flex-wrap">
-        <span className="text-xs font-semibold text-gray-600 shrink-0">搜索参数</span>
-
-        <div className="flex items-center gap-2 shrink-0">
-          <label className="text-xs font-medium text-gray-700">每源抓取</label>
-          <input
-            type="range" min={10} max={200} step={1}
-            value={settings.limitPerSource}
-            onChange={e => onSettingsChange({ limitPerSource: Number(e.target.value) })}
-            className="w-28 accent-blue-600 cursor-pointer"
-          />
-          <span className="text-xs font-bold text-blue-600 w-10 text-right tabular-nums">
-            {settings.limitPerSource} 篇
-          </span>
-        </div>
-
-        <div className="flex items-center gap-2 shrink-0">
-          <label className="text-xs font-medium text-gray-700">展示上限</label>
-          <input
-            type="range" min={10} max={500} step={1}
-            value={settings.validatedLimit}
-            onChange={e => onSettingsChange({ validatedLimit: Number(e.target.value) })}
-            className="w-28 accent-blue-600 cursor-pointer"
-          />
-          <span className="text-xs font-bold text-blue-600 w-10 text-right tabular-nums">
-            {settings.validatedLimit} 篇
-          </span>
-        </div>
-
-        {needsReSearch ? (
-          <button
-            onClick={() => onReSearch!(editKeywords)}
-            disabled={isLoading || editKeywords.length === 0}
-            className="flex items-center gap-1.5 text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg px-3 py-1.5 transition-all shadow-sm"
-          >
-            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-            </svg>
-            重新搜索
-          </button>
-        ) : (
-          <span className="text-xs text-gray-400">调整关键词或参数后可重新搜索</span>
-        )}
-      </div>
 
       {/* 状态栏 — 有结果后才显示进度（加载中且无结果时进度已在列表区展示） */}
       {statusMessage && papers.length > 0 && (
