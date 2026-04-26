@@ -5,7 +5,7 @@ import xml.etree.ElementTree as ET
 import feedparser
 import httpx
 from models import Paper, ParsedQuery
-from config import CORE_API_KEY, NASA_ADS_API_KEY, POLITE_EMAIL
+from config import CORE_API_KEY, NASA_ADS_API_KEY, SERPAPI_KEY, POLITE_EMAIL
 
 
 async def _search_arxiv(parsed: ParsedQuery, limit: int) -> list[Paper]:
@@ -529,6 +529,79 @@ async def _search_crossref(parsed: ParsedQuery, limit: int) -> list[Paper]:
         return []
 
 
+async def _search_google_scholar(parsed: ParsedQuery, limit: int) -> list[Paper]:
+    """Google Scholar via SerpAPI：综合覆盖，需服务器配置 SERPAPI_KEY。"""
+    if not SERPAPI_KEY:
+        return []
+    try:
+        params: dict = {
+            "engine": "google_scholar",
+            "q": " ".join(parsed.keywords),
+            "api_key": SERPAPI_KEY,
+            "num": min(limit, 20),  # SerpAPI 单页最多 20 条
+        }
+        if parsed.date_from:
+            params["as_ylo"] = parsed.date_from[:4]
+        if parsed.date_to:
+            params["as_yhi"] = parsed.date_to[:4]
+
+        async with httpx.AsyncClient(timeout=20) as client:
+            resp = await client.get("https://serpapi.com/search.json", params=params)
+            resp.raise_for_status()
+            data = resp.json()
+
+        papers = []
+        for item in data.get("organic_results", []):
+            title = (item.get("title") or "").strip()
+            if not title:
+                continue
+
+            result_id = item.get("result_id", "")
+
+            # 作者：优先 publication_info.authors，其次解析 summary
+            pub_info = item.get("publication_info") or {}
+            author_list = pub_info.get("authors") or []
+            if author_list:
+                authors = [a.get("name", "") for a in author_list if a.get("name")]
+            else:
+                # summary 格式通常是 "A, B - 2023 - Journal"
+                summary = pub_info.get("summary", "")
+                authors = [p.strip() for p in summary.split("-")[0].split(",")] if summary else []
+
+            # 年份：从 summary 里提取 4 位数字
+            published_date = None
+            summary = pub_info.get("summary", "")
+            year_match = re.search(r"\b(19|20)\d{2}\b", summary)
+            if year_match:
+                published_date = f"{year_match.group()}-01-01"
+
+            # PDF 链接：从 resources 数组里找 PDF 格式
+            pdf_url = None
+            for res in (item.get("resources") or []):
+                if (res.get("file_format") or "").upper() == "PDF":
+                    pdf_url = res.get("link")
+                    break
+
+            citations = (item.get("inline_links") or {}).get("cited_by", {}).get("total", 0) or 0
+
+            papers.append(Paper(
+                paper_id=f"gs_{result_id}",
+                title=title,
+                authors=authors,
+                abstract=item.get("snippet"),
+                published_date=published_date,
+                doi=None,
+                pdf_url=pdf_url,
+                url=item.get("link"),
+                source="Google Scholar",
+                citations=citations,
+            ))
+        return papers
+    except Exception as e:
+        print(f"Google Scholar search error: {e}")
+        return []
+
+
 async def enhance_with_unpaywall(papers: list[Paper]) -> list[Paper]:
     """为有 DOI 但无 PDF 的论文查询 Unpaywall，尝试补全开放获取 PDF 链接。"""
     to_enhance = [p for p in papers if p.doi and not p.pdf_url]
@@ -631,6 +704,7 @@ async def search_all_sources(parsed: ParsedQuery, limit_per_source: int = 10) ->
         _search_europepmc(parsed, limit_per_source),
         _search_nasa_ads(parsed, limit_per_source),
         _search_crossref(parsed, limit_per_source),
+        _search_google_scholar(parsed, limit_per_source),
     )
     all_papers = [p for source_results in results for p in source_results]
     return deduplicate(all_papers)
