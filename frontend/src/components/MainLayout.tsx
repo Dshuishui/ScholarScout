@@ -13,6 +13,7 @@ export function MainLayout({ apiKey, onClearKey }: Props) {
   const {
     messages, papers, rejectedPapers, isLoading, statusMessage,
     search, pendingKeywords, confirmedKeywords, confirmSearch, cancelSearch, reSearch,
+    history, removeHistory, searchFromHistory,
   } = useSearch(apiKey, settings)
 
   return (
@@ -26,6 +27,9 @@ export function MainLayout({ apiKey, onClearKey }: Props) {
           pendingKeywords={pendingKeywords}
           onConfirmKeywords={confirmSearch}
           onCancelSearch={cancelSearch}
+          history={history}
+          onSearchFromHistory={searchFromHistory}
+          onRemoveHistory={removeHistory}
         />
       </div>
       <div className="flex-1 min-w-0 relative">

@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { parseQuery, searchPapers } from '../api/client'
 import type { Message, Paper } from '../types'
 import type { SearchSettings } from './useSettings'
+import { useSearchHistory } from './useSearchHistory'
 
 const WELCOME: Message = {
   id: '0',
@@ -26,6 +27,7 @@ export function useSearch(apiKey: string, settings: SearchSettings) {
   const [statusMessage, setStatusMessage] = useState('')
   const [pendingSearch, setPendingSearch] = useState<PendingSearch | null>(null)
   const [lastConfirmed, setLastConfirmed] = useState<PendingSearch | null>(null)
+  const { history, addHistory, removeHistory } = useSearchHistory()
 
   const updateAssistant = (assistantId: string, patch: Partial<Message>) =>
     setMessages(prev => prev.map(m => m.id === assistantId ? { ...m, ...patch } : m))
@@ -120,6 +122,7 @@ export function useSearch(apiKey: string, settings: SearchSettings) {
     const snapshot = pendingSearch
     setPendingSearch(null)
     setLastConfirmed({ ...snapshot, keywords })
+    addHistory(keywords)
     await runSearchStream(snapshot.assistantId, snapshot, keywords)
   }
 
@@ -146,6 +149,27 @@ export function useSearch(apiKey: string, settings: SearchSettings) {
     await runSearchStream(assistantId, newConfirmed, keywords)
   }
 
+  const searchFromHistory = async (keywords: string[]) => {
+    const assistantId = Date.now().toString()
+    const userMsgId = (Date.now() - 1).toString()
+    const query = keywords.join(' ')
+    const confirmed: PendingSearch = {
+      assistantId,
+      keywords,
+      date_from: null,
+      date_to: null,
+      query,
+      history: [],
+    }
+    setLastConfirmed(confirmed)
+    setMessages(prev => [
+      ...prev,
+      { id: userMsgId, role: 'user', content: `历史搜索：${keywords.join('、')}` },
+      { id: assistantId, role: 'assistant', content: '', isLoading: true },
+    ])
+    await runSearchStream(assistantId, confirmed, keywords)
+  }
+
   return {
     messages,
     papers,
@@ -158,5 +182,8 @@ export function useSearch(apiKey: string, settings: SearchSettings) {
     confirmSearch,
     cancelSearch,
     reSearch: lastConfirmed ? reSearch : undefined,
+    history,
+    removeHistory,
+    searchFromHistory,
   }
 }

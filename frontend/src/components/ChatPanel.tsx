@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import type { Message } from '../types'
+import type { HistoryItem } from '../hooks/useSearchHistory'
 import { MessageBubble } from './MessageBubble'
 
 interface Props {
@@ -10,11 +11,15 @@ interface Props {
   pendingKeywords: string[] | null
   onConfirmKeywords: (keywords: string[]) => void
   onCancelSearch: () => void
+  history: HistoryItem[]
+  onSearchFromHistory: (keywords: string[]) => void
+  onRemoveHistory: (timestamp: number) => void
 }
 
 export function ChatPanel({
   messages, isLoading, onSearch, onClearKey,
   pendingKeywords, onConfirmKeywords, onCancelSearch,
+  history, onSearchFromHistory, onRemoveHistory,
 }: Props) {
   const [input, setInput] = useState('')
   const [editKeywords, setEditKeywords] = useState<string[]>([])
@@ -145,6 +150,32 @@ export function ChatPanel({
                 </button>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* 最近搜索 — 无输入、无 pending、有历史时显示 */}
+      {!pendingKeywords && !input.trim() && history.length > 0 && (
+        <div className="px-4 pt-2 pb-1 border-t border-gray-100">
+          <p className="text-xs text-gray-400 mb-1.5">最近搜索</p>
+          <div className="flex flex-col gap-1">
+            {history.map(item => (
+              <div
+                key={item.timestamp}
+                className="group flex items-center justify-between rounded-lg px-2.5 py-1.5 hover:bg-gray-50 cursor-pointer transition-colors"
+                onClick={() => !isLoading && onSearchFromHistory(item.keywords)}
+              >
+                <span className="text-xs text-gray-600 truncate flex-1">
+                  {item.keywords.join(' · ')}
+                </span>
+                <button
+                  onClick={e => { e.stopPropagation(); onRemoveHistory(item.timestamp) }}
+                  className="ml-2 text-gray-300 hover:text-gray-500 opacity-0 group-hover:opacity-100 transition-opacity text-xs leading-none flex-shrink-0"
+                >
+                  ✕
+                </button>
+              </div>
+            ))}
           </div>
         </div>
       )}
