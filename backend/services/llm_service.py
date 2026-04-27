@@ -1,5 +1,6 @@
 import json
 import asyncio
+from datetime import date
 from openai import AsyncOpenAI
 from models import ParsedQuery, Paper
 from config import DEEPSEEK_BASE_URL, DEEPSEEK_MODEL
@@ -74,6 +75,8 @@ async def parse_query(user_query: str, api_key: str, history: list[dict] = []) -
         temperature=0.1,
     )
     data = json.loads(response.choices[0].message.content)
+    if not data.get("date_from"):
+        data["date_from"] = f"{date.today().year - 5}-01-01"
     return ParsedQuery(**data)
 
 
