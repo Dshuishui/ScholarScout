@@ -3,7 +3,7 @@ import type { Paper } from '../types'
 import { getDownloadUrl } from '../api/client'
 
 const SOURCE_STYLES: Record<string, { bar: string; badge: string }> = {
-  'arXiv':            { bar: 'bg-orange-400',  badge: 'bg-orange-50 text-orange-700 border-orange-200' },
+  'arXiv':            { bar: 'bg-green-500',   badge: 'bg-green-50 text-green-700 border-green-200' },
   'Semantic Scholar': { bar: 'bg-blue-500',    badge: 'bg-blue-50 text-blue-700 border-blue-200' },
   'OpenAlex':         { bar: 'bg-violet-500',  badge: 'bg-violet-50 text-violet-700 border-violet-200' },
   'PubMed':           { bar: 'bg-emerald-500', badge: 'bg-emerald-50 text-emerald-700 border-emerald-200' },

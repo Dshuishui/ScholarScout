@@ -2,6 +2,34 @@ import { useState, useRef, useEffect } from 'react'
 import type { Paper } from '../types'
 import type { ChatMessage } from '../hooks/usePaperChat'
 
+const PROMPTS_KEY = 'scholarscout_quick_prompts'
+const DEFAULT_PROMPTS = [
+  '这篇论文的核心贡献是什么？',
+  '这篇论文的方法有哪些局限性？',
+  '这篇论文适合哪些应用场景？',
+]
+
+function useQuickPrompts() {
+  const [prompts, setPrompts] = useState<string[]>(() => {
+    try {
+      const s = localStorage.getItem(PROMPTS_KEY)
+      return s ? JSON.parse(s) : DEFAULT_PROMPTS
+    } catch { return DEFAULT_PROMPTS }
+  })
+
+  const update = (next: string[]) => {
+    setPrompts(next)
+    localStorage.setItem(PROMPTS_KEY, JSON.stringify(next))
+  }
+
+  return {
+    prompts,
+    remove: (i: number) => update(prompts.filter((_, j) => j !== i)),
+    add: (text: string) => { if (text.trim()) update([...prompts, text.trim()]) },
+    reset: () => update(DEFAULT_PROMPTS),
+  }
+}
+
 interface Props {
   paper: Paper | null
   messages: ChatMessage[]
@@ -12,8 +40,11 @@ interface Props {
 
 export function PaperChatDrawer({ paper, messages, isStreaming, onSend, onClose }: Props) {
   const [input, setInput] = useState('')
+  const [editingPrompts, setEditingPrompts] = useState(false)
+  const [newPrompt, setNewPrompt] = useState('')
   const bottomRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const { prompts, remove, add, reset } = useQuickPrompts()
   const isOpen = paper !== null
 
   useEffect(() => {
@@ -87,22 +118,64 @@ export function PaperChatDrawer({ paper, messages, isStreaming, onSend, onClose 
             {/* Messages */}
             <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
               {messages.length === 0 && (
-                <div className="flex flex-col items-center justify-center h-full text-center text-gray-400 pb-8">
+                <div className="flex flex-col items-center justify-center h-full text-center text-gray-400 pb-4">
                   <svg className="w-10 h-10 mb-3 opacity-40" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
                   </svg>
                   <p className="text-sm font-medium">和 AI 讨论这篇论文</p>
                   <p className="text-xs mt-1 text-gray-300">可以询问方法、贡献、局限性等</p>
-                  <div className="mt-4 space-y-1.5 w-full">
-                    {QUICK_PROMPTS.map(q => (
-                      <button
-                        key={q}
-                        onClick={() => { setInput(q); textareaRef.current?.focus() }}
-                        className="w-full text-left text-xs px-3 py-2 rounded-lg bg-gray-50 hover:bg-blue-50 hover:text-blue-700 border border-gray-200 hover:border-blue-200 transition-colors"
-                      >
-                        {q}
-                      </button>
+
+                  {/* Quick prompts */}
+                  <div className="mt-4 space-y-1.5 w-full text-left">
+                    {prompts.map((q, i) => (
+                      <div key={i} className="flex items-center gap-1">
+                        <button
+                          onClick={() => { if (!editingPrompts) { setInput(q); textareaRef.current?.focus() } }}
+                          className={`flex-1 text-left text-xs px-3 py-2 rounded-lg bg-gray-50 border border-gray-200 transition-colors ${
+                            editingPrompts ? 'cursor-default opacity-60' : 'hover:bg-blue-50 hover:text-blue-700 hover:border-blue-200'
+                          }`}
+                        >
+                          {q}
+                        </button>
+                        {editingPrompts && (
+                          <button
+                            onClick={() => remove(i)}
+                            className="flex-shrink-0 w-5 h-5 flex items-center justify-center rounded text-gray-300 hover:text-red-400 transition-colors"
+                          >
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                          </button>
+                        )}
+                      </div>
                     ))}
+
+                    {editingPrompts && (
+                      <div className="flex gap-1 mt-1">
+                        <input
+                          value={newPrompt}
+                          onChange={e => setNewPrompt(e.target.value)}
+                          onKeyDown={e => { if (e.key === 'Enter') { add(newPrompt); setNewPrompt('') } }}
+                          placeholder="输入新提问… Enter 添加"
+                          className="flex-1 text-xs border border-dashed border-gray-300 rounded-lg px-3 py-1.5 focus:outline-none focus:border-blue-400 bg-transparent text-gray-600 placeholder-gray-300"
+                        />
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Edit controls */}
+                  <div className="flex items-center gap-3 mt-3 text-xs">
+                    <button
+                      onClick={() => { setEditingPrompts(p => !p); setNewPrompt('') }}
+                      className="text-gray-400 hover:text-gray-600 transition-colors"
+                    >
+                      {editingPrompts ? '完成' : '编辑快捷提问'}
+                    </button>
+                    {editingPrompts && (
+                      <button onClick={reset} className="text-gray-300 hover:text-gray-500 transition-colors">
+                        恢复默认
+                      </button>
+                    )}
                   </div>
                 </div>
               )}
@@ -172,8 +245,3 @@ export function PaperChatDrawer({ paper, messages, isStreaming, onSend, onClose 
   )
 }
 
-const QUICK_PROMPTS = [
-  '这篇论文的核心贡献是什么？',
-  '这篇论文的方法有哪些局限性？',
-  '这篇论文适合哪些应用场景？',
-]

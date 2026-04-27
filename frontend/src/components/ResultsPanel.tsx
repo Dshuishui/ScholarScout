@@ -7,7 +7,7 @@ import { PaperCard } from './PaperCard'
 import { getDownloadUrl } from '../api/client'
 
 const SOURCE_COLORS: Record<string, string> = {
-  'arXiv':            'text-orange-600',
+  'arXiv':            'text-green-600',
   'Semantic Scholar': 'text-blue-600',
   'OpenAlex':         'text-violet-600',
   'PubMed':           'text-emerald-600',
@@ -23,6 +23,7 @@ const ITEMS_PER_PAGE = 20
 const DOWNLOAD_CONCURRENCY = 3
 
 type SortOption = 'relevance' | 'citations' | 'date_desc' | 'date_asc'
+type ViewMode = 'list' | 'grouped'
 
 interface Props {
   papers: Paper[]
@@ -120,6 +121,7 @@ export function ResultsPanel({ papers, rejectedPapers = [], isLoading, statusMes
   const [newKw, setNewKw] = useState('')
   const [sortBy, setSortBy] = useState<SortOption>('relevance')
   const [activeTab, setActiveTab] = useState<'filtered' | 'all'>('filtered')
+  const [viewMode, setViewMode] = useState<ViewMode>('list')
 
   // 新搜索完成时重置到筛选后视图
   useEffect(() => {
@@ -148,6 +150,16 @@ export function ResultsPanel({ papers, rejectedPapers = [], isLoading, statusMes
       return sortBy === 'date_desc' ? db.localeCompare(da) : da.localeCompare(db)
     })
   }, [activePapers, sortBy])
+
+  const groupedPapers = useMemo(() => {
+    if (viewMode !== 'grouped') return null
+    const map = new Map<string, Paper[]>()
+    for (const p of sortedPapers) {
+      if (!map.has(p.source)) map.set(p.source, [])
+      map.get(p.source)!.push(p)
+    }
+    return map
+  }, [viewMode, sortedPapers])
 
   // Sync keyword editor when a new search completes
   useEffect(() => {
@@ -470,16 +482,39 @@ const addKeyword = () => {
               </button>
             ))}
           </div>
-          <select
-            value={sortBy}
-            onChange={e => setSortBy(e.target.value as SortOption)}
-            className="text-xs text-gray-600 border border-gray-200 rounded-lg px-2.5 py-1.5 bg-white cursor-pointer hover:border-gray-300 transition-colors"
-          >
-            <option value="relevance">相关性优先</option>
-            <option value="citations">引用数最高</option>
-            <option value="date_desc">最新发表</option>
-            <option value="date_asc">最早发表</option>
-          </select>
+          <div className="flex items-center gap-2">
+            {/* 视图切换 */}
+            <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden">
+              <button
+                onClick={() => setViewMode('list')}
+                title="列表视图"
+                className={`p-1.5 transition-colors ${viewMode === 'list' ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-gray-600 bg-white'}`}
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                </svg>
+              </button>
+              <button
+                onClick={() => setViewMode('grouped')}
+                title="按来源分组"
+                className={`p-1.5 transition-colors ${viewMode === 'grouped' ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-gray-600 bg-white'}`}
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                </svg>
+              </button>
+            </div>
+            <select
+              value={sortBy}
+              onChange={e => setSortBy(e.target.value as SortOption)}
+              className="text-xs text-gray-600 border border-gray-200 rounded-lg px-2.5 py-1.5 bg-white cursor-pointer hover:border-gray-300 transition-colors"
+            >
+              <option value="relevance">相关性优先</option>
+              <option value="citations">引用数最高</option>
+              <option value="date_desc">最新发表</option>
+              <option value="date_asc">最早发表</option>
+            </select>
+          </div>
         </div>
       )}
 
@@ -536,18 +571,41 @@ const addKeyword = () => {
           </div>
         )}
 
-        {pagePapers.map(paper => (
-          <PaperCard
-            key={paper.paper_id}
-            paper={paper}
-            selected={selectedIds.has(paper.paper_id)}
-            onToggle={activeTab === 'filtered' || !rejectedIds.has(paper.paper_id) ? () => togglePaper(paper.paper_id) : undefined}
-            isRejected={rejectedIds.has(paper.paper_id)}
-            onAnalyze={onAnalyzePaper ? () => onAnalyzePaper(paper) : undefined}
-          />
-        ))}
-
-        <Pagination current={currentPage} total={totalPages} onChange={p => { setCurrentPage(p) }} />
+        {viewMode === 'grouped' && groupedPapers ? (
+          Array.from(groupedPapers.entries()).map(([source, sourcePapers]) => (
+            <div key={source}>
+              <div className="flex items-center gap-2 px-1 py-2 mb-1 mt-2 first:mt-0">
+                <span className={`text-xs font-semibold ${SOURCE_COLORS[source] ?? 'text-gray-600'}`}>{source}</span>
+                <span className="text-xs text-gray-300 tabular-nums">{sourcePapers.length} 篇</span>
+                <div className="flex-1 h-px bg-gray-100" />
+              </div>
+              {sourcePapers.map(paper => (
+                <PaperCard
+                  key={paper.paper_id}
+                  paper={paper}
+                  selected={selectedIds.has(paper.paper_id)}
+                  onToggle={activeTab === 'filtered' || !rejectedIds.has(paper.paper_id) ? () => togglePaper(paper.paper_id) : undefined}
+                  isRejected={rejectedIds.has(paper.paper_id)}
+                  onAnalyze={onAnalyzePaper ? () => onAnalyzePaper(paper) : undefined}
+                />
+              ))}
+            </div>
+          ))
+        ) : (
+          <>
+            {pagePapers.map(paper => (
+              <PaperCard
+                key={paper.paper_id}
+                paper={paper}
+                selected={selectedIds.has(paper.paper_id)}
+                onToggle={activeTab === 'filtered' || !rejectedIds.has(paper.paper_id) ? () => togglePaper(paper.paper_id) : undefined}
+                isRejected={rejectedIds.has(paper.paper_id)}
+                onAnalyze={onAnalyzePaper ? () => onAnalyzePaper(paper) : undefined}
+              />
+            ))}
+            <Pagination current={currentPage} total={totalPages} onChange={p => { setCurrentPage(p) }} />
+          </>
+        )}
       </div>
 
       {/* 下载进度浮层 */}
