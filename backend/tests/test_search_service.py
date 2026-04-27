@@ -1,4 +1,3 @@
-from contextlib import ExitStack
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -6,17 +5,9 @@ import pytest
 from models import Paper, ParsedQuery
 from services.search_service import _merge, _normalize_title, deduplicate, search_all_sources
 
-_ALL_SOURCE_PATHS = [
-    "services.search_service._search_arxiv",
-    "services.search_service._search_semantic_scholar",
-    "services.search_service._search_openalex",
-    "services.search_service._search_pubmed",
-    "services.search_service._search_core",
-    "services.search_service._search_inspire",
-    "services.search_service._search_europepmc",
-    "services.search_service._search_nasa_ads",
-    "services.search_service._search_crossref",
-    "services.search_service._search_google_scholar",
+_ALL_SOURCE_NAMES = [
+    "arXiv", "Semantic Scholar", "OpenAlex", "PubMed",
+    "Europe PMC", "INSPIRE-HEP", "CrossRef", "CORE", "NASA ADS", "Google Scholar",
 ]
 
 
@@ -100,12 +91,10 @@ def test_merge_carries_venue():
 async def test_search_all_sources_returns_papers():
     query = ParsedQuery(keywords=["transformer"], date_from=None, date_to=None)
     mock_paper = make_paper("2301.00001", "Test Paper")
-    mocks = {src: AsyncMock(return_value=[]) for src in _ALL_SOURCE_PATHS}
-    mocks["services.search_service._search_arxiv"] = AsyncMock(return_value=[mock_paper])
+    source_mocks = {src: AsyncMock(return_value=[]) for src in _ALL_SOURCE_NAMES}
+    source_mocks["arXiv"] = AsyncMock(return_value=[mock_paper])
 
-    with ExitStack() as stack:
-        for target, mock in mocks.items():
-            stack.enter_context(patch(target, mock))
+    with patch.dict("services.search_service._SOURCE_FUNCS", source_mocks):
         result = await search_all_sources(query)
 
     assert len(result) == 1
@@ -116,13 +105,11 @@ async def test_search_all_sources_deduplicates():
     query = ParsedQuery(keywords=["transformer"], date_from=None, date_to=None)
     paper_a = make_paper("1", "Same Title", doi="10.1/abc", source="arXiv", url="https://arxiv.org/1")
     paper_b = make_paper("2", "Same Title", doi="10.1/abc", source="Semantic Scholar", url="https://s2.org/2")
-    mocks = {src: AsyncMock(return_value=[]) for src in _ALL_SOURCE_PATHS}
-    mocks["services.search_service._search_arxiv"] = AsyncMock(return_value=[paper_a])
-    mocks["services.search_service._search_semantic_scholar"] = AsyncMock(return_value=[paper_b])
+    source_mocks = {src: AsyncMock(return_value=[]) for src in _ALL_SOURCE_NAMES}
+    source_mocks["arXiv"] = AsyncMock(return_value=[paper_a])
+    source_mocks["Semantic Scholar"] = AsyncMock(return_value=[paper_b])
 
-    with ExitStack() as stack:
-        for target, mock in mocks.items():
-            stack.enter_context(patch(target, mock))
+    with patch.dict("services.search_service._SOURCE_FUNCS", source_mocks):
         result = await search_all_sources(query)
 
     assert len(result) == 1
