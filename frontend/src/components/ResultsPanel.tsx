@@ -343,7 +343,7 @@ const addKeyword = () => {
       {/* 关键词行 */}
       {confirmedKeywords != null && (
         <div className="px-5 py-2.5 bg-white border-b border-gray-100 flex items-center gap-2 flex-wrap">
-          <span className="text-xs font-medium text-gray-400 shrink-0">搜索词</span>
+          <span className="text-sm font-medium text-gray-400 shrink-0">搜索词</span>
           {editKeywords.map((kw, i) => (
             <span
               key={i}
@@ -386,14 +386,14 @@ const addKeyword = () => {
         {/* 源选择 */}
         <div className="mb-2.5">
           <div className="flex items-center gap-3 mb-2">
-            <span className="text-xs font-medium text-gray-600">搜索源</span>
+            <span className="text-sm font-medium text-gray-600">搜索源</span>
             <button
               onClick={() => onSettingsChange({ selectedSources: [...ALL_SOURCES] })}
-              className="text-xs text-blue-500 hover:text-blue-700 transition-colors"
+              className="text-sm text-blue-500 hover:text-blue-700 transition-colors"
             >全选</button>
             <button
               onClick={() => onSettingsChange({ selectedSources: [] })}
-              className="text-xs text-gray-400 hover:text-gray-600 transition-colors"
+              className="text-sm text-gray-400 hover:text-gray-600 transition-colors"
             >清空</button>
           </div>
           <div className="flex flex-wrap gap-x-5 gap-y-1.5">
@@ -405,7 +405,7 @@ const addKeyword = () => {
                   onChange={() => toggleSource(source)}
                   className="w-3.5 h-3.5 rounded accent-blue-600 cursor-pointer"
                 />
-                <span className={`text-xs font-medium transition-colors ${
+                <span className={`text-sm font-medium transition-colors ${
                   (settings.selectedSources ?? ALL_SOURCES).includes(source)
                     ? (SOURCE_COLORS[source] ?? 'text-gray-700')
                     : 'text-gray-300'
@@ -420,7 +420,7 @@ const addKeyword = () => {
         {/* 数量参数 + 重搜按钮 */}
         <div className="flex items-center gap-4 flex-wrap">
           <div className="flex items-center gap-1.5">
-            <label className="text-xs text-gray-500 whitespace-nowrap">每源抓取</label>
+            <label className="text-sm text-gray-500 whitespace-nowrap">每源抓取</label>
             <input
               type="number" min={5} max={200}
               value={settings.limitPerSource}
@@ -431,7 +431,7 @@ const addKeyword = () => {
             <span className="text-xs text-gray-400">篇</span>
           </div>
           <div className="flex items-center gap-1.5">
-            <label className="text-xs text-gray-500 whitespace-nowrap">展示上限</label>
+            <label className="text-sm text-gray-500 whitespace-nowrap">展示上限</label>
             <input
               type="number" min={5} max={500}
               value={settings.validatedLimit}
@@ -467,7 +467,7 @@ const addKeyword = () => {
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
-                className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+                className={`px-4 py-3 text-base font-medium border-b-2 transition-colors ${
                   activeTab === tab
                     ? 'border-blue-600 text-blue-600'
                     : 'border-transparent text-gray-400 hover:text-gray-600'

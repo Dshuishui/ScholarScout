@@ -76,7 +76,7 @@ export function PaperCard({ paper, selected = false, onToggle, isRejected = fals
         <div className="flex-1 min-w-0">
           {/* Title + copy */}
           <div className="flex items-start gap-1.5 mb-1.5 group">
-            <h3 className="text-sm font-semibold text-gray-900 leading-snug line-clamp-2 flex-1">
+            <h3 className="text-base font-semibold text-gray-900 leading-snug line-clamp-2 flex-1">
               {paper.title}
             </h3>
             <button
@@ -98,7 +98,7 @@ export function PaperCard({ paper, selected = false, onToggle, isRejected = fals
 
           {/* Authors + Venue */}
           <div className="flex items-baseline justify-between gap-3 mb-2">
-            <p className="text-xs text-gray-400 truncate">{authorStr}</p>
+            <p className="text-sm text-gray-400 truncate">{authorStr}</p>
             {paper.venue && (
               <span
                 className="text-xs text-slate-500 font-medium whitespace-nowrap flex-shrink-0 max-w-[45%] truncate"
@@ -130,7 +130,7 @@ export function PaperCard({ paper, selected = false, onToggle, isRejected = fals
 
           {/* Abstract */}
           {paper.abstract && (
-            <p className="text-xs text-gray-600 leading-relaxed line-clamp-3 mb-3">
+            <p className="text-sm text-gray-600 leading-relaxed line-clamp-3 mb-3">
               {paper.abstract}
             </p>
           )}
@@ -139,7 +139,7 @@ export function PaperCard({ paper, selected = false, onToggle, isRejected = fals
           {paper.relevance_reason && (
             <div className="flex items-start gap-1.5 bg-blue-50 border border-blue-100 rounded-lg px-2.5 py-2 mb-3">
               <span className="text-blue-400 flex-shrink-0 mt-px text-xs">✦</span>
-              <p className="text-xs text-blue-700 leading-relaxed">{paper.relevance_reason}</p>
+              <p className="text-sm text-blue-700 leading-relaxed">{paper.relevance_reason}</p>
             </div>
           )}
 

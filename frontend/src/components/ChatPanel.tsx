@@ -84,8 +84,8 @@ export function ChatPanel({
             </svg>
           </div>
           <div>
-            <h1 className="text-sm font-bold text-gray-900 leading-none mb-0.5">ScholarScout</h1>
-            <p className="text-xs text-gray-400 leading-none">AI 学术论文搜索</p>
+            <h1 className="text-base font-bold text-gray-900 leading-none mb-0.5">ScholarScout</h1>
+            <p className="text-sm text-gray-400 leading-none">AI 学术论文搜索</p>
           </div>
         </div>
         <button
@@ -108,7 +108,7 @@ export function ChatPanel({
       {pendingKeywords && (
         <div className="px-4 pb-3">
           <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 space-y-2.5">
-            <p className="text-xs font-semibold text-blue-700">确认关键词后开始搜索</p>
+            <p className="text-sm font-semibold text-blue-700">确认关键词后开始搜索</p>
 
             {/* Tag list */}
             <div className="flex flex-wrap gap-1.5">
@@ -165,7 +165,7 @@ export function ChatPanel({
       {/* 最近搜索 — 无输入、无 pending、有历史时显示 */}
       {!pendingKeywords && !input.trim() && history.length > 0 && (
         <div className="px-4 pt-2 pb-1 border-t border-gray-100">
-          <p className="text-xs text-gray-400 mb-1.5">最近搜索</p>
+          <p className="text-sm text-gray-400 mb-1.5">最近搜索</p>
           <div className="flex flex-col gap-0.5">
             {history.map(item => (
               <div
@@ -176,7 +176,7 @@ export function ChatPanel({
                 <svg className="w-3 h-3 text-gray-300 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
-                <span className="text-xs text-gray-500 truncate flex-1 group-hover:text-gray-700 transition-colors">
+                <span className="text-sm text-gray-500 truncate flex-1 group-hover:text-gray-700 transition-colors">
                   {item.keywords.join(' · ')}
                 </span>
                 <button
