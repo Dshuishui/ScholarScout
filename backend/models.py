@@ -4,25 +4,24 @@ from config import SEARCH_LIMIT_PER_SOURCE, VALIDATED_LIMIT
 
 
 class HistoryMessage(BaseModel):
-    role: str
-    content: str
+    role: str = Field(max_length=20)
+    content: str = Field(max_length=5000)
 
 class ParseRequest(BaseModel):
-    query: str
+    query: str = Field(max_length=2000)
     api_key: str
-    messages: list[HistoryMessage] = []
+    messages: list[HistoryMessage] = Field(default=[], max_length=30)
 
 class SearchRequest(BaseModel):
-    query: str
+    query: str = Field(default="", max_length=2000)
     api_key: str
-    messages: list[HistoryMessage] = []
+    messages: list[HistoryMessage] = Field(default=[], max_length=30)
     limit_per_source: int = Field(default=SEARCH_LIMIT_PER_SOURCE, ge=5, le=200)
     validated_limit: int = Field(default=VALIDATED_LIMIT, ge=5, le=500)
-    # 若前端传入已确认的关键词，跳过 parse_query
-    keywords: Optional[list[str]] = None
-    date_from: Optional[str] = None
-    date_to: Optional[str] = None
-    sources: Optional[list[str]] = None  # None = 全部源
+    keywords: Optional[list[str]] = Field(default=None, max_length=15)
+    date_from: Optional[str] = Field(default=None, max_length=20)
+    date_to: Optional[str] = Field(default=None, max_length=20)
+    sources: Optional[list[str]] = Field(default=None, max_length=15)
 
 
 class Paper(BaseModel):

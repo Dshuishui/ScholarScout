@@ -15,6 +15,8 @@ ALLOWED_DOMAINS = [
     "pmc.ncbi.nlm.nih.gov",
 ]
 
+MAX_FILE_SIZE = 50 * 1024 * 1024  # 50MB
+
 
 def _is_allowed(url: str) -> bool:
     try:
@@ -32,6 +34,20 @@ async def fetch_pdf_bytes(url: str) -> tuple[bytes, str]:
         raise ValueError(f"不支持的 URL: {url}")
 
     async with httpx.AsyncClient(follow_redirects=True, timeout=30) as client:
-        response = await client.get(url, headers={"User-Agent": "ScholarScout/1.0"})
-        response.raise_for_status()
-        return response.content, response.headers.get("content-type", "application/pdf")
+        async with client.stream("GET", url, headers={"User-Agent": "ScholarScout/1.0"}) as response:
+            response.raise_for_status()
+
+            content_length = int(response.headers.get("content-length", 0))
+            if content_length > MAX_FILE_SIZE:
+                raise ValueError(f"文件过大（{content_length // 1024 // 1024}MB），超过 50MB 限制")
+
+            content_type = response.headers.get("content-type", "application/pdf")
+            total = 0
+            chunks: list[bytes] = []
+            async for chunk in response.aiter_bytes(65536):
+                total += len(chunk)
+                if total > MAX_FILE_SIZE:
+                    raise ValueError("文件过大，超过 50MB 限制")
+                chunks.append(chunk)
+
+    return b"".join(chunks), content_type

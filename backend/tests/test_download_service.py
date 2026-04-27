@@ -5,15 +5,22 @@ from services.download_service import fetch_pdf_bytes
 
 @pytest.mark.asyncio
 async def test_fetch_pdf_bytes_success():
-    mock_response = MagicMock()
-    mock_response.status_code = 200
-    mock_response.content = b"%PDF-fake-content"
-    mock_response.headers = {"content-type": "application/pdf"}
+    mock_response = AsyncMock()
+    mock_response.headers = {"content-type": "application/pdf", "content-length": "17"}
     mock_response.raise_for_status = MagicMock()
+
+    async def fake_aiter_bytes(chunk_size):
+        yield b"%PDF-fake-content"
+
+    mock_response.aiter_bytes = fake_aiter_bytes
+
+    mock_stream_cm = AsyncMock()
+    mock_stream_cm.__aenter__ = AsyncMock(return_value=mock_response)
+    mock_stream_cm.__aexit__ = AsyncMock(return_value=False)
 
     with patch("services.download_service.httpx.AsyncClient") as MockClient:
         instance = MockClient.return_value.__aenter__.return_value
-        instance.get = AsyncMock(return_value=mock_response)
+        instance.stream = MagicMock(return_value=mock_stream_cm)
         content, content_type = await fetch_pdf_bytes("https://arxiv.org/pdf/2301.00001.pdf")
 
     assert content == b"%PDF-fake-content"
