@@ -49,6 +49,14 @@ export function PaperCard({ paper, selected = false, onToggle, isRejected = fals
     ? paper.source_links
     : paper.url ? [{ source: paper.source, url: paper.url }] : []
 
+  // Google Scholar 链接：优先复用已有的，否则拼精确标题搜索
+  const scholarUrl =
+    paper.source_links?.find(l => l.source === 'Google Scholar')?.url
+    ?? `https://scholar.google.com/scholar?q=${encodeURIComponent(`"${paper.title}"`)}`
+
+  // 来源链接里过滤掉 Google Scholar（避免下方重复展示）
+  const sourceLinks = links.filter(l => l.source !== 'Google Scholar')
+
   return (
     <div className={`relative bg-white border rounded-xl overflow-hidden transition-all duration-200 ${
       selected
@@ -176,7 +184,7 @@ export function PaperCard({ paper, selected = false, onToggle, isRejected = fals
           <div className="flex flex-wrap items-end gap-1.5 mt-1">
             {/* 来源链接 + PDF */}
             <div className="flex flex-wrap gap-1.5 flex-1 min-w-0">
-              {links.map(link => (
+              {sourceLinks.map(link => (
                 <a
                   key={link.source}
                   href={link.url}
@@ -223,6 +231,22 @@ export function PaperCard({ paper, selected = false, onToggle, isRejected = fals
                 <span className="text-xs text-gray-300 py-1">无开放获取 PDF</span>
               ) : null}
             </div>
+
+            {/* Google Scholar 按钮 — 常驻，跳转查看引用/全文/格式导出 */}
+            <a
+              href={scholarUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex-shrink-0 inline-flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-lg border border-sky-200 bg-sky-50 hover:bg-sky-100 hover:border-sky-300 active:bg-sky-200 text-sky-700 transition-all"
+            >
+              <span className="flex items-center gap-1 text-xs font-semibold leading-tight">
+                <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M12 24a7 7 0 1 1 0-14 7 7 0 0 1 0 14zm0-24L0 9.5l4.838 3.94A8 8 0 0 1 12 9a8 8 0 0 1 7.162 4.44L24 9.5z"/>
+                </svg>
+                Google Scholar
+              </span>
+              <span className="text-[10px] text-sky-400 leading-none">引用 · 全文 · 相关</span>
+            </a>
 
             {/* AI 对话按钮 — 常驻，独立上下文 */}
             {onAnalyze && (
