@@ -1,5 +1,7 @@
 import json
+import re
 import pytest
+from datetime import date
 from unittest.mock import AsyncMock, patch, MagicMock
 
 from models import Paper, ParsedQuery
@@ -38,7 +40,10 @@ async def test_parse_query_no_date():
         }))
         result = await parse_query("找transformer相关论文", "sk-fake-key")
 
-    assert result.date_from is None
+    # 未指定日期时应自动回填近 5 年的默认值
+    assert result.date_from is not None
+    assert re.match(r"\d{4}-01-01", result.date_from)
+    assert int(result.date_from[:4]) >= date.today().year - 5
     assert "transformer" in result.keywords
 
 
