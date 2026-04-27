@@ -1,7 +1,11 @@
+import { useState } from 'react'
+import type { Paper } from '../types'
 import { ChatPanel } from './ChatPanel'
 import { ResultsPanel } from './ResultsPanel'
+import { PaperChatDrawer } from './PaperChatDrawer'
 import { useSearch } from '../hooks/useSearch'
 import { useSettings } from '../hooks/useSettings'
+import { usePaperChat } from '../hooks/usePaperChat'
 
 interface Props {
   apiKey: string
@@ -15,6 +19,13 @@ export function MainLayout({ apiKey, onClearKey }: Props) {
     search, pendingKeywords, confirmedKeywords, confirmSearch, cancelSearch, reSearch,
     history, removeHistory, searchFromHistory,
   } = useSearch(apiKey, settings)
+
+  const [activePaper, setActivePaper] = useState<Paper | null>(null)
+  const { getMessages, sendMessage, isStreaming, streamingPaperId } = usePaperChat(apiKey)
+
+  const handleAnalyzePaper = (paper: Paper) => {
+    setActivePaper(prev => prev?.paper_id === paper.paper_id ? null : paper)
+  }
 
   return (
     <div className="h-screen flex overflow-hidden">
@@ -42,8 +53,17 @@ export function MainLayout({ apiKey, onClearKey }: Props) {
           onSettingsChange={updateSettings}
           onReSearch={reSearch}
           confirmedKeywords={confirmedKeywords}
+          onAnalyzePaper={handleAnalyzePaper}
         />
       </div>
+
+      <PaperChatDrawer
+        paper={activePaper}
+        messages={activePaper ? getMessages(activePaper.paper_id) : []}
+        isStreaming={!!activePaper && streamingPaperId === activePaper.paper_id && isStreaming}
+        onSend={content => activePaper && sendMessage(activePaper, content)}
+        onClose={() => setActivePaper(null)}
+      />
     </div>
   )
 }

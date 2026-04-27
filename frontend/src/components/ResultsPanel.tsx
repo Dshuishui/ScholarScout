@@ -33,6 +33,7 @@ interface Props {
   onReSearch?: (keywords: string[]) => void
   confirmedKeywords?: string[] | null
   statusMessage: string
+  onAnalyzePaper?: (paper: Paper) => void
 }
 
 interface DownloadProgress {
@@ -110,7 +111,7 @@ function Pagination({ current, total, onChange }: {
   )
 }
 
-export function ResultsPanel({ papers, rejectedPapers = [], isLoading, statusMessage, settings, onSettingsChange, onReSearch, confirmedKeywords }: Props) {
+export function ResultsPanel({ papers, rejectedPapers = [], isLoading, statusMessage, settings, onSettingsChange, onReSearch, confirmedKeywords, onAnalyzePaper }: Props) {
   const [currentPage, setCurrentPage] = useState(1)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [downloadProgress, setDownloadProgress] = useState<DownloadProgress | null>(null)
@@ -542,6 +543,7 @@ const addKeyword = () => {
             selected={selectedIds.has(paper.paper_id)}
             onToggle={activeTab === 'filtered' || !rejectedIds.has(paper.paper_id) ? () => togglePaper(paper.paper_id) : undefined}
             isRejected={rejectedIds.has(paper.paper_id)}
+            onAnalyze={onAnalyzePaper ? () => onAnalyzePaper(paper) : undefined}
           />
         ))}
 

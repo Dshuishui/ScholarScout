@@ -21,9 +21,10 @@ interface Props {
   selected?: boolean
   onToggle?: () => void
   isRejected?: boolean
+  onAnalyze?: () => void
 }
 
-export function PaperCard({ paper, selected = false, onToggle, isRejected = false }: Props) {
+export function PaperCard({ paper, selected = false, onToggle, isRejected = false, onAnalyze }: Props) {
   const [copied, setCopied] = useState(false)
   const year = paper.published_date?.slice(0, 4) ?? '—'
 
@@ -73,11 +74,22 @@ export function PaperCard({ paper, selected = false, onToggle, isRejected = fals
         )}
 
         <div className="flex-1 min-w-0">
-          {/* Title + copy */}
+          {/* Title + copy + analyze */}
           <div className="flex items-start gap-1.5 mb-1.5 group">
             <h3 className="text-sm font-semibold text-gray-900 leading-snug line-clamp-2 flex-1">
               {paper.title}
             </h3>
+            {onAnalyze && (
+              <button
+                onClick={e => { e.stopPropagation(); onAnalyze() }}
+                title="AI 分析"
+                className="flex-shrink-0 mt-0.5 p-0.5 rounded text-gray-300 hover:text-blue-500 opacity-0 group-hover:opacity-100 transition-all"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+                </svg>
+              </button>
+            )}
             <button
               onClick={copyTitle}
               title="复制标题"
