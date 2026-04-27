@@ -20,7 +20,7 @@ export async function* searchPapers(
   query: string,
   apiKey: string,
   history: { role: string; content: string }[] = [],
-  settings: { limitPerSource?: number; validatedLimit?: number } = {},
+  settings: { limitPerSource?: number; validatedLimit?: number; selectedSources?: string[] } = {},
   confirmed?: { keywords: string[]; date_from?: string | null; date_to?: string | null }
 ): AsyncGenerator<SearchEvent> {
   const response = await fetch(`${API_BASE}/search`, {
@@ -32,6 +32,7 @@ export async function* searchPapers(
       messages: history,
       limit_per_source: settings.limitPerSource,
       validated_limit: settings.validatedLimit,
+      sources: settings.selectedSources,
       ...(confirmed && {
         keywords: confirmed.keywords,
         date_from: confirmed.date_from ?? null,

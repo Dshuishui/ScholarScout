@@ -11,6 +11,7 @@ logger = logging.getLogger(__name__)
 
 # 备用查找平台（规则拼接，无需 AI）
 _PLATFORMS = [
+    ("arXiv 预印本",      lambda doi, t: f"https://arxiv.org/search/?searchtype=all&query={urllib.parse.quote(t)}"),
     ("Sci-Hub",          lambda doi, t: f"https://sci-hub.se/{doi}" if doi else None),
     ("ResearchGate",     lambda doi, t: f"https://www.researchgate.net/search?q={urllib.parse.quote(t)}"),
     ("Semantic Scholar", lambda doi, t: f"https://www.semanticscholar.org/search?q={urllib.parse.quote(t)}"),

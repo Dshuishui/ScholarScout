@@ -1,13 +1,20 @@
 import { useState } from 'react'
 
+export const ALL_SOURCES = [
+  'arXiv', 'Semantic Scholar', 'OpenAlex', 'PubMed',
+  'Europe PMC', 'INSPIRE-HEP', 'CrossRef', 'CORE', 'NASA ADS', 'Google Scholar',
+] as const
+
 export interface SearchSettings {
   limitPerSource: number
   validatedLimit: number
+  selectedSources: string[]
 }
 
 const DEFAULT: SearchSettings = {
   limitPerSource: 50,
   validatedLimit: 50,
+  selectedSources: [...ALL_SOURCES],
 }
 
 const STORAGE_KEY = 'scholarscout-settings'

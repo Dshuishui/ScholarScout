@@ -2,8 +2,22 @@ import { useState, useEffect, useMemo } from 'react'
 import JSZip from 'jszip'
 import type { Paper } from '../types'
 import type { SearchSettings } from '../hooks/useSettings'
+import { ALL_SOURCES } from '../hooks/useSettings'
 import { PaperCard } from './PaperCard'
 import { getDownloadUrl } from '../api/client'
+
+const SOURCE_COLORS: Record<string, string> = {
+  'arXiv':            'text-orange-600',
+  'Semantic Scholar': 'text-blue-600',
+  'OpenAlex':         'text-violet-600',
+  'PubMed':           'text-emerald-600',
+  'Europe PMC':       'text-teal-600',
+  'INSPIRE-HEP':      'text-red-500',
+  'CrossRef':         'text-indigo-600',
+  'CORE':             'text-cyan-600',
+  'NASA ADS':         'text-sky-600',
+  'Google Scholar':   'text-amber-600',
+}
 
 const ITEMS_PER_PAGE = 20
 const DOWNLOAD_CONCURRENCY = 3
@@ -105,7 +119,6 @@ export function ResultsPanel({ papers, rejectedPapers = [], isLoading, statusMes
   const [newKw, setNewKw] = useState('')
   const [sortBy, setSortBy] = useState<SortOption>('relevance')
   const [activeTab, setActiveTab] = useState<'filtered' | 'all'>('filtered')
-  const [showSettings, setShowSettings] = useState(false)
 
   // 新搜索完成时重置到筛选后视图
   useEffect(() => {
@@ -148,11 +161,21 @@ export function ResultsPanel({ papers, rejectedPapers = [], isLoading, statusMes
   )
   const settingsChanged = papers.length > 0 && (
     appliedSettings.limitPerSource !== settings.limitPerSource ||
-    appliedSettings.validatedLimit !== settings.validatedLimit
+    appliedSettings.validatedLimit !== settings.validatedLimit ||
+    JSON.stringify([...(appliedSettings.selectedSources ?? [])].sort()) !==
+    JSON.stringify([...(settings.selectedSources ?? [])].sort())
   )
-  const needsReSearch = (keywordsChanged || settingsChanged) && papers.length > 0 && !!onReSearch
 
-  const addKeyword = () => {
+  const toggleSource = (source: string) => {
+    const cur = settings.selectedSources ?? []
+    onSettingsChange({
+      selectedSources: cur.includes(source) ? cur.filter(s => s !== source) : [...cur, source]
+    })
+  }
+
+  const clampNum = (val: number, min: number, max: number) =>
+    Math.min(max, Math.max(min, isNaN(val) ? min : val))
+const addKeyword = () => {
     const kw = newKw.trim()
     if (!kw || editKeywords.includes(kw)) { setNewKw(''); return }
     setEditKeywords(prev => [...prev, kw])
@@ -330,9 +353,9 @@ export function ResultsPanel({ papers, rejectedPapers = [], isLoading, statusMes
             placeholder="＋ 添加"
             className="text-xs border border-dashed border-gray-300 rounded-full px-2.5 py-1 outline-none focus:border-blue-400 bg-transparent text-gray-500 placeholder-gray-300 w-20"
           />
-          {needsReSearch && (
+          {keywordsChanged && onReSearch && (
             <button
-              onClick={() => onReSearch!(editKeywords)}
+              onClick={() => onReSearch(editKeywords)}
               disabled={isLoading || editKeywords.length === 0}
               className="ml-auto flex items-center gap-1.5 text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-full px-3 py-1 transition-all shadow-sm"
             >
@@ -345,88 +368,118 @@ export function ResultsPanel({ papers, rejectedPapers = [], isLoading, statusMes
         </div>
       )}
 
-      {/* Tab 栏 + 排序 + 设置 */}
+      {/* ── 始终展开的搜索配置区 ─────────────────────────────────────── */}
+      <div className="px-5 py-3 bg-white border-b border-gray-200">
+        {/* 源选择 */}
+        <div className="mb-2.5">
+          <div className="flex items-center gap-3 mb-2">
+            <span className="text-xs font-medium text-gray-600">搜索源</span>
+            <button
+              onClick={() => onSettingsChange({ selectedSources: [...ALL_SOURCES] })}
+              className="text-xs text-blue-500 hover:text-blue-700 transition-colors"
+            >全选</button>
+            <button
+              onClick={() => onSettingsChange({ selectedSources: [] })}
+              className="text-xs text-gray-400 hover:text-gray-600 transition-colors"
+            >清空</button>
+          </div>
+          <div className="flex flex-wrap gap-x-5 gap-y-1.5">
+            {ALL_SOURCES.map(source => (
+              <label key={source} className="flex items-center gap-1.5 cursor-pointer select-none group">
+                <input
+                  type="checkbox"
+                  checked={(settings.selectedSources ?? ALL_SOURCES).includes(source)}
+                  onChange={() => toggleSource(source)}
+                  className="w-3.5 h-3.5 rounded accent-blue-600 cursor-pointer"
+                />
+                <span className={`text-xs font-medium transition-colors ${
+                  (settings.selectedSources ?? ALL_SOURCES).includes(source)
+                    ? (SOURCE_COLORS[source] ?? 'text-gray-700')
+                    : 'text-gray-300'
+                }`}>
+                  {source}
+                </span>
+              </label>
+            ))}
+          </div>
+        </div>
+
+        {/* 数量参数 + 重搜按钮 */}
+        <div className="flex items-center gap-4 flex-wrap">
+          <div className="flex items-center gap-1.5">
+            <label className="text-xs text-gray-500 whitespace-nowrap">每源抓取</label>
+            <input
+              type="number" min={5} max={200}
+              value={settings.limitPerSource}
+              onChange={e => onSettingsChange({ limitPerSource: Number(e.target.value) })}
+              onBlur={e => onSettingsChange({ limitPerSource: clampNum(Number(e.target.value), 5, 200) })}
+              className="w-14 text-xs text-center border border-gray-200 rounded-lg px-1.5 py-1 focus:outline-none focus:border-blue-400 tabular-nums"
+            />
+            <span className="text-xs text-gray-400">篇</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <label className="text-xs text-gray-500 whitespace-nowrap">展示上限</label>
+            <input
+              type="number" min={5} max={500}
+              value={settings.validatedLimit}
+              onChange={e => onSettingsChange({ validatedLimit: Number(e.target.value) })}
+              onBlur={e => onSettingsChange({ validatedLimit: clampNum(Number(e.target.value), 5, 500) })}
+              className="w-16 text-xs text-center border border-gray-200 rounded-lg px-1.5 py-1 focus:outline-none focus:border-blue-400 tabular-nums"
+            />
+            <span className="text-xs text-gray-400">篇</span>
+          </div>
+          {settingsChanged && onReSearch && (
+            <button
+              onClick={() => onReSearch(editKeywords)}
+              disabled={isLoading || (settings.selectedSources ?? []).length === 0}
+              className="flex items-center gap-1.5 text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg px-3 py-1.5 transition-all"
+            >
+              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              重新搜索
+            </button>
+          )}
+          {!settingsChanged && (
+            <span className="text-xs text-gray-300">调整参数或勾选源后点击重新搜索</span>
+          )}
+        </div>
+      </div>
+
+      {/* Tab 栏 + 排序（有结果才显示）*/}
       {(papers.length > 0 || rejectedPapers.length > 0) && (
-        <>
-          <div className="px-5 py-0 bg-white border-b border-gray-200 flex items-center justify-between">
-            <div className="flex">
-              {(['filtered', 'all'] as const).map(tab => (
-                <button
-                  key={tab}
-                  onClick={() => setActiveTab(tab)}
-                  className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
-                    activeTab === tab
-                      ? 'border-blue-600 text-blue-600'
-                      : 'border-transparent text-gray-400 hover:text-gray-600'
-                  }`}
-                >
-                  {tab === 'filtered' ? 'AI 筛选后' : '全部结果'}
-                  <span className={`ml-1.5 text-xs rounded-full px-1.5 py-0.5 tabular-nums ${
-                    activeTab === tab ? 'bg-blue-100 text-blue-600' : 'bg-gray-100 text-gray-400'
-                  }`}>
-                    {tab === 'filtered' ? papers.length : papers.length + rejectedPapers.length}
-                  </span>
-                </button>
-              ))}
-            </div>
-
-            <div className="flex items-center gap-2">
-              <select
-                value={sortBy}
-                onChange={e => setSortBy(e.target.value as SortOption)}
-                className="text-xs text-gray-600 border border-gray-200 rounded-lg px-2.5 py-1.5 bg-white cursor-pointer hover:border-gray-300 transition-colors"
-              >
-                <option value="relevance">相关性优先</option>
-                <option value="citations">引用数最高</option>
-                <option value="date_desc">最新发表</option>
-                <option value="date_asc">最早发表</option>
-              </select>
-
+        <div className="px-5 py-0 bg-white border-b border-gray-200 flex items-center justify-between">
+          <div className="flex">
+            {(['filtered', 'all'] as const).map(tab => (
               <button
-                onClick={() => setShowSettings(v => !v)}
-                className={`flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg border transition-colors ${
-                  showSettings || settingsChanged
-                    ? 'border-blue-300 bg-blue-50 text-blue-600'
-                    : 'border-gray-200 bg-white text-gray-500 hover:border-gray-300 hover:text-gray-700'
+                key={tab}
+                onClick={() => setActiveTab(tab)}
+                className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+                  activeTab === tab
+                    ? 'border-blue-600 text-blue-600'
+                    : 'border-transparent text-gray-400 hover:text-gray-600'
                 }`}
               >
-                <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                    d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
-                </svg>
-                <span className="tabular-nums">每源 {settings.limitPerSource} · 展示 {settings.validatedLimit}</span>
-                {settingsChanged && <span className="w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0" />}
+                {tab === 'filtered' ? 'AI 筛选后' : '全部结果'}
+                <span className={`ml-1.5 text-xs rounded-full px-1.5 py-0.5 tabular-nums ${
+                  activeTab === tab ? 'bg-blue-100 text-blue-600' : 'bg-gray-100 text-gray-400'
+                }`}>
+                  {tab === 'filtered' ? papers.length : papers.length + rejectedPapers.length}
+                </span>
               </button>
-            </div>
+            ))}
           </div>
-
-          {/* 折叠设置面板 */}
-          {showSettings && (
-            <div className="px-5 py-3 bg-blue-50/60 border-b border-blue-100 flex items-center gap-6 flex-wrap">
-              <div className="flex items-center gap-2">
-                <label className="text-xs text-gray-500 whitespace-nowrap">每源抓取</label>
-                <input
-                  type="range" min={10} max={200} step={1}
-                  value={settings.limitPerSource}
-                  onChange={e => onSettingsChange({ limitPerSource: Number(e.target.value) })}
-                  className="w-24 accent-blue-600 cursor-pointer"
-                />
-                <span className="text-xs font-semibold text-blue-600 w-10 tabular-nums">{settings.limitPerSource} 篇</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <label className="text-xs text-gray-500 whitespace-nowrap">展示上限</label>
-                <input
-                  type="range" min={10} max={500} step={1}
-                  value={settings.validatedLimit}
-                  onChange={e => onSettingsChange({ validatedLimit: Number(e.target.value) })}
-                  className="w-24 accent-blue-600 cursor-pointer"
-                />
-                <span className="text-xs font-semibold text-blue-600 w-10 tabular-nums">{settings.validatedLimit} 篇</span>
-              </div>
-              <p className="text-xs text-blue-400 ml-auto">调整后点击重新搜索生效</p>
-            </div>
-          )}
-        </>
+          <select
+            value={sortBy}
+            onChange={e => setSortBy(e.target.value as SortOption)}
+            className="text-xs text-gray-600 border border-gray-200 rounded-lg px-2.5 py-1.5 bg-white cursor-pointer hover:border-gray-300 transition-colors"
+          >
+            <option value="relevance">相关性优先</option>
+            <option value="citations">引用数最高</option>
+            <option value="date_desc">最新发表</option>
+            <option value="date_asc">最早发表</option>
+          </select>
+        </div>
       )}
 
       {/* 状态栏 — 有结果后才显示进度（加载中且无结果时进度已在列表区展示） */}

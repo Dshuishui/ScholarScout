@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import type { Paper } from '../types'
 import { getDownloadUrl } from '../api/client'
 
@@ -23,7 +24,15 @@ interface Props {
 }
 
 export function PaperCard({ paper, selected = false, onToggle, isRejected = false }: Props) {
+  const [copied, setCopied] = useState(false)
   const year = paper.published_date?.slice(0, 4) ?? '—'
+
+  const copyTitle = () => {
+    navigator.clipboard.writeText(paper.title).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    })
+  }
   const authorStr = paper.authors.length === 0
     ? '作者未知'
     : paper.authors.slice(0, 3).join(', ') + (paper.authors.length > 3 ? ` 等 ${paper.authors.length} 人` : '')
@@ -64,10 +73,27 @@ export function PaperCard({ paper, selected = false, onToggle, isRejected = fals
         )}
 
         <div className="flex-1 min-w-0">
-          {/* Title */}
-          <h3 className="text-sm font-semibold text-gray-900 leading-snug line-clamp-2 mb-1.5">
-            {paper.title}
-          </h3>
+          {/* Title + copy */}
+          <div className="flex items-start gap-1.5 mb-1.5 group">
+            <h3 className="text-sm font-semibold text-gray-900 leading-snug line-clamp-2 flex-1">
+              {paper.title}
+            </h3>
+            <button
+              onClick={copyTitle}
+              title="复制标题"
+              className="flex-shrink-0 mt-0.5 p-0.5 rounded text-gray-300 hover:text-gray-500 opacity-0 group-hover:opacity-100 transition-all"
+            >
+              {copied ? (
+                <svg className="w-3.5 h-3.5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                </svg>
+              ) : (
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                </svg>
+              )}
+            </button>
+          </div>
 
           {/* Authors + Venue */}
           <div className="flex items-baseline justify-between gap-3 mb-2">

@@ -780,18 +780,30 @@ def deduplicate(papers: list[Paper]) -> list[Paper]:
     return result
 
 
-async def search_all_sources(parsed: ParsedQuery, limit_per_source: int = 10) -> list[Paper]:
-    results = await asyncio.gather(
-        _search_arxiv(parsed, limit_per_source),
-        _search_semantic_scholar(parsed, limit_per_source),
-        _search_openalex(parsed, limit_per_source),
-        _search_pubmed(parsed, limit_per_source),
-        _search_core(parsed, limit_per_source),
-        _search_inspire(parsed, limit_per_source),
-        _search_europepmc(parsed, limit_per_source),
-        _search_nasa_ads(parsed, limit_per_source),
-        _search_crossref(parsed, limit_per_source),
-        _search_google_scholar(parsed, limit_per_source),
+_SOURCE_FUNCS: dict = {
+    "arXiv":            _search_arxiv,
+    "Semantic Scholar": _search_semantic_scholar,
+    "OpenAlex":         _search_openalex,
+    "PubMed":           _search_pubmed,
+    "Europe PMC":       _search_europepmc,
+    "INSPIRE-HEP":      _search_inspire,
+    "CrossRef":         _search_crossref,
+    "CORE":             _search_core,
+    "NASA ADS":         _search_nasa_ads,
+    "Google Scholar":   _search_google_scholar,
+}
+
+
+async def search_all_sources(
+    parsed: ParsedQuery,
+    limit_per_source: int = 10,
+    sources: list[str] | None = None,
+) -> list[Paper]:
+    funcs = (
+        _SOURCE_FUNCS
+        if not sources
+        else {k: v for k, v in _SOURCE_FUNCS.items() if k in sources}
     )
+    results = await asyncio.gather(*(fn(parsed, limit_per_source) for fn in funcs.values()))
     all_papers = [p for source_results in results for p in source_results]
     return deduplicate(all_papers)

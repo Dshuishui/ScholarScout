@@ -58,7 +58,7 @@ async def search(request: SearchRequest):
 
             kw_str = "、".join(parsed.keywords)
             yield sse("progress", {"message": f"正在搜索关键词：{kw_str}..."})
-            papers = await search_all_sources(parsed, limit_per_source=request.limit_per_source)
+            papers = await search_all_sources(parsed, limit_per_source=request.limit_per_source, sources=request.sources)
             if not papers:
                 yield sse("done", {"papers": [], "message": "未找到相关论文，请尝试换个描述方式。"})
                 return

@@ -22,6 +22,7 @@ class SearchRequest(BaseModel):
     keywords: Optional[list[str]] = None
     date_from: Optional[str] = None
     date_to: Optional[str] = None
+    sources: Optional[list[str]] = None  # None = 全部源
 
 
 class Paper(BaseModel):
