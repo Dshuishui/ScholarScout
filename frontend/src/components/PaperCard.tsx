@@ -82,7 +82,7 @@ export function PaperCard({ paper, selected = false, onToggle, isRejected = fals
             <button
               onClick={copyTitle}
               title="复制标题"
-              className="flex-shrink-0 mt-0.5 p-0.5 rounded text-gray-300 hover:text-gray-500 opacity-0 group-hover:opacity-100 transition-all"
+              className="flex-shrink-0 mt-0.5 p-0.5 rounded text-gray-300 hover:text-gray-500 transition-all"
             >
               {copied ? (
                 <svg className="w-3.5 h-3.5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
