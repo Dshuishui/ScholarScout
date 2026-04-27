@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import type { Paper } from '../types'
 import { getDownloadUrl } from '../api/client'
+import { toast } from './Toast'
 
 const SOURCE_STYLES: Record<string, { bar: string; badge: string }> = {
   'arXiv':            { bar: 'bg-green-500',   badge: 'bg-green-50 text-green-700 border-green-200' },
@@ -32,6 +33,7 @@ export function PaperCard({ paper, selected = false, onToggle, isRejected = fals
     navigator.clipboard.writeText(paper.title).then(() => {
       setCopied(true)
       setTimeout(() => setCopied(false), 2000)
+      toast.show('论文题目已复制到剪贴板，快去学习吧 📚')
     })
   }
   const authorStr = paper.authors.length === 0

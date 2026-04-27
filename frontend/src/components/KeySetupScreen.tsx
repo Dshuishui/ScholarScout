@@ -5,10 +5,10 @@ interface Props {
 }
 
 const FEATURES = [
-  { icon: '🔍', label: '10 个学术数据库' },
-  { icon: '✦', label: 'AI 相关性过滤' },
-  { icon: '📄', label: 'PDF 深度查找' },
-  { icon: '💬', label: '论文独立对话' },
+  '10 个数据源并发搜索，AI 相关性过滤',
+  '每篇论文独立 AI 对话，深入理解研究内容',
+  'PDF 深度查找 + 8 个平台备用入口',
+  '来源分组 · 批量下载 · 一键导出 CSV',
 ]
 
 export function KeySetupScreen({ onKeySubmit }: Props) {
@@ -26,85 +26,117 @@ export function KeySetupScreen({ onKeySubmit }: Props) {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 flex items-center justify-center p-6">
-      <div className="w-full max-w-md">
+    <div className="min-h-screen flex">
 
-        {/* Brand */}
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 shadow-lg shadow-blue-300/40 mb-5">
-            <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      {/* ── 左侧：品牌区 ─────────────────────────────────────────── */}
+      <div className="hidden lg:flex w-[56%] bg-gradient-to-br from-blue-700 via-indigo-800 to-slate-900 flex-col justify-between p-14 text-white relative overflow-hidden">
+        {/* 装饰圆 */}
+        <div className="absolute -top-24 -right-24 w-96 h-96 rounded-full bg-white/5 pointer-events-none" />
+        <div className="absolute -bottom-32 -left-16 w-[480px] h-[480px] rounded-full bg-white/5 pointer-events-none" />
+        <div className="absolute top-1/2 right-8 w-48 h-48 rounded-full bg-indigo-500/10 pointer-events-none" />
+
+        {/* Logo */}
+        <div className="flex items-center gap-3 relative z-10">
+          <div className="w-11 h-11 rounded-xl bg-white/15 backdrop-blur flex items-center justify-center">
+            <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8}
                 d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
             </svg>
           </div>
-          <h1 className="text-3xl font-bold text-gray-900 tracking-tight mb-2">ScholarScout</h1>
-          <p className="text-gray-500 text-sm leading-relaxed">
-            用自然语言探索学术文献<br />
-            <span className="text-gray-400">搜索 · 筛选 · 阅读 · 对话，一站完成</span>
+          <span className="text-xl font-bold tracking-tight">ScholarScout</span>
+        </div>
+
+        {/* 主文案 */}
+        <div className="relative z-10">
+          <h2 className="text-5xl font-bold leading-[1.15] mb-5 tracking-tight">
+            用自然语言<br />探索学术文献
+          </h2>
+          <p className="text-blue-200 text-lg mb-10 leading-relaxed">
+            输入你的研究需求，AI 自动提取关键词<br />
+            同时搜索 10 个学术数据库，秒级返回结果
           </p>
+
+          <div className="space-y-4">
+            {FEATURES.map(f => (
+              <div key={f} className="flex items-start gap-3">
+                <div className="w-5 h-5 rounded-full bg-blue-400/25 flex items-center justify-center flex-shrink-0 mt-0.5">
+                  <svg className="w-3 h-3 text-blue-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                  </svg>
+                </div>
+                <span className="text-blue-100 text-[15px] leading-snug">{f}</span>
+              </div>
+            ))}
+          </div>
         </div>
 
-        {/* Feature chips */}
-        <div className="flex flex-wrap justify-center gap-2 mb-8">
-          {FEATURES.map(f => (
-            <span
-              key={f.label}
-              className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full bg-white border border-blue-100 text-blue-700 shadow-sm font-medium"
-            >
-              <span>{f.icon}</span>
-              {f.label}
-            </span>
-          ))}
+        {/* 底部链接 */}
+        <div className="relative z-10 flex items-center gap-5 text-sm text-blue-300">
+          <a href="http://118.25.192.117" target="_blank" rel="noopener noreferrer"
+            className="hover:text-white transition-colors">
+            在线体验 →
+          </a>
+          <span className="text-blue-700">|</span>
+          <a href="https://github.com/Dshuishui/ScholarScout" target="_blank" rel="noopener noreferrer"
+            className="hover:text-white transition-colors">
+            GitHub 开源
+          </a>
         </div>
+      </div>
 
-        {/* Form card */}
-        <div className="bg-white rounded-2xl shadow-xl shadow-blue-100/60 border border-gray-100 p-8">
-          <p className="text-sm font-semibold text-gray-800 mb-1">输入 DeepSeek API Key 开始使用</p>
-          <p className="text-xs text-gray-400 mb-5">
+      {/* ── 右侧：表单区 ─────────────────────────────────────────── */}
+      <div className="flex-1 flex items-center justify-center p-8 bg-white">
+        <div className="w-full max-w-sm">
+
+          {/* 移动端 logo（lg 以下显示） */}
+          <div className="lg:hidden flex items-center gap-2.5 mb-8">
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center">
+              <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8}
+                  d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+              </svg>
+            </div>
+            <span className="text-lg font-bold text-gray-900">ScholarScout</span>
+          </div>
+
+          <h2 className="text-2xl font-bold text-gray-900 mb-1.5">开始使用</h2>
+          <p className="text-gray-400 text-sm mb-8 leading-relaxed">
+            输入你的 DeepSeek API Key 继续。
             Key 仅存于本地浏览器，不会上传服务器。
-            <a
-              href="https://platform.deepseek.com"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-blue-500 hover:underline ml-1"
-            >
-              没有 Key？免费注册 →
-            </a>
           </p>
 
-          <input
-            type="password"
-            value={input}
-            onChange={e => { setInput(e.target.value); setError('') }}
-            onKeyDown={e => e.key === 'Enter' && handleSubmit()}
-            placeholder="sk-xxxxxxxxxxxxxxxx"
-            className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent transition-all placeholder-gray-300 mb-1"
-          />
-          {error
-            ? <p className="text-red-500 text-xs mt-1 mb-3">{error}</p>
-            : <div className="mb-3" />
-          }
+          <div className="mb-6">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              DeepSeek API Key
+            </label>
+            <input
+              type="password"
+              value={input}
+              onChange={e => { setInput(e.target.value); setError('') }}
+              onKeyDown={e => e.key === 'Enter' && handleSubmit()}
+              placeholder="sk-xxxxxxxxxxxxxxxx"
+              className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent transition-all placeholder-gray-300"
+            />
+            {error && <p className="text-red-500 text-xs mt-1.5">{error}</p>}
+          </div>
 
           <button
             onClick={handleSubmit}
-            className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 active:from-blue-800 active:to-indigo-800 text-white rounded-xl py-3 text-sm font-semibold transition-all shadow-md shadow-blue-200 cursor-pointer"
+            className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-xl py-3 text-sm font-semibold transition-all shadow-md shadow-blue-100 cursor-pointer"
           >
             开始探索论文 →
           </button>
-        </div>
 
-        {/* Footer */}
-        <p className="text-center text-xs text-gray-400 mt-5 leading-relaxed">
-          在线体验：
-          <a href="http://118.25.192.117" target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:underline">
-            118.25.192.117
-          </a>
-          &ensp;·&ensp;开源于
-          <a href="https://github.com/Dshuishui/ScholarScout" target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:underline ml-1">
-            GitHub
-          </a>
-        </p>
+          <p className="text-center text-xs text-gray-400 mt-6">
+            没有 Key？
+            <a href="https://platform.deepseek.com" target="_blank" rel="noopener noreferrer"
+              className="text-blue-500 hover:underline ml-1">
+              免费注册 DeepSeek →
+            </a>
+          </p>
+        </div>
       </div>
+
     </div>
   )
 }

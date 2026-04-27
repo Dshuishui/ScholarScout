@@ -3,6 +3,7 @@ import type { Paper } from '../types'
 import { ChatPanel } from './ChatPanel'
 import { ResultsPanel } from './ResultsPanel'
 import { PaperChatDrawer } from './PaperChatDrawer'
+import { ToastContainer } from './Toast'
 import { useSearch } from '../hooks/useSearch'
 import { useSettings } from '../hooks/useSettings'
 import { usePaperChat } from '../hooks/usePaperChat'
@@ -57,6 +58,7 @@ export function MainLayout({ apiKey, onClearKey }: Props) {
         />
       </div>
 
+      <ToastContainer />
       <PaperChatDrawer
         paper={activePaper}
         messages={activePaper ? getMessages(activePaper.paper_id) : []}
