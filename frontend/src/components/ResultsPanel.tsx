@@ -4,6 +4,7 @@ import type { Paper } from '../types'
 import type { SearchSettings } from '../hooks/useSettings'
 import { ALL_SOURCES } from '../hooks/useSettings'
 import { PaperCard } from './PaperCard'
+import { PaperCardSkeleton } from './PaperCardSkeleton'
 import { getDownloadUrl } from '../api/client'
 
 const SOURCE_COLORS: Record<string, string> = {
@@ -36,6 +37,7 @@ interface Props {
   confirmedKeywords?: string[] | null
   statusMessage: string
   onAnalyzePaper?: (paper: Paper) => void
+  onExampleSearch?: (query: string) => void
 }
 
 interface DownloadProgress {
@@ -113,7 +115,7 @@ function Pagination({ current, total, onChange }: {
   )
 }
 
-export function ResultsPanel({ papers, rejectedPapers = [], isLoading, statusMessage, settings, onSettingsChange, onReSearch, confirmedKeywords, onAnalyzePaper }: Props) {
+export function ResultsPanel({ papers, rejectedPapers = [], isLoading, statusMessage, settings, onSettingsChange, onReSearch, confirmedKeywords, onAnalyzePaper, onExampleSearch }: Props) {
   const [currentPage, setCurrentPage] = useState(1)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [downloadProgress, setDownloadProgress] = useState<DownloadProgress | null>(null)
@@ -555,21 +557,25 @@ const addKeyword = () => {
 
       {/* 论文列表 */}
       <div className="flex-1 overflow-y-auto p-4 space-y-3">
+        {/* 骨架屏：搜索中且结果为空时显示 */}
         {isLoading && papers.length === 0 && (
-          <div className="flex flex-col items-center justify-center h-56 gap-4">
-            <div className="relative w-12 h-12">
-              <div className="absolute inset-0 rounded-full border-4 border-blue-100" />
-              <div className="absolute inset-0 rounded-full border-4 border-transparent border-t-blue-500 animate-spin" />
-            </div>
-            <div className="text-center">
-              <p className="text-sm font-medium text-gray-600">正在搜索</p>
-              {statusMessage && (
-                <p className="text-xs text-gray-400 mt-1 max-w-xs">{statusMessage}</p>
-              )}
-            </div>
+          <div className="space-y-3">
+            {statusMessage && (
+              <div className="flex items-center gap-2 px-1 pb-1">
+                <div className="relative w-4 h-4 flex-shrink-0">
+                  <div className="absolute inset-0 rounded-full border-2 border-blue-100" />
+                  <div className="absolute inset-0 rounded-full border-2 border-transparent border-t-blue-500 animate-spin" />
+                </div>
+                <p className="text-sm text-gray-400">{statusMessage}</p>
+              </div>
+            )}
+            {Array.from({ length: 6 }).map((_, i) => (
+              <PaperCardSkeleton key={i} index={i} />
+            ))}
           </div>
         )}
 
+        {/* 空状态：示例查询可点击 */}
         {!isLoading && papers.length === 0 && !statusMessage && (
           <div className="flex flex-col items-center justify-center h-full min-h-[360px] text-center gap-5 px-8">
             <div className="w-16 h-16 rounded-2xl bg-white border border-gray-200 shadow-sm flex items-center justify-center">
@@ -586,16 +592,36 @@ const addKeyword = () => {
               </p>
             </div>
             <div className="flex flex-col gap-2 w-full max-w-xs">
+              <p className="text-xs text-gray-300 mb-1">点击示例快速开始 ↓</p>
               {[
                 '找 2023 年后关于大模型幻觉问题的论文',
                 'diffusion model 在医学图像的应用综述',
                 '图神经网络用于药物发现的最新进展',
               ].map(example => (
-                <div key={example} className="text-xs text-gray-400 bg-white border border-gray-200 rounded-lg px-3 py-2 text-left">
+                <button
+                  key={example}
+                  onClick={() => onExampleSearch?.(example)}
+                  className="text-sm text-gray-500 hover:text-blue-600 bg-white hover:bg-blue-50 border border-gray-200 hover:border-blue-200 rounded-lg px-3 py-2.5 text-left transition-all"
+                >
                   "{example}"
-                </div>
+                </button>
               ))}
             </div>
+          </div>
+        )}
+
+        {/* 搜索统计 */}
+        {!isLoading && papers.length > 0 && (
+          <div className="flex items-center gap-2 px-1 pb-1 text-xs text-gray-400">
+            <span>共找到 <span className="font-medium text-gray-600">{papers.length + rejectedPapers.length}</span> 篇</span>
+            {rejectedPapers.length > 0 && (
+              <>
+                <span className="text-gray-200">·</span>
+                <span>AI 筛选保留 <span className="font-medium text-blue-600">{papers.length}</span> 篇</span>
+                <span className="text-gray-200">·</span>
+                <span>过滤 {rejectedPapers.length} 篇低相关</span>
+              </>
+            )}
           </div>
         )}
 
@@ -637,15 +663,16 @@ const addKeyword = () => {
                 {!isCollapsed && (
                   <div className="mt-2 space-y-3">
                     {sourcePapers.map(paper => (
-                      <PaperCard
-                        key={paper.paper_id}
-                        paper={paper}
-                        selected={selectedIds.has(paper.paper_id)}
-                        onToggle={activeTab === 'filtered' || !rejectedIds.has(paper.paper_id) ? () => togglePaper(paper.paper_id) : undefined}
-                        isRejected={rejectedIds.has(paper.paper_id)}
-                        onAnalyze={onAnalyzePaper ? () => onAnalyzePaper(paper) : undefined}
-                        compact={density === 'compact'}
-                      />
+                      <div key={paper.paper_id} className="card-enter" style={{ animationDelay: `${sourcePapers.indexOf(paper) * 55}ms` }}>
+                        <PaperCard
+                          paper={paper}
+                          selected={selectedIds.has(paper.paper_id)}
+                          onToggle={activeTab === 'filtered' || !rejectedIds.has(paper.paper_id) ? () => togglePaper(paper.paper_id) : undefined}
+                          isRejected={rejectedIds.has(paper.paper_id)}
+                          onAnalyze={onAnalyzePaper ? () => onAnalyzePaper(paper) : undefined}
+                          compact={density === 'compact'}
+                        />
+                      </div>
                     ))}
                   </div>
                 )}
@@ -655,15 +682,16 @@ const addKeyword = () => {
         ) : (
           <>
             {pagePapers.map(paper => (
-              <PaperCard
-                key={paper.paper_id}
-                paper={paper}
-                selected={selectedIds.has(paper.paper_id)}
-                onToggle={activeTab === 'filtered' || !rejectedIds.has(paper.paper_id) ? () => togglePaper(paper.paper_id) : undefined}
-                isRejected={rejectedIds.has(paper.paper_id)}
-                onAnalyze={onAnalyzePaper ? () => onAnalyzePaper(paper) : undefined}
-                compact={density === 'compact'}
-              />
+              <div key={paper.paper_id} className="card-enter" style={{ animationDelay: `${pagePapers.indexOf(paper) * 55}ms` }}>
+                <PaperCard
+                  paper={paper}
+                  selected={selectedIds.has(paper.paper_id)}
+                  onToggle={activeTab === 'filtered' || !rejectedIds.has(paper.paper_id) ? () => togglePaper(paper.paper_id) : undefined}
+                  isRejected={rejectedIds.has(paper.paper_id)}
+                  onAnalyze={onAnalyzePaper ? () => onAnalyzePaper(paper) : undefined}
+                  compact={density === 'compact'}
+                />
+              </div>
             ))}
             <Pagination current={currentPage} total={totalPages} onChange={p => { setCurrentPage(p) }} />
           </>

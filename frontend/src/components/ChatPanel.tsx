@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
+import type { RefObject } from 'react'
 import type { Message } from '../types'
 import type { HistoryItem } from '../hooks/useSearchHistory'
 import { MessageBubble } from './MessageBubble'
@@ -14,18 +15,21 @@ interface Props {
   history: HistoryItem[]
   onSearchFromHistory: (keywords: string[]) => void
   onRemoveHistory: (timestamp: number) => void
+  inputRef?: RefObject<HTMLTextAreaElement | null>
 }
 
 export function ChatPanel({
   messages, isLoading, onSearch, onClearKey,
   pendingKeywords, onConfirmKeywords, onCancelSearch,
-  history, onSearchFromHistory, onRemoveHistory,
+  history, onSearchFromHistory, onRemoveHistory, inputRef,
 }: Props) {
   const [input, setInput] = useState('')
   const [editKeywords, setEditKeywords] = useState<string[]>([])
   const [newKw, setNewKw] = useState('')
   const bottomRef = useRef<HTMLDivElement>(null)
   const newKwRef = useRef<HTMLInputElement>(null)
+  const localRef = useRef<HTMLTextAreaElement>(null)
+  const textareaRef = (inputRef as RefObject<HTMLTextAreaElement>) ?? localRef
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -195,6 +199,7 @@ export function ChatPanel({
       <div className="px-4 py-3 border-t border-gray-200">
         <div className="flex gap-2 items-end">
           <textarea
+            ref={textareaRef}
             value={input}
             onChange={e => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
