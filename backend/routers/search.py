@@ -5,7 +5,8 @@ from models import SearchRequest, ParseRequest, ParsedQuery
 from services.llm_service import classify_intent, parse_query, validate_papers
 from services.search_service import search_all_sources, enhance_with_unpaywall
 from services.download_service import fetch_pdf_bytes
-from config import CORE_API_KEY, NASA_ADS_API_KEY, SERPAPI_KEY
+from services.pdf_finder_service import find_pdfs_with_kimi, generate_fallback_links
+from config import CORE_API_KEY, NASA_ADS_API_KEY, SERPAPI_KEY, KIMI_API_KEY
 
 router = APIRouter()
 
@@ -76,6 +77,35 @@ async def search(request: SearchRequest):
                 "rejected_papers": rejected_dict,
                 "message": f"为您找到 {len(final)} 篇相关论文。"
             })
+
+            # ── PDF 深度查找（异步补充，不阻塞结果展示）──────────────────
+            no_pdf = [p for p in final if not p.pdf_url]
+            if no_pdf:
+                yield sse("pdf_finding", {
+                    "message": f"正在为 {len(no_pdf)} 篇无 PDF 的论文深度查找..."
+                })
+                kimi_results: dict[str, str] = {}
+                if KIMI_API_KEY:
+                    kimi_results = await find_pdfs_with_kimi(no_pdf, KIMI_API_KEY)
+
+                updates = []
+                for paper in no_pdf:
+                    pdf_url = kimi_results.get(paper.paper_id)
+                    updates.append({
+                        "paper_id": paper.paper_id,
+                        "pdf_url": pdf_url,
+                        "fallback_links": [] if pdf_url else generate_fallback_links(paper),
+                    })
+
+                found = sum(1 for u in updates if u["pdf_url"])
+                yield sse("pdf_update", {
+                    "updates": updates,
+                    "message": (
+                        f"深度查找完成：新增 {found} 篇 PDF，其余 {len(updates) - found} 篇提供备用查找入口。"
+                        if found else
+                        f"未找到新 PDF，已为 {len(updates)} 篇论文提供备用查找入口。"
+                    ),
+                })
 
         except Exception as e:
             yield sse("error", {"message": f"出错了：{str(e)}"})

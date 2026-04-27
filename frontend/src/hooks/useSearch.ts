@@ -55,7 +55,22 @@ export function useSearch(apiKey: string, settings: SearchSettings) {
           setPapers(event.papers)
           setRejectedPapers(event.rejected_papers ?? [])
           setStatusMessage(event.message)
+          setIsLoading(false)  // 主搜索完成，立即释放输入框
           updateAssistant(assistantId, { content: event.message, isLoading: false, papers: event.papers })
+        } else if (event.type === 'pdf_finding') {
+          setStatusMessage(event.message)
+        } else if (event.type === 'pdf_update') {
+          const updateMap = new Map(event.updates.map(u => [u.paper_id, u]))
+          setPapers(prev => prev.map(p => {
+            const u = updateMap.get(p.paper_id)
+            if (!u) return p
+            return {
+              ...p,
+              pdf_url: u.pdf_url ?? p.pdf_url ?? undefined,
+              fallback_links: u.fallback_links.length > 0 ? u.fallback_links : p.fallback_links,
+            }
+          }))
+          setStatusMessage(event.message)
         } else if (event.type === 'error') {
           setStatusMessage('')
           updateAssistant(assistantId, { content: `出错了：${event.message}`, isLoading: false })

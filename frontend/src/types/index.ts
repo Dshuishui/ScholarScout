@@ -12,6 +12,7 @@ export interface Paper {
   relevance_reason?: string
   source_links?: { source: string; url: string }[]
   venue?: string
+  fallback_links?: { name: string; url: string }[]
 }
 
 export interface Message {
@@ -44,7 +45,18 @@ export type SearchChatEvent = {
   message: string
 }
 
-export type SearchEvent = SearchProgressEvent | SearchDoneEvent | SearchErrorEvent | SearchChatEvent
+export type SearchPdfFindingEvent = {
+  type: 'pdf_finding'
+  message: string
+}
+
+export type SearchPdfUpdateEvent = {
+  type: 'pdf_update'
+  updates: { paper_id: string; pdf_url: string | null; fallback_links: { name: string; url: string }[] }[]
+  message: string
+}
+
+export type SearchEvent = SearchProgressEvent | SearchDoneEvent | SearchErrorEvent | SearchChatEvent | SearchPdfFindingEvent | SearchPdfUpdateEvent
 
 export type ParseResult =
   | { intent: 'chat'; reply: string }
