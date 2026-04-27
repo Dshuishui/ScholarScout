@@ -22,11 +22,19 @@ const LINE1 = '用自然语言'
 const LINE2 = '探索学术文献'
 const L1_END = 400 + LINE1.length * 70
 
+// 左侧底部 4 个特性卡片
 const FEATURES = [
-  { icon: '⚡', text: '10 个学术数据库并发搜索' },
-  { icon: '✦', text: 'AI 相关性筛选与深度分析' },
-  { icon: '💬', text: '每篇论文独立 AI 对话' },
-  { icon: '📄', text: 'PDF 深度查找 + 备用入口' },
+  { icon: '⚡', title: '10 源并发', detail: '10个数据库同时搜索' },
+  { icon: '✦', title: 'AI 精准筛选', detail: '过滤低相关论文' },
+  { icon: '💬', title: '论文对话', detail: '独立上下文深度解析' },
+  { icon: '📄', title: 'PDF 查找', detail: '8个备用平台入口' },
+]
+
+// 右侧优势条目
+const BENEFITS = [
+  { icon: '⚡', title: '10 个学术数据库并发搜索', desc: 'arXiv · Semantic Scholar · PubMed · CrossRef 等' },
+  { icon: '✦', title: 'AI 智能筛选 + 论文独立对话', desc: '自动过滤低相关结果，每篇论文可开启独立 AI 分析' },
+  { icon: '📄', title: 'PDF 深度查找 + Google Scholar 直达', desc: '多平台备用入口，跨库引用与引文一键可达' },
 ]
 
 const STATS = [
@@ -35,7 +43,6 @@ const STATS = [
   { value: 'AI', label: '智能筛选' },
 ]
 
-// 仿真 App 预览中的小论文卡片
 function MiniCard({ bar, title, badge, badgeColor, cite }: {
   bar: string; title: string; badge: string; badgeColor: string; cite: string
 }) {
@@ -43,13 +50,13 @@ function MiniCard({ bar, title, badge, badgeColor, cite }: {
     <div className="relative bg-white rounded-lg border border-gray-100 px-3 py-2 overflow-hidden shadow-sm">
       <div className={`absolute inset-y-0 left-0 w-[3px] ${bar}`} />
       <div className="pl-1">
-        <div className="text-[9px] font-semibold text-gray-800 leading-tight mb-1 line-clamp-1">{title}</div>
-        <div className="flex items-center gap-1.5 flex-wrap">
+        <div className="text-[9px] font-semibold text-gray-800 leading-snug mb-1.5 line-clamp-1">{title}</div>
+        <div className="flex items-center gap-1.5">
           <span className={`text-[8px] px-1.5 py-0.5 rounded-full border font-medium ${badgeColor}`}>{badge}</span>
           <span className="text-[8px] text-gray-400">{cite}</span>
           <div className="ml-auto flex gap-1">
-            <span className="text-[7px] px-1.5 py-0.5 rounded bg-sky-50 border border-sky-200 text-sky-600 font-medium">Scholar</span>
-            <span className="text-[7px] px-1.5 py-0.5 rounded bg-violet-50 border border-violet-200 text-violet-600 font-medium">AI 对话</span>
+            <span className="text-[7px] px-1.5 py-0.5 rounded bg-sky-50 border border-sky-200 text-sky-600 font-medium whitespace-nowrap">Google Scholar</span>
+            <span className="text-[7px] px-1.5 py-0.5 rounded bg-violet-50 border border-violet-200 text-violet-600 font-medium whitespace-nowrap">AI 对话</span>
           </div>
         </div>
       </div>
@@ -79,45 +86,44 @@ export function KeySetupScreen({ onKeySubmit }: Props) {
         }
         @keyframes floatY {
           0%,100% { transform: translateY(0); }
-          50%      { transform: translateY(-10px); }
+          50%      { transform: translateY(-8px); }
         }
         @keyframes glowPulse {
-          0%,100% { opacity: .18; transform: scale(1); }
-          50%      { opacity: .30; transform: scale(1.08); }
-        }
-        @keyframes fadeUp {
-          from { opacity:0; transform:translateY(14px); }
-          to   { opacity:1; transform:translateY(0); }
+          0%,100% { opacity:.18; transform:scale(1); }
+          50%      { opacity:.30; transform:scale(1.07); }
         }
         @keyframes cursorBlink { 0%,100%{opacity:1} 50%{opacity:0} }
+        @keyframes fadeIn {
+          from { opacity:0; transform:translateY(10px); }
+          to   { opacity:1; transform:translateY(0); }
+        }
         .gradient-bg {
           background: linear-gradient(-45deg,#0f172a,#1e1b4b,#0c1445,#1e3a8a,#0f172a);
           background-size: 400% 400%;
           animation: gradientFlow 14s ease infinite;
         }
-        .float-logo { animation: floatY 4s ease-in-out infinite; }
-        .glow-blue   { animation: glowPulse 7s ease-in-out infinite; }
-        .glow-purple { animation: glowPulse 9s ease-in-out infinite 1s; }
-        .glow-cyan   { animation: glowPulse 6s ease-in-out infinite 2s; }
-        .fade-up { opacity:0; animation: fadeUp .5s ease forwards; }
-        .cursor { animation: cursorBlink .9s step-end infinite; }
-        .preview-float { animation: floatY 6s ease-in-out infinite; }
+        .float-logo  { animation: floatY 4s ease-in-out infinite; }
+        .glow-blue   { animation: glowPulse  7s ease-in-out infinite; }
+        .glow-purple { animation: glowPulse  9s ease-in-out infinite 1s; }
+        .glow-cyan   { animation: glowPulse  6s ease-in-out infinite 2s; }
+        .cursor      { animation: cursorBlink .9s step-end infinite; }
+        .anim-in     { animation: fadeIn .6s ease forwards; opacity:0; }
       `}</style>
 
       <div className="min-h-screen flex">
 
-        {/* ── 左侧 ─────────────────────────────────────── */}
-        <div className="hidden lg:flex w-[56%] gradient-bg flex-col justify-between p-12 text-white relative overflow-hidden">
+        {/* ══ 左侧 62% ══════════════════════════════════════ */}
+        <div className="hidden lg:flex w-[62%] gradient-bg flex-col p-10 text-white relative overflow-hidden">
 
-          {/* 三色辉光球 */}
-          <div className="glow-blue absolute -top-20 -right-20 w-[480px] h-[480px] rounded-full pointer-events-none"
-            style={{ background: 'radial-gradient(circle, #3b82f6 0%, transparent 70%)', filter: 'blur(60px)' }} />
-          <div className="glow-purple absolute -bottom-32 -left-20 w-[520px] h-[520px] rounded-full pointer-events-none"
-            style={{ background: 'radial-gradient(circle, #7c3aed 0%, transparent 70%)', filter: 'blur(80px)' }} />
-          <div className="glow-cyan absolute top-1/3 right-1/4 w-64 h-64 rounded-full pointer-events-none"
-            style={{ background: 'radial-gradient(circle, #22d3ee 0%, transparent 70%)', filter: 'blur(60px)' }} />
+          {/* 辉光球 */}
+          <div className="glow-blue absolute -top-20 -right-20 w-[500px] h-[500px] rounded-full pointer-events-none"
+            style={{ background: 'radial-gradient(circle,#3b82f6 0%,transparent 70%)', filter: 'blur(70px)' }} />
+          <div className="glow-purple absolute -bottom-32 -left-24 w-[560px] h-[560px] rounded-full pointer-events-none"
+            style={{ background: 'radial-gradient(circle,#7c3aed 0%,transparent 70%)', filter: 'blur(90px)' }} />
+          <div className="glow-cyan absolute top-[40%] right-[20%] w-56 h-56 rounded-full pointer-events-none"
+            style={{ background: 'radial-gradient(circle,#22d3ee 0%,transparent 70%)', filter: 'blur(60px)' }} />
 
-          {/* Logo */}
+          {/* ① Logo */}
           <div className="relative z-10 flex items-center gap-3">
             <div className="float-logo w-11 h-11 rounded-xl bg-white/10 border border-white/20 backdrop-blur flex items-center justify-center">
               <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -128,86 +134,82 @@ export function KeySetupScreen({ onKeySubmit }: Props) {
             <span className="text-lg font-bold tracking-tight">ScholarScout</span>
           </div>
 
-          {/* 超大打字机标题 + App 预览 */}
-          <div className="relative z-10 flex-1 flex flex-col justify-center py-6">
-
-            {/* 标题 */}
-            <h2 className="text-7xl font-black leading-[1.05] tracking-tight mb-6" style={{ minHeight: '8.5rem' }}>
+          {/* ② 标题 */}
+          <div className="relative z-10 mt-8 mb-6">
+            <h2 className="text-7xl font-black leading-[1.05] tracking-tight" style={{ minHeight: '8rem' }}>
               <span className="block">{line1}{line1.length < LINE1.length && <span className="cursor text-blue-300">|</span>}</span>
-              <span className="block bg-gradient-to-r from-white via-blue-100 to-cyan-200 bg-clip-text text-transparent">
+              <span className="block bg-gradient-to-r from-white via-blue-100 to-cyan-300 bg-clip-text text-transparent">
                 {line2}{line1.length >= LINE1.length && line2.length < LINE2.length && <span className="cursor text-blue-300">|</span>}
               </span>
             </h2>
-
-            {/* App 预览窗口 */}
-            <div
-              className="preview-float fade-up w-full max-w-[420px]"
-              style={{ animationDelay: `${L1_END + LINE2.length * 70 + 300}ms` }}
-            >
-              {/* macOS 风格窗口边框 */}
-              <div className="rounded-xl overflow-hidden shadow-2xl border border-white/10" style={{ boxShadow: '0 25px 60px rgba(0,0,0,.5), 0 0 0 1px rgba(255,255,255,.08)' }}>
-                {/* 标题栏 */}
-                <div className="flex items-center gap-1.5 px-3 py-2 bg-gray-100/95 border-b border-gray-200">
-                  <div className="w-3 h-3 rounded-full bg-red-400" />
-                  <div className="w-3 h-3 rounded-full bg-yellow-400" />
-                  <div className="w-3 h-3 rounded-full bg-green-400" />
-                  <div className="flex-1 mx-3">
-                    <div className="bg-white border border-gray-200 rounded px-2 py-0.5 text-[9px] text-gray-400 text-center truncate">
-                      RAG · retrieval augmented generation — ScholarScout
-                    </div>
-                  </div>
-                </div>
-                {/* App 内容 */}
-                <div className="bg-slate-50 px-3 pt-2 pb-3 space-y-1.5">
-                  {/* 统计行 */}
-                  <div className="text-[8px] text-gray-400 pb-1">
-                    共找到 <span className="text-gray-700 font-semibold">47</span> 篇 · AI 筛选保留 <span className="text-blue-600 font-semibold">12</span> 篇 · 过滤 35 篇低相关
-                  </div>
-                  <MiniCard
-                    bar="bg-green-500"
-                    title="Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks"
-                    badge="arXiv" badgeColor="bg-green-50 text-green-700 border-green-200"
-                    cite="引用 6,842"
-                  />
-                  <MiniCard
-                    bar="bg-blue-500"
-                    title="REALM: Retrieval-Augmented Language Model Pre-Training"
-                    badge="Semantic Scholar" badgeColor="bg-blue-50 text-blue-700 border-blue-200"
-                    cite="引用 2,341"
-                  />
-                  {/* 第三张半截，暗示更多内容 */}
-                  <div className="relative bg-white rounded-lg border border-gray-100 px-3 py-2 overflow-hidden shadow-sm opacity-60">
-                    <div className="absolute inset-y-0 left-0 w-[3px] bg-violet-500" />
-                    <div className="pl-1 text-[9px] font-semibold text-gray-700 line-clamp-1">
-                      Dense Passage Retrieval for Open-Domain Question Answering
-                    </div>
-                  </div>
-                  {/* 渐变遮罩暗示更多 */}
-                  <div className="absolute bottom-0 left-0 right-0 h-8 pointer-events-none" style={{ background: 'linear-gradient(to bottom, transparent, #f8fafc)' }} />
-                </div>
-              </div>
-            </div>
-
+            <p className="anim-in text-blue-200 text-base mt-3 leading-relaxed"
+              style={{ animationDelay: `${L1_END + LINE2.length * 70 + 200}ms` }}>
+              AI 驱动 · 自然语言描述 · 秒级返回结果
+            </p>
           </div>
 
-          {/* 特性列表（2列紧凑）+ 底部链接 */}
-          <div className="relative z-10">
-            <div
-              className="fade-up grid grid-cols-2 gap-x-6 gap-y-2.5 mb-6"
-              style={{ animationDelay: `${L1_END + LINE2.length * 70 + 700}ms` }}
-            >
+          {/* ③ App 预览窗口 */}
+          <div className="anim-in relative z-10 flex-1 flex flex-col justify-center mb-6"
+            style={{ animationDelay: `${L1_END + LINE2.length * 70 + 350}ms` }}>
+            <div className="rounded-xl overflow-hidden w-full"
+              style={{ boxShadow: '0 30px 70px rgba(0,0,0,.55), 0 0 0 1px rgba(255,255,255,.1)' }}>
+              {/* macOS 标题栏 */}
+              <div className="flex items-center gap-1.5 px-3 py-2 bg-gray-100 border-b border-gray-200">
+                <div className="w-3 h-3 rounded-full bg-red-400" />
+                <div className="w-3 h-3 rounded-full bg-yellow-400" />
+                <div className="w-3 h-3 rounded-full bg-green-400" />
+                <div className="flex-1 mx-3">
+                  <div className="bg-white border border-gray-200 rounded px-2 py-0.5 text-[9px] text-gray-400 text-center truncate">
+                    RAG · retrieval augmented generation — ScholarScout
+                  </div>
+                </div>
+              </div>
+              {/* 内容 */}
+              <div className="bg-slate-50 px-3 pt-2 pb-3 space-y-2">
+                <div className="text-[8px] text-gray-400 pb-0.5">
+                  共找到 <span className="text-gray-700 font-semibold">47</span> 篇
+                  · AI 筛选保留 <span className="text-blue-600 font-semibold">12</span> 篇
+                  · 过滤 35 篇低相关
+                </div>
+                <MiniCard
+                  bar="bg-green-500"
+                  title="Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks"
+                  badge="arXiv" badgeColor="bg-green-50 text-green-700 border-green-200"
+                  cite="引用 6,842"
+                />
+                <MiniCard
+                  bar="bg-blue-500"
+                  title="REALM: Retrieval-Augmented Language Model Pre-Training"
+                  badge="Semantic Scholar" badgeColor="bg-blue-50 text-blue-700 border-blue-200"
+                  cite="引用 2,341"
+                />
+                <div className="relative bg-white rounded-lg border border-gray-100 px-3 py-2 overflow-hidden shadow-sm opacity-50">
+                  <div className="absolute inset-y-0 left-0 w-[3px] bg-violet-500" />
+                  <div className="pl-1 text-[9px] font-semibold text-gray-600 line-clamp-1">
+                    Dense Passage Retrieval for Open-Domain Question Answering
+                  </div>
+                </div>
+                {/* 渐变遮罩 */}
+                <div className="pointer-events-none h-4 -mb-1"
+                  style={{ background: 'linear-gradient(to bottom, transparent, #f8fafc)' }} />
+              </div>
+            </div>
+          </div>
+
+          {/* ④ 特性卡片 + 链接 */}
+          <div className="anim-in relative z-10"
+            style={{ animationDelay: `${L1_END + LINE2.length * 70 + 600}ms` }}>
+            <div className="grid grid-cols-4 gap-2.5 mb-5">
               {FEATURES.map(f => (
-                <div key={f.text} className="flex items-start gap-2">
-                  <span className="text-sm mt-0.5 flex-shrink-0">{f.icon}</span>
-                  <span className="text-blue-100 text-xs leading-snug">{f.text}</span>
+                <div key={f.title}
+                  className="border border-white/15 bg-white/8 backdrop-blur-sm rounded-xl p-3 text-center hover:bg-white/12 transition-colors">
+                  <div className="text-xl mb-1.5">{f.icon}</div>
+                  <p className="text-sm font-semibold text-white leading-snug">{f.title}</p>
+                  <p className="text-[11px] text-blue-300 mt-0.5 leading-snug">{f.detail}</p>
                 </div>
               ))}
             </div>
-
-            <div
-              className="fade-up flex items-center gap-5 text-sm text-blue-400"
-              style={{ animationDelay: `${L1_END + LINE2.length * 70 + 900}ms` }}
-            >
+            <div className="flex items-center gap-5 text-sm text-blue-400">
               <a href="http://118.25.192.117" target="_blank" rel="noopener noreferrer"
                 className="hover:text-white transition-colors">在线体验 →</a>
               <span className="text-blue-800">|</span>
@@ -217,13 +219,14 @@ export function KeySetupScreen({ onKeySubmit }: Props) {
           </div>
         </div>
 
-        {/* ── 右侧 ─────────────────────────────────────── */}
-        <div className="flex-1 flex items-center justify-center p-8 relative overflow-hidden" style={{ background: '#f8fafc' }}>
+        {/* ══ 右侧 38% ══════════════════════════════════════ */}
+        <div className="flex-1 flex items-center justify-center px-10 py-12 relative overflow-hidden"
+          style={{ background: '#f8fafc' }}>
           {/* 左上角淡蓝辉光 */}
-          <div className="absolute -top-20 -left-20 w-80 h-80 rounded-full pointer-events-none"
-            style={{ background: 'radial-gradient(circle, #bfdbfe 0%, transparent 70%)', filter: 'blur(60px)', opacity: .6 }} />
+          <div className="absolute -top-24 -left-24 w-80 h-80 rounded-full pointer-events-none"
+            style={{ background: 'radial-gradient(circle,#bfdbfe 0%,transparent 70%)', filter: 'blur(60px)', opacity: .7 }} />
 
-          <div className="w-full max-w-sm relative z-10">
+          <div className="w-full max-w-xs relative z-10">
 
             {/* 移动端 logo */}
             <div className="lg:hidden flex items-center gap-2.5 mb-8">
@@ -236,18 +239,40 @@ export function KeySetupScreen({ onKeySubmit }: Props) {
               <span className="text-lg font-bold text-gray-900">ScholarScout</span>
             </div>
 
+            {/* 优势列表（填充右侧空间） */}
+            <div className="space-y-2.5 mb-8">
+              {BENEFITS.map(b => (
+                <div key={b.title}
+                  className="flex items-start gap-3 bg-white border border-gray-100 rounded-xl px-4 py-3 shadow-sm">
+                  <span className="text-lg flex-shrink-0 mt-0.5">{b.icon}</span>
+                  <div>
+                    <p className="text-sm font-semibold text-gray-800 leading-snug">{b.title}</p>
+                    <p className="text-xs text-gray-400 mt-0.5 leading-snug">{b.desc}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* 分隔线 */}
+            <div className="flex items-center gap-3 mb-7">
+              <div className="flex-1 h-px bg-gray-200" />
+              <span className="text-xs text-gray-400 flex-shrink-0">输入 Key 开始使用</span>
+              <div className="flex-1 h-px bg-gray-200" />
+            </div>
+
             {/* 渐变标题 */}
-            <h2 className="text-3xl font-bold mb-2 bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-600 bg-clip-text text-transparent">
+            <h2 className="text-2xl font-bold mb-1.5 bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-600 bg-clip-text text-transparent">
               开始你的学术探索
             </h2>
-            <p className="text-gray-400 text-sm mb-5 leading-relaxed">
-              输入你的 DeepSeek API Key 继续。Key 仅存于本地浏览器，不会上传服务器。
+            <p className="text-gray-400 text-xs mb-5 leading-relaxed">
+              Key 仅存于本地浏览器，不会上传服务器。
             </p>
 
             {/* 数据徽章 */}
-            <div className="flex items-center gap-2 mb-7">
+            <div className="flex items-center gap-2 mb-5">
               {STATS.map(s => (
-                <div key={s.label} className="flex items-center gap-1 text-xs bg-white border border-slate-200 rounded-full px-2.5 py-1 shadow-sm">
+                <div key={s.label}
+                  className="flex items-center gap-1 text-xs bg-white border border-slate-200 rounded-full px-2.5 py-1 shadow-sm">
                   <span className="font-bold text-slate-700">{s.value}</span>
                   <span className="text-slate-400">{s.label}</span>
                 </div>
@@ -255,7 +280,7 @@ export function KeySetupScreen({ onKeySubmit }: Props) {
             </div>
 
             {/* 输入框 */}
-            <div className="mb-5">
+            <div className="mb-4">
               <label className="block text-sm font-medium text-gray-700 mb-2">DeepSeek API Key</label>
               <input
                 type="password"
@@ -263,7 +288,7 @@ export function KeySetupScreen({ onKeySubmit }: Props) {
                 onChange={e => { setInput(e.target.value); setError('') }}
                 onKeyDown={e => e.key === 'Enter' && handleSubmit()}
                 placeholder="sk-xxxxxxxxxxxxxxxx"
-                className="w-full bg-white border border-gray-200 rounded-xl px-4 py-3 text-sm placeholder-gray-300 transition-all focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-400/20 focus:shadow-[0_0_0_4px_rgba(59,130,246,0.08)] shadow-sm"
+                className="w-full bg-white border border-gray-200 rounded-xl px-4 py-3 text-sm placeholder-gray-300 shadow-sm transition-all focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-400/20 focus:shadow-[0_0_0_4px_rgba(59,130,246,0.08)]"
               />
               {error && <p className="text-red-500 text-xs mt-1.5">{error}</p>}
             </div>
@@ -276,7 +301,7 @@ export function KeySetupScreen({ onKeySubmit }: Props) {
               开始探索论文 →
             </button>
 
-            <p className="text-center text-xs text-gray-400 mt-6">
+            <p className="text-center text-xs text-gray-400 mt-5">
               没有 Key？
               <a href="https://platform.deepseek.com" target="_blank" rel="noopener noreferrer"
                 className="text-blue-500 hover:underline ml-1">免费注册 DeepSeek →</a>
