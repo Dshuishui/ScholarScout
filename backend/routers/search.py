@@ -1,6 +1,10 @@
 import json
+import logging
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse, Response
+
+logger = logging.getLogger(__name__)
+
 from models import SearchRequest, ParseRequest, ParsedQuery
 from services.llm_service import classify_intent, parse_query, validate_papers
 from services.search_service import search_all_sources, enhance_with_unpaywall
@@ -108,7 +112,8 @@ async def search(request: SearchRequest):
                 })
 
         except Exception as e:
-            yield sse("error", {"message": f"出错了：{str(e)}"})
+            logger.error("Search pipeline error: %s", e, exc_info=True)
+            yield sse("error", {"message": "搜索出错，请稍后重试。"})
 
     return StreamingResponse(
         generate(),
@@ -148,4 +153,5 @@ async def download(url: str):
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        raise HTTPException(status_code=502, detail=f"下载失败: {str(e)}")
+        logger.error("Download error: %s", e, exc_info=True)
+        raise HTTPException(status_code=502, detail="下载失败，请稍后重试。")
