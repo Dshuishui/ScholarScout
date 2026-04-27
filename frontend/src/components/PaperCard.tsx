@@ -23,10 +23,14 @@ interface Props {
   onToggle?: () => void
   isRejected?: boolean
   onAnalyze?: () => void
+  compact?: boolean
 }
 
-export function PaperCard({ paper, selected = false, onToggle, isRejected = false, onAnalyze }: Props) {
+export function PaperCard({ paper, selected = false, onToggle, isRejected = false, onAnalyze, compact = false }: Props) {
   const [copied, setCopied] = useState(false)
+  const [expanded, setExpanded] = useState(false)
+  const showAbstract = !compact || expanded
+  const hasExpandable = compact && (!!paper.abstract || !!paper.relevance_reason)
   const year = paper.published_date?.slice(0, 4) ?? '—'
 
   const copyTitle = () => {
@@ -130,15 +134,38 @@ export function PaperCard({ paper, selected = false, onToggle, isRejected = fals
             )}
           </div>
 
+          {/* 紧凑模式：展开/收起横条 */}
+          {hasExpandable && (
+            <button
+              onClick={() => setExpanded(prev => !prev)}
+              className="w-full flex items-center gap-2 text-xs text-gray-400 hover:text-blue-500 py-1.5 border-y border-gray-100 my-2 hover:bg-blue-50/40 transition-colors group"
+            >
+              <svg
+                className={`w-3.5 h-3.5 transition-transform duration-200 flex-shrink-0 ${expanded ? 'rotate-180' : ''}`}
+                fill="none" stroke="currentColor" viewBox="0 0 24 24"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+              <span className="font-medium group-hover:text-blue-500 transition-colors">
+                {expanded ? '收起摘要' : '查看摘要与 AI 分析'}
+              </span>
+              {!expanded && paper.abstract && (
+                <span className="truncate text-gray-300 flex-1">
+                  — {paper.abstract.slice(0, 60)}…
+                </span>
+              )}
+            </button>
+          )}
+
           {/* Abstract */}
-          {paper.abstract && (
+          {showAbstract && paper.abstract && (
             <p className="text-sm text-gray-600 leading-relaxed line-clamp-3 mb-3">
               {paper.abstract}
             </p>
           )}
 
           {/* AI relevance reason */}
-          {paper.relevance_reason && (
+          {showAbstract && paper.relevance_reason && (
             <div className="flex items-start gap-1.5 bg-blue-50 border border-blue-100 rounded-lg px-2.5 py-2 mb-3">
               <span className="text-blue-400 flex-shrink-0 mt-px text-xs">✦</span>
               <p className="text-sm text-blue-700 leading-relaxed">{paper.relevance_reason}</p>

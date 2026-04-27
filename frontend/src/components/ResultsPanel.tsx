@@ -24,6 +24,7 @@ const DOWNLOAD_CONCURRENCY = 3
 
 type SortOption = 'relevance' | 'citations' | 'date_desc' | 'date_asc'
 type ViewMode = 'list' | 'grouped'
+type Density = 'compact' | 'standard'
 
 interface Props {
   papers: Paper[]
@@ -123,6 +124,13 @@ export function ResultsPanel({ papers, rejectedPapers = [], isLoading, statusMes
   const [activeTab, setActiveTab] = useState<'filtered' | 'all'>('filtered')
   const [viewMode, setViewMode] = useState<ViewMode>('list')
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set())
+  const [density, setDensityState] = useState<Density>(() =>
+    (localStorage.getItem('scholarscout_density') as Density) ?? 'compact'
+  )
+  const setDensity = (d: Density) => {
+    setDensityState(d)
+    localStorage.setItem('scholarscout_density', d)
+  }
 
   // 新搜索完成时重置到筛选后视图
   useEffect(() => {
@@ -485,6 +493,24 @@ const addKeyword = () => {
             ))}
           </div>
           <div className="flex items-center gap-2">
+            {/* 密度切换 */}
+            <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden">
+              <button
+                onClick={() => setDensity('compact')}
+                title="紧凑模式 — 折叠摘要，每屏显示更多论文"
+                className={`px-2.5 py-1.5 text-xs font-medium transition-colors ${density === 'compact' ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-gray-600 bg-white'}`}
+              >
+                紧凑
+              </button>
+              <button
+                onClick={() => setDensity('standard')}
+                title="标准模式 — 显示摘要"
+                className={`px-2.5 py-1.5 text-xs font-medium transition-colors ${density === 'standard' ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-gray-600 bg-white'}`}
+              >
+                标准
+              </button>
+            </div>
+
             {/* 视图切换 */}
             <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden">
               <button
@@ -618,6 +644,7 @@ const addKeyword = () => {
                         onToggle={activeTab === 'filtered' || !rejectedIds.has(paper.paper_id) ? () => togglePaper(paper.paper_id) : undefined}
                         isRejected={rejectedIds.has(paper.paper_id)}
                         onAnalyze={onAnalyzePaper ? () => onAnalyzePaper(paper) : undefined}
+                        compact={density === 'compact'}
                       />
                     ))}
                   </div>
@@ -635,6 +662,7 @@ const addKeyword = () => {
                 onToggle={activeTab === 'filtered' || !rejectedIds.has(paper.paper_id) ? () => togglePaper(paper.paper_id) : undefined}
                 isRejected={rejectedIds.has(paper.paper_id)}
                 onAnalyze={onAnalyzePaper ? () => onAnalyzePaper(paper) : undefined}
+                compact={density === 'compact'}
               />
             ))}
             <Pagination current={currentPage} total={totalPages} onChange={p => { setCurrentPage(p) }} />
