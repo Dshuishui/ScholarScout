@@ -122,6 +122,7 @@ export function ResultsPanel({ papers, rejectedPapers = [], isLoading, statusMes
   const [sortBy, setSortBy] = useState<SortOption>('relevance')
   const [activeTab, setActiveTab] = useState<'filtered' | 'all'>('filtered')
   const [viewMode, setViewMode] = useState<ViewMode>('list')
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set())
 
   // 新搜索完成时重置到筛选后视图
   useEffect(() => {
@@ -129,6 +130,7 @@ export function ResultsPanel({ papers, rejectedPapers = [], isLoading, statusMes
     setSelectedIds(new Set())
     setAppliedSettings(settings)
     setActiveTab('filtered')
+    setCollapsedGroups(new Set())
   }, [papers]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // 切换 tab 或排序时回到第一页
@@ -572,25 +574,57 @@ const addKeyword = () => {
         )}
 
         {viewMode === 'grouped' && groupedPapers ? (
-          Array.from(groupedPapers.entries()).map(([source, sourcePapers]) => (
-            <div key={source}>
-              <div className="flex items-center gap-2 px-1 py-2 mb-1 mt-2 first:mt-0">
-                <span className={`text-xs font-semibold ${SOURCE_COLORS[source] ?? 'text-gray-600'}`}>{source}</span>
-                <span className="text-xs text-gray-300 tabular-nums">{sourcePapers.length} 篇</span>
-                <div className="flex-1 h-px bg-gray-100" />
+          Array.from(groupedPapers.entries()).map(([source, sourcePapers]) => {
+            const isCollapsed = collapsedGroups.has(source)
+            const toggleCollapse = () => setCollapsedGroups(prev => {
+              const next = new Set(prev)
+              next.has(source) ? next.delete(source) : next.add(source)
+              return next
+            })
+            return (
+              <div key={source}>
+                {/* 分组标题 — 可折叠 */}
+                <button
+                  onClick={toggleCollapse}
+                  className="w-full flex items-center gap-3 px-3 py-3 mt-3 first:mt-0 rounded-xl bg-white border border-gray-100 hover:border-gray-200 hover:shadow-sm transition-all group"
+                >
+                  <span className={`text-base font-bold ${SOURCE_COLORS[source] ?? 'text-gray-700'}`}>
+                    {source}
+                  </span>
+                  <span className={`text-sm font-medium px-2 py-0.5 rounded-full tabular-nums ${
+                    SOURCE_COLORS[source]
+                      ? `bg-gray-100 text-gray-500`
+                      : 'bg-gray-100 text-gray-400'
+                  }`}>
+                    {sourcePapers.length} 篇
+                  </span>
+                  <div className="flex-1 h-px bg-gray-100" />
+                  <svg
+                    className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${isCollapsed ? '-rotate-90' : ''}`}
+                    fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+
+                {/* 分组内论文列表 */}
+                {!isCollapsed && (
+                  <div className="mt-2 space-y-3">
+                    {sourcePapers.map(paper => (
+                      <PaperCard
+                        key={paper.paper_id}
+                        paper={paper}
+                        selected={selectedIds.has(paper.paper_id)}
+                        onToggle={activeTab === 'filtered' || !rejectedIds.has(paper.paper_id) ? () => togglePaper(paper.paper_id) : undefined}
+                        isRejected={rejectedIds.has(paper.paper_id)}
+                        onAnalyze={onAnalyzePaper ? () => onAnalyzePaper(paper) : undefined}
+                      />
+                    ))}
+                  </div>
+                )}
               </div>
-              {sourcePapers.map(paper => (
-                <PaperCard
-                  key={paper.paper_id}
-                  paper={paper}
-                  selected={selectedIds.has(paper.paper_id)}
-                  onToggle={activeTab === 'filtered' || !rejectedIds.has(paper.paper_id) ? () => togglePaper(paper.paper_id) : undefined}
-                  isRejected={rejectedIds.has(paper.paper_id)}
-                  onAnalyze={onAnalyzePaper ? () => onAnalyzePaper(paper) : undefined}
-                />
-              ))}
-            </div>
-          ))
+            )
+          })
         ) : (
           <>
             {pagePapers.map(paper => (
