@@ -153,16 +153,23 @@ async def search(request: SearchRequest):
 
 @router.post("/validate-key")
 async def validate_key(request: ValidateKeyRequest):
-    """验证 DeepSeek API Key 是否有效，调用 models.list 不消耗 token。"""
-    from openai import AsyncOpenAI, AuthenticationError
+    """验证 DeepSeek API Key 是否有效，GET /models 不消耗 token。"""
+    import httpx
     try:
-        client = AsyncOpenAI(api_key=request.api_key, base_url=DEEPSEEK_BASE_URL)
-        await client.models.list()
-        return {"valid": True}
-    except AuthenticationError:
-        return {"valid": False, "reason": "Key 无效，请检查是否正确复制"}
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.get(
+                f"{DEEPSEEK_BASE_URL}/models",
+                headers={"Authorization": f"Bearer {request.api_key}"},
+            )
+        if resp.status_code == 200:
+            return {"valid": True}
+        if resp.status_code in (401, 403):
+            return {"valid": False, "reason": "Key 无效，请检查是否正确复制"}
+        return {"valid": False, "reason": f"验证失败（{resp.status_code}），请稍后重试"}
+    except httpx.TimeoutException:
+        return {"valid": False, "reason": "请求超时，请检查网络后重试"}
     except Exception:
-        return {"valid": False, "reason": "验证失败，请检查网络或稍后重试"}
+        return {"valid": False, "reason": "网络连接失败，请检查网络后重试"}
 
 
 @router.get("/health")
