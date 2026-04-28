@@ -35,38 +35,40 @@ const STATS = [
   { value: 'AI', label: '智能筛选' },
 ]
 
-function MiniCard({ bar, title, badge, badgeColor, cite }: {
-  bar: string; title: string; badge: string; badgeColor: string; cite: string
-}) {
-  return (
-    <div className="relative bg-white rounded-lg border border-gray-100 px-3 py-2 overflow-hidden shadow-sm">
-      <div className={`absolute inset-y-0 left-0 w-[3px] ${bar}`} />
-      <div className="pl-1">
-        <div className="text-[9px] font-semibold text-gray-800 leading-snug mb-1.5 line-clamp-1">{title}</div>
-        <div className="flex items-center gap-1.5">
-          <span className={`text-[8px] px-1.5 py-0.5 rounded-full border font-medium ${badgeColor}`}>{badge}</span>
-          <span className="text-[8px] text-gray-400">{cite}</span>
-          <div className="ml-auto flex gap-1">
-            <span className="text-[7px] px-1.5 py-0.5 rounded bg-sky-50 border border-sky-200 text-sky-600 font-medium whitespace-nowrap">Google Scholar</span>
-            <span className="text-[7px] px-1.5 py-0.5 rounded bg-violet-50 border border-violet-200 text-violet-600 font-medium whitespace-nowrap">AI 对话</span>
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-}
 
 export function KeySetupScreen({ onKeySubmit }: Props) {
   const [input, setInput] = useState('')
   const [error, setError] = useState('')
+  const [isValidating, setIsValidating] = useState(false)
   const line1 = useTypewriter(LINE1, 400)
   const line2 = useTypewriter(LINE2, L1_END + 180)
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     const t = input.trim()
-    if (!t.startsWith('sk-')) { setError('Key 格式不正确，应以 sk- 开头'); return }
+    if (!t) return
+    if (!t.startsWith('sk-')) {
+      setError('Key 格式不正确，应以 sk- 开头')
+      return
+    }
     setError('')
-    onKeySubmit(t)
+    setIsValidating(true)
+    try {
+      const res = await fetch('/api/validate-key', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ api_key: t }),
+      })
+      const data = await res.json()
+      if (data.valid) {
+        onKeySubmit(t)
+      } else {
+        setError(data.reason ?? 'Key 无效，请重新确认')
+      }
+    } catch {
+      setError('网络错误，请检查连接后重试')
+    } finally {
+      setIsValidating(false)
+    }
   }
 
   return (
@@ -156,34 +158,14 @@ export function KeySetupScreen({ onKeySubmit }: Props) {
                   </div>
                 </div>
               </div>
-              {/* 内容 */}
-              <div className="bg-slate-50 px-3 pt-2 pb-3 space-y-2">
-                <div className="text-[8px] text-gray-400 pb-0.5">
-                  共找到 <span className="text-gray-700 font-semibold">47</span> 篇
-                  · AI 筛选保留 <span className="text-blue-600 font-semibold">12</span> 篇
-                  · 过滤 35 篇低相关
-                </div>
-                <MiniCard
-                  bar="bg-green-500"
-                  title="Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks"
-                  badge="arXiv" badgeColor="bg-green-50 text-green-700 border-green-200"
-                  cite="引用 6,842"
+              {/* 真实截图 */}
+              <div className="overflow-hidden bg-slate-50">
+                <img
+                  src="/preview.png"
+                  alt="ScholarScout AI 对话功能演示"
+                  className="w-full object-cover object-top"
+                  style={{ maxHeight: '240px' }}
                 />
-                <MiniCard
-                  bar="bg-blue-500"
-                  title="REALM: Retrieval-Augmented Language Model Pre-Training"
-                  badge="Semantic Scholar" badgeColor="bg-blue-50 text-blue-700 border-blue-200"
-                  cite="引用 2,341"
-                />
-                <div className="relative bg-white rounded-lg border border-gray-100 px-3 py-2 overflow-hidden shadow-sm opacity-50">
-                  <div className="absolute inset-y-0 left-0 w-[3px] bg-violet-500" />
-                  <div className="pl-1 text-[9px] font-semibold text-gray-600 line-clamp-1">
-                    Dense Passage Retrieval for Open-Domain Question Answering
-                  </div>
-                </div>
-                {/* 渐变遮罩 */}
-                <div className="pointer-events-none h-4 -mb-1"
-                  style={{ background: 'linear-gradient(to bottom, transparent, #f8fafc)' }} />
               </div>
             </div>
           </div>
@@ -299,7 +281,7 @@ export function KeySetupScreen({ onKeySubmit }: Props) {
                 type="password"
                 value={input}
                 onChange={e => { setInput(e.target.value); setError('') }}
-                onKeyDown={e => e.key === 'Enter' && handleSubmit()}
+                onKeyDown={e => { if (e.key === 'Enter' && !isValidating) handleSubmit() }}
                 placeholder="sk-xxxxxxxxxxxxxxxx"
                 className="w-full bg-white border border-gray-200 rounded-xl px-4 py-3 text-sm placeholder-gray-300 shadow-sm transition-all focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-400/20 focus:shadow-[0_0_0_4px_rgba(59,130,246,0.08)]"
               />
@@ -309,9 +291,17 @@ export function KeySetupScreen({ onKeySubmit }: Props) {
             {/* 按钮 */}
             <button
               onClick={handleSubmit}
-              className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-xl py-3 text-sm font-semibold transition-all shadow-md shadow-blue-200/60 cursor-pointer hover:-translate-y-0.5 hover:shadow-lg hover:shadow-blue-300/40"
+              disabled={isValidating || !input.trim()}
+              className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 disabled:from-blue-400 disabled:to-indigo-400 text-white rounded-xl py-3 text-sm font-semibold transition-all shadow-md shadow-blue-200/60 cursor-pointer hover:-translate-y-0.5 hover:shadow-lg hover:shadow-blue-300/40 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:shadow-none"
             >
-              开始探索论文 →
+              {isValidating ? (
+                <span className="flex items-center justify-center gap-2">
+                  <svg className="w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                  正在验证 Key...
+                </span>
+              ) : '开始探索论文 →'}
             </button>
 
             <p className="text-center text-xs text-gray-400 mt-5">

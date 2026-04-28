@@ -41,6 +41,10 @@ class Paper(BaseModel):
     fallback_links: list[dict] = [] # [{"name": "Sci-Hub", "url": "..."}]，无 PDF 时的备用查找入口
 
 
+class ValidateKeyRequest(BaseModel):
+    api_key: str = Field(max_length=200)
+
+
 class ParsedQuery(BaseModel):
     keywords: list[str]
     date_from: Optional[str] = None

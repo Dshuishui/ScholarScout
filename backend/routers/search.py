@@ -6,7 +6,7 @@ from fastapi.responses import StreamingResponse, Response
 
 logger = logging.getLogger(__name__)
 
-from models import SearchRequest, ParseRequest, ParsedQuery
+from models import SearchRequest, ParseRequest, ParsedQuery, ValidateKeyRequest
 from services.llm_service import classify_intent, parse_query, validate_papers
 from services.search_service import search_all_sources, enhance_with_unpaywall, get_source_names
 from services.download_service import fetch_pdf_bytes
@@ -149,6 +149,20 @@ async def search(request: SearchRequest):
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
+
+
+@router.post("/validate-key")
+async def validate_key(request: ValidateKeyRequest):
+    """验证 DeepSeek API Key 是否有效，调用 models.list 不消耗 token。"""
+    from openai import AsyncOpenAI, AuthenticationError
+    try:
+        client = AsyncOpenAI(api_key=request.api_key, base_url=DEEPSEEK_BASE_URL)
+        await client.models.list()
+        return {"valid": True}
+    except AuthenticationError:
+        return {"valid": False, "reason": "Key 无效，请检查是否正确复制"}
+    except Exception:
+        return {"valid": False, "reason": "验证失败，请检查网络或稍后重试"}
 
 
 @router.get("/health")
