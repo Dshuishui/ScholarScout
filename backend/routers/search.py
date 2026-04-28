@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 from fastapi import APIRouter, HTTPException
@@ -7,7 +8,7 @@ logger = logging.getLogger(__name__)
 
 from models import SearchRequest, ParseRequest, ParsedQuery
 from services.llm_service import classify_intent, parse_query, validate_papers
-from services.search_service import search_all_sources, enhance_with_unpaywall
+from services.search_service import search_all_sources, enhance_with_unpaywall, get_source_names
 from services.download_service import fetch_pdf_bytes
 from services.pdf_finder_service import find_pdfs_with_kimi, generate_fallback_links
 from config import CORE_API_KEY, NASA_ADS_API_KEY, SERPAPI_KEY, KIMI_API_KEY
@@ -62,7 +63,35 @@ async def search(request: SearchRequest):
 
             kw_str = "、".join(parsed.keywords)
             yield sse("progress", {"message": f"正在搜索关键词：{kw_str}..."})
-            papers = await search_all_sources(parsed, limit_per_source=request.limit_per_source, sources=request.sources)
+
+            # Notify frontend which sources will be searched
+            source_names = get_source_names(request.sources)
+            yield sse("search_start", {"sources": source_names})
+
+            # Collect per-source completion events via queue
+            source_queue: asyncio.Queue = asyncio.Queue()
+
+            async def on_source_done(name: str, count: int) -> None:
+                await source_queue.put({"source": name, "count": count})
+
+            search_task = asyncio.create_task(
+                search_all_sources(parsed, limit_per_source=request.limit_per_source,
+                                   sources=request.sources, on_source_done=on_source_done)
+            )
+
+            # Drain progress events while search runs
+            while not search_task.done():
+                try:
+                    item = source_queue.get_nowait()
+                    yield sse("source_done", item)
+                except asyncio.QueueEmpty:
+                    await asyncio.sleep(0.05)
+
+            # Drain any remaining events
+            while not source_queue.empty():
+                yield sse("source_done", source_queue.get_nowait())
+
+            papers = await search_task
             if not papers:
                 yield sse("done", {"papers": [], "message": "未找到相关论文，请尝试换个描述方式。"})
                 return

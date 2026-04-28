@@ -17,6 +17,19 @@ const SOURCE_STYLES: Record<string, { bar: string; badge: string }> = {
 }
 const DEFAULT_STYLE = { bar: 'bg-gray-300', badge: 'bg-gray-50 text-gray-600 border-gray-200' }
 
+const SOURCE_DESCRIPTIONS: Record<string, string> = {
+  'arXiv':            'arXiv — 物理/CS/数学预印本，全文免费',
+  'Semantic Scholar': 'Semantic Scholar — 2亿+ 论文，AI 语义搜索',
+  'OpenAlex':         'OpenAlex — 2.5亿+ 开放元数据，综合学科',
+  'PubMed':           'PubMed — 医学与生命科学权威数据库',
+  'Europe PMC':       'Europe PMC — 生命科学 + bioRxiv/medRxiv',
+  'INSPIRE-HEP':      'INSPIRE-HEP — 高能物理专业数据库',
+  'CrossRef':         'CrossRef — 1.5亿+ DOI 注册，综合学科',
+  'CORE':             'CORE — 1.7亿+ 开放获取全文',
+  'NASA ADS':         'NASA ADS — 天文学与天体物理专业库',
+  'Google Scholar':   'Google Scholar — 综合搜索，含灰色文献',
+}
+
 interface Props {
   paper: Paper
   selected?: boolean
@@ -40,6 +53,7 @@ export function PaperCard({ paper, selected = false, onToggle, isRejected = fals
       toast.show('论文题目已复制到剪贴板，快去学习吧 📚')
     })
   }
+
   const authorStr = paper.authors.length === 0
     ? '作者未知'
     : paper.authors.slice(0, 3).join(', ') + (paper.authors.length > 3 ? ` 等 ${paper.authors.length} 人` : '')
@@ -49,23 +63,25 @@ export function PaperCard({ paper, selected = false, onToggle, isRejected = fals
     ? paper.source_links
     : paper.url ? [{ source: paper.source, url: paper.url }] : []
 
-  // Google Scholar 链接：优先复用已有的，否则拼精确标题搜索
   const scholarUrl =
     paper.source_links?.find(l => l.source === 'Google Scholar')?.url
     ?? `https://scholar.google.com/scholar?q=${encodeURIComponent(`"${paper.title}"`)}`
 
-  // 来源链接里过滤掉 Google Scholar（避免下方重复展示）
   const sourceLinks = links.filter(l => l.source !== 'Google Scholar')
+
+  // P1: Quality badges
+  const isHighlyCited = paper.citations >= 1000
+  const hasOpenAccess = !!paper.pdf_url
 
   return (
     <div className={`relative bg-white border rounded-xl overflow-hidden transition-all duration-200 ${
       selected
-        ? 'border-blue-400 shadow-md ring-1 ring-blue-100'
+        ? 'border-blue-400 shadow-md ring-1 ring-blue-100 -translate-y-0.5'
         : isRejected
         ? 'border-gray-200 opacity-60 hover:opacity-80'
-        : 'border-gray-200 hover:border-gray-300 hover:shadow-md'
+        : 'border-gray-200 hover:border-gray-300 hover:-translate-y-0.5 hover:shadow-lg'
     }`}>
-      {/* Left accent bar — colored per source */}
+      {/* Left accent bar */}
       <div className={`absolute inset-y-0 left-0 w-[3px] ${isRejected ? 'bg-gray-300' : style.bar}`} />
 
       <div className="pl-5 pr-4 py-4 flex gap-3">
@@ -74,7 +90,7 @@ export function PaperCard({ paper, selected = false, onToggle, isRejected = fals
           <div className="flex-shrink-0 pt-0.5" onClick={e => e.stopPropagation()}>
             <button
               onClick={onToggle}
-              className={`w-4 h-4 rounded border-2 flex items-center justify-center transition-all ${
+              className={`w-4 h-4 rounded border-2 flex items-center justify-center transition-all active:scale-95 ${
                 selected ? 'bg-blue-600 border-blue-600' : 'bg-white border-gray-300 hover:border-blue-400'
               }`}
             >
@@ -89,14 +105,14 @@ export function PaperCard({ paper, selected = false, onToggle, isRejected = fals
 
         <div className="flex-1 min-w-0">
           {/* Title + copy */}
-          <div className="flex items-start gap-1.5 mb-1.5 group">
-            <h3 className="text-base font-semibold text-gray-900 leading-snug line-clamp-2 flex-1">
+          <div className="flex items-start gap-1.5 mb-1.5">
+            <h3 className="text-base font-bold text-gray-900 leading-snug line-clamp-2 flex-1">
               {paper.title}
             </h3>
             <button
               onClick={copyTitle}
               title="复制标题"
-              className="flex-shrink-0 mt-0.5 p-0.5 rounded text-gray-300 hover:text-gray-500 transition-all"
+              className="flex-shrink-0 mt-0.5 p-0.5 rounded text-gray-300 hover:text-gray-500 transition-all active:scale-95"
             >
               {copied ? (
                 <svg className="w-3.5 h-3.5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -114,25 +130,33 @@ export function PaperCard({ paper, selected = false, onToggle, isRejected = fals
           <div className="flex items-baseline justify-between gap-3 mb-2">
             <p className="text-sm text-gray-400 truncate">{authorStr}</p>
             {paper.venue && (
-              <span
-                className="text-xs text-slate-500 font-medium whitespace-nowrap flex-shrink-0 max-w-[45%] truncate"
-                title={paper.venue}
-              >
+              <span className="text-xs text-slate-500 font-medium whitespace-nowrap flex-shrink-0 max-w-[45%] truncate" title={paper.venue}>
                 {paper.venue}
               </span>
             )}
           </div>
 
-          {/* Meta row: year · source · citations */}
-          <div className="flex items-center gap-1.5 flex-wrap mb-3">
+          {/* Meta row: year · source · citations · quality badges */}
+          <div className="flex items-center gap-1.5 flex-wrap mb-2">
             <span className="text-xs text-gray-400 tabular-nums">{year}</span>
             <span className="text-gray-200 select-none">·</span>
-            <span className={`text-xs border rounded-full px-2 py-0.5 font-medium ${style.badge}`}>
+            <span
+              className={`text-xs border rounded-full px-2 py-0.5 font-medium cursor-default ${style.badge}`}
+              title={SOURCE_DESCRIPTIONS[paper.source] ?? paper.source}
+            >
               {paper.source}
             </span>
             {paper.citations > 0 && (
-              <span className="text-xs text-gray-400">
-                引用&nbsp;{paper.citations.toLocaleString()}
+              <span className="text-xs text-gray-400">引用&nbsp;{paper.citations.toLocaleString()}</span>
+            )}
+            {isHighlyCited && (
+              <span className="text-xs border rounded-full px-2 py-0.5 font-medium bg-amber-50 text-amber-700 border-amber-200" title="引用数超过 1000">
+                高引
+              </span>
+            )}
+            {hasOpenAccess && !isRejected && (
+              <span className="text-xs border rounded-full px-2 py-0.5 font-medium bg-emerald-50 text-emerald-700 border-emerald-200" title="可免费获取全文">
+                OA
               </span>
             )}
             {isRejected && (
@@ -142,7 +166,15 @@ export function PaperCard({ paper, selected = false, onToggle, isRejected = fals
             )}
           </div>
 
-          {/* 紧凑模式：展开/收起横条 */}
+          {/* P1: Compact mode — always show 1-line relevance reason preview */}
+          {compact && !expanded && paper.relevance_reason && !isRejected && (
+            <div className="flex items-start gap-1 mb-2">
+              <span className="text-blue-400 flex-shrink-0 text-xs mt-0.5">✦</span>
+              <p className="text-xs text-blue-600/90 line-clamp-1 leading-relaxed">{paper.relevance_reason}</p>
+            </div>
+          )}
+
+          {/* Compact expand bar */}
           {hasExpandable && (
             <button
               onClick={() => setExpanded(prev => !prev)}
@@ -158,9 +190,7 @@ export function PaperCard({ paper, selected = false, onToggle, isRejected = fals
                 {expanded ? '收起摘要' : '查看摘要与 AI 分析'}
               </span>
               {!expanded && paper.abstract && (
-                <span className="truncate text-gray-300 flex-1">
-                  — {paper.abstract.slice(0, 60)}…
-                </span>
+                <span className="truncate text-gray-300 flex-1">— {paper.abstract.slice(0, 60)}…</span>
               )}
             </button>
           )}
@@ -172,7 +202,7 @@ export function PaperCard({ paper, selected = false, onToggle, isRejected = fals
             </p>
           )}
 
-          {/* AI relevance reason */}
+          {/* AI relevance reason (full) */}
           {showAbstract && paper.relevance_reason && (
             <div className="flex items-start gap-1.5 bg-blue-50 border border-blue-100 rounded-lg px-2.5 py-2 mb-3">
               <span className="text-blue-400 flex-shrink-0 mt-px text-xs">✦</span>
@@ -182,7 +212,6 @@ export function PaperCard({ paper, selected = false, onToggle, isRejected = fals
 
           {/* Actions */}
           <div className="flex flex-wrap items-end gap-1.5 mt-1">
-            {/* 来源链接 + PDF */}
             <div className="flex flex-wrap gap-1.5 flex-1 min-w-0">
               {sourceLinks.map(link => (
                 <a
@@ -190,7 +219,7 @@ export function PaperCard({ paper, selected = false, onToggle, isRejected = fals
                   href={link.url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1 text-xs text-gray-500 hover:text-gray-800 border border-gray-200 hover:border-gray-300 bg-white hover:bg-gray-50 rounded-lg px-2.5 py-1 transition-all"
+                  className="inline-flex items-center gap-1 text-xs text-gray-500 hover:text-gray-800 border border-gray-200 hover:border-gray-300 bg-white hover:bg-gray-50 rounded-lg px-2.5 py-1 transition-all active:scale-95"
                 >
                   {link.source}
                   <svg className="w-3 h-3 opacity-60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -202,7 +231,7 @@ export function PaperCard({ paper, selected = false, onToggle, isRejected = fals
                 <a
                   href={getDownloadUrl(paper.pdf_url)}
                   download="paper.pdf"
-                  className="inline-flex items-center gap-1 text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 active:bg-blue-800 rounded-lg px-2.5 py-1 transition-colors"
+                  className="inline-flex items-center gap-1 text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 active:bg-blue-800 rounded-lg px-2.5 py-1 transition-all active:scale-95"
                 >
                   <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
@@ -218,7 +247,7 @@ export function PaperCard({ paper, selected = false, onToggle, isRejected = fals
                       href={fl.url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 text-xs text-gray-500 hover:text-gray-800 border border-gray-200 hover:border-gray-300 bg-white hover:bg-gray-50 rounded-lg px-2.5 py-1 transition-all"
+                      className="inline-flex items-center gap-1 text-xs text-gray-500 hover:text-gray-800 border border-gray-200 hover:border-gray-300 bg-white hover:bg-gray-50 rounded-lg px-2.5 py-1 transition-all active:scale-95"
                     >
                       {fl.name}
                       <svg className="w-3 h-3 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -232,12 +261,12 @@ export function PaperCard({ paper, selected = false, onToggle, isRejected = fals
               ) : null}
             </div>
 
-            {/* Google Scholar 按钮 — 常驻，跳转查看引用/全文/格式导出 */}
+            {/* Google Scholar — 常驻 */}
             <a
               href={scholarUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex-shrink-0 inline-flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-lg border border-sky-200 bg-sky-50 hover:bg-sky-100 hover:border-sky-300 active:bg-sky-200 text-sky-700 transition-all"
+              className="flex-shrink-0 inline-flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-lg border border-sky-200 bg-sky-50 hover:bg-sky-100 hover:border-sky-300 active:bg-sky-200 text-sky-700 transition-all active:scale-95"
             >
               <span className="flex items-center gap-1 text-xs font-semibold leading-tight">
                 <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
@@ -248,11 +277,11 @@ export function PaperCard({ paper, selected = false, onToggle, isRejected = fals
               <span className="text-[10px] text-sky-400 leading-none">引用 · 全文 · 相关</span>
             </a>
 
-            {/* AI 对话按钮 — 常驻，独立上下文 */}
+            {/* AI 对话 — 常驻 */}
             {onAnalyze && (
               <button
                 onClick={e => { e.stopPropagation(); onAnalyze() }}
-                className="flex-shrink-0 inline-flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-lg border border-violet-200 bg-violet-50 hover:bg-violet-100 hover:border-violet-300 active:bg-violet-200 text-violet-700 transition-all"
+                className="flex-shrink-0 inline-flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-lg border border-violet-200 bg-violet-50 hover:bg-violet-100 hover:border-violet-300 active:bg-violet-200 text-violet-700 transition-all active:scale-95"
               >
                 <span className="flex items-center gap-1 text-xs font-semibold leading-tight">
                   <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

@@ -794,16 +794,31 @@ _SOURCE_FUNCS: dict = {
 }
 
 
+def get_source_names(sources: list[str] | None = None) -> list[str]:
+    """Return the list of source names that will actually be searched."""
+    if not sources:
+        return list(_SOURCE_FUNCS.keys())
+    return [k for k in _SOURCE_FUNCS if k in sources]
+
+
 async def search_all_sources(
     parsed: ParsedQuery,
     limit_per_source: int = 10,
     sources: list[str] | None = None,
+    on_source_done=None,  # async callable(name: str, count: int) | None
 ) -> list[Paper]:
     funcs = (
         _SOURCE_FUNCS
         if not sources
         else {k: v for k, v in _SOURCE_FUNCS.items() if k in sources}
     )
-    results = await asyncio.gather(*(fn(parsed, limit_per_source) for fn in funcs.values()))
+
+    async def run_source(name: str, fn) -> list[Paper]:
+        papers = await fn(parsed, limit_per_source)
+        if on_source_done:
+            await on_source_done(name, len(papers))
+        return papers
+
+    results = await asyncio.gather(*(run_source(name, fn) for name, fn in funcs.items()))
     all_papers = [p for source_results in results for p in source_results]
     return deduplicate(all_papers)

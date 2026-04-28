@@ -56,7 +56,18 @@ export type SearchPdfUpdateEvent = {
   message: string
 }
 
-export type SearchEvent = SearchProgressEvent | SearchDoneEvent | SearchErrorEvent | SearchChatEvent | SearchPdfFindingEvent | SearchPdfUpdateEvent
+export type SearchStartEvent = {
+  type: 'search_start'
+  sources: string[]
+}
+
+export type SourceDoneEvent = {
+  type: 'source_done'
+  source: string
+  count: number
+}
+
+export type SearchEvent = SearchProgressEvent | SearchDoneEvent | SearchErrorEvent | SearchChatEvent | SearchPdfFindingEvent | SearchPdfUpdateEvent | SearchStartEvent | SourceDoneEvent
 
 export type ParseResult =
   | { intent: 'chat'; reply: string }

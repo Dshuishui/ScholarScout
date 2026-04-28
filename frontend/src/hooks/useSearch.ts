@@ -19,6 +19,8 @@ interface PendingSearch {
   history: { role: string; content: string }[]
 }
 
+export type SourceStatus = { status: 'pending' | 'done'; count: number }
+
 export function useSearch(apiKey: string, settings: SearchSettings) {
   const [messages, setMessages] = useState<Message[]>([WELCOME])
   const [papers, setPapers] = useState<Paper[]>([])
@@ -27,6 +29,7 @@ export function useSearch(apiKey: string, settings: SearchSettings) {
   const [statusMessage, setStatusMessage] = useState('')
   const [pendingSearch, setPendingSearch] = useState<PendingSearch | null>(null)
   const [lastConfirmed, setLastConfirmed] = useState<PendingSearch | null>(null)
+  const [sourceStatuses, setSourceStatuses] = useState<Record<string, SourceStatus>>({})
   const { history, addHistory, removeHistory } = useSearchHistory()
 
   const updateAssistant = (assistantId: string, patch: Partial<Message>) =>
@@ -41,6 +44,7 @@ export function useSearch(apiKey: string, settings: SearchSettings) {
     setPapers([])
     setRejectedPapers([])
     setStatusMessage('')
+    setSourceStatuses({})
     updateAssistant(assistantId, { content: '正在搜索...', isLoading: true })
 
     try {
@@ -48,7 +52,16 @@ export function useSearch(apiKey: string, settings: SearchSettings) {
         pending.query, apiKey, pending.history, settings,
         { keywords, date_from: pending.date_from, date_to: pending.date_to }
       )) {
-        if (event.type === 'progress') {
+        if (event.type === 'search_start') {
+          const init: Record<string, SourceStatus> = {}
+          event.sources.forEach(s => { init[s] = { status: 'pending', count: 0 } })
+          setSourceStatuses(init)
+        } else if (event.type === 'source_done') {
+          setSourceStatuses(prev => ({
+            ...prev,
+            [event.source]: { status: 'done', count: event.count },
+          }))
+        } else if (event.type === 'progress') {
           setStatusMessage(event.message)
           updateAssistant(assistantId, { content: event.message })
         } else if (event.type === 'done') {
@@ -191,6 +204,7 @@ export function useSearch(apiKey: string, settings: SearchSettings) {
     rejectedPapers,
     isLoading,
     statusMessage,
+    sourceStatuses,
     search,
     pendingKeywords: pendingSearch?.keywords ?? null,
     confirmedKeywords: lastConfirmed?.keywords ?? null,

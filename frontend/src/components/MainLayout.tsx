@@ -16,7 +16,7 @@ interface Props {
 export function MainLayout({ apiKey, onClearKey }: Props) {
   const { settings, updateSettings } = useSettings()
   const {
-    messages, papers, rejectedPapers, isLoading, statusMessage,
+    messages, papers, rejectedPapers, isLoading, statusMessage, sourceStatuses,
     search, pendingKeywords, confirmedKeywords, confirmSearch, cancelSearch, reSearch,
     history, removeHistory, searchFromHistory,
   } = useSearch(apiKey, settings)
@@ -78,6 +78,7 @@ export function MainLayout({ apiKey, onClearKey }: Props) {
           rejectedPapers={rejectedPapers}
           isLoading={isLoading}
           statusMessage={statusMessage}
+          sourceStatuses={sourceStatuses}
           settings={settings}
           onSettingsChange={updateSettings}
           onReSearch={reSearch}

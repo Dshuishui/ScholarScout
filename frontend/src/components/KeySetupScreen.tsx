@@ -22,14 +22,6 @@ const LINE1 = '用自然语言'
 const LINE2 = '探索学术文献'
 const L1_END = 400 + LINE1.length * 70
 
-// 左侧底部 4 个特性卡片
-const FEATURES = [
-  { icon: '⚡', title: '10 源并发', detail: '10个数据库同时搜索' },
-  { icon: '✦', title: 'AI 精准筛选', detail: '过滤低相关论文' },
-  { icon: '💬', title: '论文对话', detail: '独立上下文深度解析' },
-  { icon: '📄', title: 'PDF 查找', detail: '8个备用平台入口' },
-]
-
 // 右侧优势条目
 const BENEFITS = [
   { icon: '⚡', title: '10 个学术数据库并发搜索', desc: 'arXiv · Semantic Scholar · PubMed · CrossRef 等' },
@@ -196,18 +188,39 @@ export function KeySetupScreen({ onKeySubmit }: Props) {
             </div>
           </div>
 
-          {/* ④ 特性卡片 + 链接 */}
+          {/* ④ Bento 特性网格 + 链接 */}
           <div className="anim-in relative z-10"
             style={{ animationDelay: `${L1_END + LINE2.length * 70 + 600}ms` }}>
-            <div className="grid grid-cols-4 gap-2.5 mb-5">
-              {FEATURES.map(f => (
-                <div key={f.title}
-                  className="border border-white/15 bg-white/8 backdrop-blur-sm rounded-xl p-3 text-center hover:bg-white/12 transition-colors">
-                  <div className="text-xl mb-1.5">{f.icon}</div>
-                  <p className="text-sm font-semibold text-white leading-snug">{f.title}</p>
-                  <p className="text-[11px] text-blue-300 mt-0.5 leading-snug">{f.detail}</p>
+            <div className="grid grid-cols-2 gap-2 mb-5">
+              {/* 大卡：左列占两行 */}
+              <div className="row-span-2 border border-white/15 bg-white/10 backdrop-blur-sm rounded-xl p-4 hover:bg-white/15 transition-colors flex flex-col justify-between">
+                <div className="text-2xl">⚡</div>
+                <div>
+                  <p className="text-sm font-bold text-white leading-snug">10 源并发搜索</p>
+                  <p className="text-xs text-blue-300 mt-1 leading-snug">arXiv · S2 · PubMed · CrossRef 等同时检索</p>
                 </div>
-              ))}
+                <div className="text-xs text-white/30 font-semibold tabular-nums mt-3">10+ 数据库</div>
+              </div>
+              {/* 右上小卡 */}
+              <div className="border border-white/15 bg-white/8 backdrop-blur-sm rounded-xl p-3 hover:bg-white/12 transition-colors">
+                <div className="text-lg mb-1">✦</div>
+                <p className="text-sm font-bold text-white leading-snug">AI 精准筛选</p>
+                <p className="text-[11px] text-blue-300 mt-0.5">过滤低相关论文</p>
+              </div>
+              {/* 右下小卡 */}
+              <div className="border border-white/15 bg-white/8 backdrop-blur-sm rounded-xl p-3 hover:bg-white/12 transition-colors">
+                <div className="text-lg mb-1">💬</div>
+                <p className="text-sm font-bold text-white leading-snug">论文对话</p>
+                <p className="text-[11px] text-blue-300 mt-0.5">独立上下文深度解析</p>
+              </div>
+              {/* 横跨底部宽卡 */}
+              <div className="col-span-2 border border-white/15 bg-white/8 backdrop-blur-sm rounded-xl px-4 py-3 hover:bg-white/12 transition-colors flex items-center gap-3">
+                <div className="text-xl flex-shrink-0">📄</div>
+                <div>
+                  <p className="text-sm font-bold text-white leading-tight">PDF 深度查找</p>
+                  <p className="text-[11px] text-blue-300 mt-0.5">Kimi 联网搜索 + 8 平台备用入口</p>
+                </div>
+              </div>
             </div>
             <div className="flex items-center gap-5 text-sm text-blue-400">
               <a href="http://118.25.192.117" target="_blank" rel="noopener noreferrer"

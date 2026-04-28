@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import JSZip from 'jszip'
 import type { Paper } from '../types'
 import type { SearchSettings } from '../hooks/useSettings'
+import type { SourceStatus } from '../hooks/useSearch'
 import { ALL_SOURCES } from '../hooks/useSettings'
 import { PaperCard } from './PaperCard'
 import { PaperCardSkeleton } from './PaperCardSkeleton'
@@ -36,6 +37,7 @@ interface Props {
   onReSearch?: (keywords: string[]) => void
   confirmedKeywords?: string[] | null
   statusMessage: string
+  sourceStatuses?: Record<string, SourceStatus>
   onAnalyzePaper?: (paper: Paper) => void
   onExampleSearch?: (query: string) => void
 }
@@ -115,7 +117,7 @@ function Pagination({ current, total, onChange }: {
   )
 }
 
-export function ResultsPanel({ papers, rejectedPapers = [], isLoading, statusMessage, settings, onSettingsChange, onReSearch, confirmedKeywords, onAnalyzePaper, onExampleSearch }: Props) {
+export function ResultsPanel({ papers, rejectedPapers = [], isLoading, statusMessage, sourceStatuses = {}, settings, onSettingsChange, onReSearch, confirmedKeywords, onAnalyzePaper, onExampleSearch }: Props) {
   const [currentPage, setCurrentPage] = useState(1)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [downloadProgress, setDownloadProgress] = useState<DownloadProgress | null>(null)
@@ -557,19 +559,47 @@ const addKeyword = () => {
 
       {/* 论文列表 */}
       <div className="flex-1 overflow-y-auto p-4 space-y-3">
-        {/* 骨架屏：搜索中且结果为空时显示 */}
+        {/* 搜索中：来源进度网格 + 骨架屏 */}
         {isLoading && papers.length === 0 && (
           <div className="space-y-3">
-            {statusMessage && (
-              <div className="flex items-center gap-2 px-1 pb-1">
-                <div className="relative w-4 h-4 flex-shrink-0">
-                  <div className="absolute inset-0 rounded-full border-2 border-blue-100" />
-                  <div className="absolute inset-0 rounded-full border-2 border-transparent border-t-blue-500 animate-spin" />
+            {Object.keys(sourceStatuses).length > 0 ? (
+              <div className="bg-white rounded-xl border border-gray-100 p-4">
+                <p className="text-xs font-medium text-gray-500 mb-3">
+                  并发搜索中
+                  <span className="ml-2 text-gray-300 font-normal">
+                    {Object.values(sourceStatuses).filter(s => s.status === 'done').length}
+                    &nbsp;/&nbsp;{Object.keys(sourceStatuses).length} 完成
+                  </span>
+                </p>
+                <div className="grid grid-cols-2 gap-x-4 gap-y-2">
+                  {Object.entries(sourceStatuses).map(([source, st]) => (
+                    <div key={source} className="flex items-center gap-2">
+                      {st.status === 'done' ? (
+                        <svg className="w-3.5 h-3.5 text-green-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                        </svg>
+                      ) : (
+                        <div className="w-3.5 h-3.5 rounded-full border-2 border-blue-400 border-t-transparent animate-spin flex-shrink-0" />
+                      )}
+                      <span className={`text-xs font-medium truncate ${SOURCE_COLORS[source] ?? 'text-gray-500'}`}>
+                        {source}
+                      </span>
+                      {st.status === 'done' && (
+                        <span className="text-xs text-gray-400 ml-auto tabular-nums flex-shrink-0">
+                          {st.count}
+                        </span>
+                      )}
+                    </div>
+                  ))}
                 </div>
+              </div>
+            ) : statusMessage ? (
+              <div className="flex items-center gap-2 px-1 pb-1">
+                <div className="w-4 h-4 rounded-full border-2 border-transparent border-t-blue-500 animate-spin flex-shrink-0" />
                 <p className="text-sm text-gray-400">{statusMessage}</p>
               </div>
-            )}
-            {Array.from({ length: 6 }).map((_, i) => (
+            ) : null}
+            {Array.from({ length: 4 }).map((_, i) => (
               <PaperCardSkeleton key={i} index={i} />
             ))}
           </div>
