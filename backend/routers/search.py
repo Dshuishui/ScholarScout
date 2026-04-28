@@ -163,13 +163,9 @@ async def validate_key(request: ValidateKeyRequest):
             )
         if resp.status_code == 200:
             return {"valid": True}
-        if resp.status_code in (401, 403):
-            return {"valid": False, "reason": "Key 无效，请检查是否正确复制"}
-        return {"valid": False, "reason": f"验证失败（{resp.status_code}），请稍后重试"}
-    except httpx.TimeoutException:
-        return {"valid": False, "reason": "请求超时，请检查网络后重试"}
     except Exception:
-        return {"valid": False, "reason": "网络连接失败，请检查网络后重试"}
+        pass
+    return {"valid": False, "reason": "Key 无效，请检查后重新输入"}
 
 
 @router.get("/health")
