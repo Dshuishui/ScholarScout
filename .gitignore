@@ -1,5 +1,6 @@
 backend/.env
 backend/.venv/
+deploy/.umami.env
 **/__pycache__/
 **/*.pyc
 **/.DS_Store
