@@ -158,7 +158,7 @@ async def validate_key(request: ValidateKeyRequest):
     try:
         async with httpx.AsyncClient(timeout=10) as client:
             resp = await client.get(
-                f"{DEEPSEEK_BASE_URL}/models",
+                f"{DEEPSEEK_BASE_URL}/v1/models",
                 headers={"Authorization": f"Bearer {request.api_key}"},
             )
         if resp.status_code == 200:

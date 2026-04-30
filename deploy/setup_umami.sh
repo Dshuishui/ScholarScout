@@ -68,9 +68,10 @@ for i in $(seq 1 12); do
     echo "    等待中... ($((i*5))s)"
 done
 
-# 4. 更新 Nginx
+# 4. 更新 Nginx（复制最新配置再重载）
 echo ""
-echo ">>> [4/4] 重载 Nginx..."
+echo ">>> [4/4] 更新并重载 Nginx..."
+sudo cp "$REPO_DIR/deploy/nginx.conf" /etc/nginx/sites-available/scholarscout
 sudo nginx -t && sudo systemctl reload nginx
 echo "    Nginx 重载完成 ✓"
 

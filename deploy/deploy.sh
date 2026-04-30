@@ -35,6 +35,7 @@ sudo rsync -a --delete "$REPO_DIR/frontend/dist/" "$STATIC_DIR/"
 echo ""
 echo ">>> [5/5] 重启服务..."
 sudo systemctl restart scholarscout-backend
+sudo cp "$REPO_DIR/deploy/nginx.conf" /etc/nginx/sites-available/scholarscout
 sudo nginx -t && sudo systemctl reload nginx
 
 sleep 1
