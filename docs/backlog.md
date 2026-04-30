@@ -42,6 +42,30 @@
 - **空状态示例可点击**：直接触发搜索
 - **封面大改版**：左右分栏，辉光球动效，打字机，App预览窗口，特性卡片，右侧 benefit 列表
 
+### 安全加固
+- **Nginx 限速**：/api/search 5r/m，/api/download 120r/m，其余 30r/m
+- **安全响应头**：X-Frame-Options / X-Content-Type-Options / Referrer-Policy
+- **SSRF 防护**：download 接口域名白名单
+- **文件大小限制**：下载接口 50MB 上限，流式读取
+- **请求体限制**：Pydantic 字段长度约束
+- **错误信息脱敏**：内部异常只记日志，不暴露给客户端
+
+### 前端体验提升
+- **微交互 P4**：卡片 hover 上浮，按钮 active:scale-95，来源 badge tooltip
+- **卡片重设计 P1**：质量徽章（高引/OA），compact 模式相关性 1 行预览，标题加粗
+- **来源进度可视化 P2**：Perplexity 风格，per-source spinner/✓ 实时更新
+- **封面 App 预览窗口**：真实截图替代 mock 卡片
+- **历史 Key 记录**：localStorage 保存最多 5 条，masked 显示，一键复用
+
+### 统计分析
+- **Umami 自托管**：Docker Compose 部署，nginx 代理 `/analytics/`
+- **Website ID**：ff24afb1-395c-40f5-b7a7-86fc6721b16b
+
+### Key 验证
+- **封面 Key 验证**：POST /api/validate-key，httpx 直接发 chat completion，只看 HTTP 状态码
+- **格式验证**：必须以 sk- 开头
+- **验证中状态**：按钮 loading + 禁用
+
 ---
 
 ## 🔲 待做事项
@@ -62,7 +86,6 @@
 ### 收藏/书签功能 🟡（设计复杂暂缓）
 
 localStorage 持久化，跨搜索保存感兴趣的论文。
-需要好好设计数据结构和 UI 入口。
 
 ### 封面截图更新 🟢
 
@@ -70,9 +93,13 @@ localStorage 持久化，跨搜索保存感兴趣的论文。
 - `docs/images/01_key_setup.png`
 - 更新 README 展示
 
-### Issue I：Docker 支持 🟢（暂缓）
+### Issue I：Docker 支持（主应用）🟢（暂缓）
 
 加 `Dockerfile` + `docker-compose.yml`，一条命令本地启动。
+
+### 统计后端事件 🟢
+
+目前 Umami 只记录页面访问。可以在 FastAPI 里加 middleware，把搜索事件（关键词、数据源、结果篇数）记录到 SQLite，供后续分析最热搜索词等。
 
 ---
 
@@ -80,5 +107,6 @@ localStorage 持久化，跨搜索保存感兴趣的论文。
 
 1. **多模型支持**：最高价值，已在 README 预告，用户期待
 2. **封面截图**：5 分钟，视觉更新
-3. **收藏功能**：需设计，择机做
-4. **Docker**：有需求再做
+3. **统计后端事件**：补充 Umami 的业务维度数据
+4. **收藏功能**：需设计，择机做
+5. **Docker（主应用）**：有需求再做
