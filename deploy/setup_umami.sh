@@ -15,15 +15,26 @@ echo "=========================================="
 echo ""
 echo ">>> [1/4] 检查 Docker..."
 if ! command -v docker &>/dev/null; then
-    echo "    安装 Docker..."
-    # 取消代理，避免本地代理（scholarly 用）干扰 apt
+    echo "    安装 Docker (使用 Ubuntu 内置包，从腾讯云镜像下载，无需代理)..."
+    # 取消所有代理：腾讯云镜像是内网，直连更快；外网包由 Docker daemon 代理处理
     unset HTTP_PROXY HTTPS_PROXY http_proxy https_proxy
-    curl -fsSL https://get.docker.com | sh
+    sudo apt-get -qq update
+    sudo apt-get install -y -qq docker.io docker-compose-v2
     sudo usermod -aG docker "$USER"
-    echo "    Docker 安装完成（当前 shell 需重新登录才能免 sudo 使用 docker）"
-else
-    echo "    Docker 已安装：$(docker --version | grep -o '[0-9.]*' | head -1)"
+    echo "    Docker 安装完成"
 fi
+
+# 给 Docker daemon 配置 HTTPS 代理（用于拉取 ghcr.io 镜像）
+echo "    配置 Docker 代理（ghcr.io 需要走代理）..."
+sudo mkdir -p /etc/systemd/system/docker.service.d
+sudo tee /etc/systemd/system/docker.service.d/proxy.conf > /dev/null <<'PROXY_CONF'
+[Service]
+Environment="HTTPS_PROXY=http://127.0.0.1:7890"
+Environment="NO_PROXY=localhost,127.0.0.1,mirrors.tencentyun.com"
+PROXY_CONF
+sudo systemctl daemon-reload
+sudo systemctl restart docker
+echo "    Docker 已安装：$(docker --version | cut -d' ' -f3 | tr -d ',')"
 
 # 2. 生成密钥（幂等：已存在则跳过）
 echo ""
