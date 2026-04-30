@@ -44,12 +44,41 @@ const STATS = [
 ]
 
 
+const SAVED_KEYS_STORAGE = 'scholarscout_saved_keys'
+
+interface SavedKey { key: string; lastUsed: number }
+
+const loadSavedKeys = (): SavedKey[] => {
+  try { return JSON.parse(localStorage.getItem(SAVED_KEYS_STORAGE) ?? '[]') }
+  catch { return [] }
+}
+
+const persistKey = (key: string) => {
+  const list = loadSavedKeys().filter(k => k.key !== key)
+  localStorage.setItem(SAVED_KEYS_STORAGE,
+    JSON.stringify([{ key, lastUsed: Date.now() }, ...list].slice(0, 5)))
+}
+
+const maskKey = (key: string) => `sk-···${key.slice(-4)}`
+
 export function KeySetupScreen({ onKeySubmit }: Props) {
   const [input, setInput] = useState('')
   const [error, setError] = useState('')
   const [isValidating, setIsValidating] = useState(false)
+  const [savedKeys, setSavedKeys] = useState<SavedKey[]>(() => loadSavedKeys())
   const line1 = useTypewriter(LINE1, 400)
   const line2 = useTypewriter(LINE2, L1_END + 180)
+
+  const useSavedKey = (key: string) => {
+    persistKey(key)
+    onKeySubmit(key)
+  }
+
+  const removeSavedKey = (key: string) => {
+    const updated = loadSavedKeys().filter(k => k.key !== key)
+    localStorage.setItem(SAVED_KEYS_STORAGE, JSON.stringify(updated))
+    setSavedKeys(updated)
+  }
 
   const handleSubmit = async () => {
     const t = input.trim()
@@ -68,6 +97,7 @@ export function KeySetupScreen({ onKeySubmit }: Props) {
       })
       const data = await res.json()
       if (data.valid) {
+        persistKey(t)
         onKeySubmit(t)
       } else {
         setError(data.reason ?? 'Key 无效，请重新确认')
@@ -261,9 +291,39 @@ export function KeySetupScreen({ onKeySubmit }: Props) {
               ))}
             </div>
 
+            {/* 历史 Key */}
+            {savedKeys.length > 0 && (
+              <div className="mb-4">
+                <p className="text-xs text-gray-400 mb-2">历史 Key</p>
+                <div className="space-y-1.5">
+                  {savedKeys.map(({ key }) => (
+                    <div key={key} className="flex items-center gap-2 bg-white border border-gray-200 rounded-xl px-3 py-2.5 group hover:border-blue-200 transition-colors">
+                      <span className="flex-1 text-sm font-mono text-gray-500 tracking-wide">
+                        {maskKey(key)}
+                      </span>
+                      <button
+                        onClick={() => useSavedKey(key)}
+                        className="text-xs text-blue-600 hover:text-blue-800 font-medium px-1.5 flex-shrink-0"
+                      >
+                        使用
+                      </button>
+                      <button
+                        onClick={() => removeSavedKey(key)}
+                        className="text-xs text-gray-300 hover:text-gray-500 flex-shrink-0 leading-none"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* 输入框 */}
             <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-2">DeepSeek API Key</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                {savedKeys.length > 0 ? '输入新的 Key' : 'DeepSeek API Key'}
+              </label>
               <input
                 type="password"
                 value={input}

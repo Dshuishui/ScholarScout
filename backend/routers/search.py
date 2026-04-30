@@ -153,16 +153,12 @@ async def search(request: SearchRequest):
 
 @router.post("/validate-key")
 async def validate_key(request: ValidateKeyRequest):
-    """验证 DeepSeek API Key 是否有效，GET /models 不消耗 token。"""
-    import httpx
+    """验证 DeepSeek API Key 是否有效，调用 models.list 不消耗 token。"""
+    from openai import AsyncOpenAI
     try:
-        async with httpx.AsyncClient(timeout=10) as client:
-            resp = await client.get(
-                f"{DEEPSEEK_BASE_URL}/v1/models",
-                headers={"Authorization": f"Bearer {request.api_key}"},
-            )
-        if resp.status_code == 200:
-            return {"valid": True}
+        client = AsyncOpenAI(api_key=request.api_key, base_url=DEEPSEEK_BASE_URL)
+        await client.models.list()
+        return {"valid": True}
     except Exception:
         pass
     return {"valid": False, "reason": "Key 无效，请检查后重新输入"}
