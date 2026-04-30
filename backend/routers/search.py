@@ -11,7 +11,7 @@ from services.llm_service import classify_intent, parse_query, validate_papers
 from services.search_service import search_all_sources, enhance_with_unpaywall, get_source_names
 from services.download_service import fetch_pdf_bytes
 from services.pdf_finder_service import find_pdfs_with_kimi, generate_fallback_links
-from config import CORE_API_KEY, NASA_ADS_API_KEY, SERPAPI_KEY, KIMI_API_KEY
+from config import CORE_API_KEY, NASA_ADS_API_KEY, SERPAPI_KEY, KIMI_API_KEY, DEEPSEEK_BASE_URL, DEEPSEEK_MODEL
 
 router = APIRouter()
 
@@ -153,14 +153,27 @@ async def search(request: SearchRequest):
 
 @router.post("/validate-key")
 async def validate_key(request: ValidateKeyRequest):
-    """验证 DeepSeek API Key 是否有效，调用 models.list 不消耗 token。"""
-    from openai import AsyncOpenAI
+    """验证 DeepSeek API Key：发一条极小的 chat 请求，只看 HTTP 状态码。"""
+    import httpx
     try:
-        client = AsyncOpenAI(api_key=request.api_key, base_url=DEEPSEEK_BASE_URL)
-        await client.models.list()
-        return {"valid": True}
-    except Exception:
-        pass
+        async with httpx.AsyncClient(timeout=15) as client:
+            resp = await client.post(
+                f"{DEEPSEEK_BASE_URL}/v1/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {request.api_key}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": DEEPSEEK_MODEL,
+                    "messages": [{"role": "user", "content": "hi"}],
+                    "max_tokens": 1,
+                },
+            )
+        if resp.status_code == 200:
+            return {"valid": True}
+        logger.warning("validate-key status %s: %s", resp.status_code, resp.text[:200])
+    except Exception as e:
+        logger.warning("validate-key error: %s", e)
     return {"valid": False, "reason": "Key 无效，请检查后重新输入"}
 
 
