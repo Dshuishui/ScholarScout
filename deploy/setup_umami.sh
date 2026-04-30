@@ -16,6 +16,8 @@ echo ""
 echo ">>> [1/4] 检查 Docker..."
 if ! command -v docker &>/dev/null; then
     echo "    安装 Docker..."
+    # 取消代理，避免本地代理（scholarly 用）干扰 apt
+    unset HTTP_PROXY HTTPS_PROXY http_proxy https_proxy
     curl -fsSL https://get.docker.com | sh
     sudo usermod -aG docker "$USER"
     echo "    Docker 安装完成（当前 shell 需重新登录才能免 sudo 使用 docker）"
