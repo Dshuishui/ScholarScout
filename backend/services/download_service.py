@@ -29,19 +29,30 @@ def _is_allowed(url: str) -> bool:
         return False
 
 
+ALLOWED_CONTENT_TYPES = ("application/pdf", "application/octet-stream", "binary/octet-stream")
+
+
 async def fetch_pdf_bytes(url: str) -> tuple[bytes, str]:
     if not _is_allowed(url):
-        raise ValueError(f"不支持的 URL: {url}")
+        raise ValueError("不支持的下载地址")
 
     async with httpx.AsyncClient(follow_redirects=True, timeout=30) as client:
         async with client.stream("GET", url, headers={"User-Agent": "ScholarScout/1.0"}) as response:
             response.raise_for_status()
 
+            # 重定向后重新校验最终域名
+            final_url = str(response.url)
+            if not _is_allowed(final_url):
+                raise ValueError("不支持的下载地址")
+
+            content_type = response.headers.get("content-type", "application/pdf").split(";")[0].strip()
+            if not any(content_type.startswith(ct) for ct in ALLOWED_CONTENT_TYPES):
+                raise ValueError("文件类型不支持")
+
             content_length = int(response.headers.get("content-length", 0))
             if content_length > MAX_FILE_SIZE:
-                raise ValueError(f"文件过大（{content_length // 1024 // 1024}MB），超过 50MB 限制")
+                raise ValueError("文件过大，超过 50MB 限制")
 
-            content_type = response.headers.get("content-type", "application/pdf")
             total = 0
             chunks: list[bytes] = []
             async for chunk in response.aiter_bytes(65536):
@@ -50,4 +61,4 @@ async def fetch_pdf_bytes(url: str) -> tuple[bytes, str]:
                     raise ValueError("文件过大，超过 50MB 限制")
                 chunks.append(chunk)
 
-    return b"".join(chunks), content_type
+    return b"".join(chunks), "application/pdf"
