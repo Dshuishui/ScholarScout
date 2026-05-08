@@ -260,10 +260,13 @@ export function KeySetupScreen({ onKeySubmit }: Props) {
             <h2 className="text-5xl font-black mb-3 bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-600 bg-clip-text text-transparent leading-tight">
               开始你的<br />学术探索
             </h2>
-            <p className="text-gray-400 text-base mb-6 leading-relaxed">
+            <p className="text-gray-400 text-base mb-4 leading-relaxed">
               AI 驱动 · 自然语言描述 · 秒级返回结果<br />
               Key 仅存于本地，不会上传服务器。
             </p>
+            <div className="bg-blue-50 border border-blue-100 rounded-xl px-4 py-3 mb-6 text-sm text-blue-700 leading-relaxed">
+              目前使用 <span className="font-semibold">DeepSeek API Key</span>。如需接入 Claude / GPT / Gemini 等模型，欢迎联系我添加支持。
+            </div>
 
             {/* 数据徽章 */}
             <div className="flex items-center gap-2 mb-6">
@@ -365,7 +368,7 @@ export function KeySetupScreen({ onKeySubmit }: Props) {
 
             <div className="mt-auto pt-4 border-t border-gray-100 text-center space-y-1">
               <p className="text-sm text-gray-400">
-                遇到问题或有改进建议？欢迎联系我们 👋
+                遇到问题或有改进建议？欢迎联系我 👋
               </p>
               <a href="mailto:dongyucong@sjtu.edu.cn"
                 className="text-sm text-blue-500 hover:text-blue-700 hover:underline transition-colors block">
