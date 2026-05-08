@@ -243,13 +243,13 @@ export function KeySetupScreen({ onKeySubmit }: Props) {
         </div>
 
         {/* ══ 右侧 38% ══════════════════════════════════════ */}
-        <div className="flex-1 flex items-center justify-center px-6 py-6 relative overflow-hidden"
+        <div className="flex-1 flex flex-col px-8 py-10 relative overflow-hidden"
           style={{ background: '#f8fafc' }}>
           {/* 左上角淡蓝辉光 */}
           <div className="absolute -top-24 -left-24 w-80 h-80 rounded-full pointer-events-none"
             style={{ background: 'radial-gradient(circle,#bfdbfe 0%,transparent 70%)', filter: 'blur(60px)', opacity: .7 }} />
 
-          <div className="w-full max-w-sm relative z-10">
+          <div className="w-full max-w-sm mx-auto flex flex-col flex-1 relative z-10">
 
             {/* 移动端 logo */}
             <div className="lg:hidden flex items-center gap-2.5 mb-8">
@@ -392,7 +392,7 @@ export function KeySetupScreen({ onKeySubmit }: Props) {
                 className="text-blue-500 hover:underline ml-1">免费注册 DeepSeek →</a>
             </p>
 
-            <div className="mt-4 pt-4 border-t border-gray-100 text-center space-y-1">
+            <div className="mt-auto pt-4 border-t border-gray-100 text-center space-y-1">
               <p className="text-xs text-gray-400">
                 遇到问题或有改进建议？欢迎联系我们 👋
               </p>
