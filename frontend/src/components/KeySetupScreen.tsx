@@ -243,7 +243,7 @@ export function KeySetupScreen({ onKeySubmit }: Props) {
         </div>
 
         {/* ══ 右侧 38% ══════════════════════════════════════ */}
-        <div className="flex-1 flex items-center justify-center px-6 py-10 relative overflow-hidden"
+        <div className="flex-1 flex items-center justify-center px-6 py-6 relative overflow-hidden"
           style={{ background: '#f8fafc' }}>
           {/* 左上角淡蓝辉光 */}
           <div className="absolute -top-24 -left-24 w-80 h-80 rounded-full pointer-events-none"
@@ -263,10 +263,10 @@ export function KeySetupScreen({ onKeySubmit }: Props) {
             </div>
 
             {/* 优势列表（填充右侧空间） */}
-            <div className="space-y-2.5 mb-8">
+            <div className="space-y-2 mb-5">
               {BENEFITS.map(b => (
                 <div key={b.title}
-                  className="flex items-start gap-3 bg-white border border-gray-100 rounded-xl px-4 py-3.5 shadow-sm">
+                  className="flex items-start gap-3 bg-white border border-gray-100 rounded-xl px-4 py-2.5 shadow-sm">
                   <span className="text-xl flex-shrink-0 mt-0.5">{b.icon}</span>
                   <div>
                     <p className="text-sm font-semibold text-gray-800 leading-snug">{b.title}</p>
@@ -277,7 +277,7 @@ export function KeySetupScreen({ onKeySubmit }: Props) {
             </div>
 
             {/* 分隔线 */}
-            <div className="flex items-center gap-3 mb-7">
+            <div className="flex items-center gap-3 mb-4">
               <div className="flex-1 h-px bg-gray-200" />
               <span className="text-xs text-gray-400 flex-shrink-0">输入 Key 开始使用</span>
               <div className="flex-1 h-px bg-gray-200" />
@@ -287,12 +287,12 @@ export function KeySetupScreen({ onKeySubmit }: Props) {
             <h2 className="text-3xl font-bold mb-2 bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-600 bg-clip-text text-transparent">
               开始你的学术探索
             </h2>
-            <p className="text-gray-400 text-sm mb-5 leading-relaxed">
+            <p className="text-gray-400 text-sm mb-3 leading-relaxed">
               Key 仅存于本地浏览器，不会上传服务器。
             </p>
 
             {/* 数据徽章 */}
-            <div className="flex items-center gap-2 mb-5">
+            <div className="flex items-center gap-2 mb-3">
               {STATS.map(s => (
                 <div key={s.label}
                   className="flex items-center gap-1 text-xs bg-white border border-slate-200 rounded-full px-2.5 py-1 shadow-sm">
@@ -304,7 +304,7 @@ export function KeySetupScreen({ onKeySubmit }: Props) {
 
             {/* 历史 Key */}
             {savedKeys.length > 0 && (
-              <div className="mb-4">
+              <div className="mb-3">
                 <p className="text-xs text-gray-400 mb-2">历史 Key</p>
                 <div className="space-y-1.5">
                   {savedKeys.map(({ key }) => (
@@ -331,7 +331,7 @@ export function KeySetupScreen({ onKeySubmit }: Props) {
             )}
 
             {/* 输入框 */}
-            <div className="mb-4">
+            <div className="mb-3">
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 {savedKeys.length > 0 ? '输入新的 Key' : 'DeepSeek API Key'}
               </label>
@@ -347,7 +347,7 @@ export function KeySetupScreen({ onKeySubmit }: Props) {
             </div>
 
             {/* 模型选择 */}
-            <div className="mb-4">
+            <div className="mb-3">
               <label className="block text-sm font-medium text-gray-700 mb-2">模型选择</label>
               <div className="grid grid-cols-2 gap-2">
                 {DEEPSEEK_MODELS.map(m => (
@@ -386,13 +386,13 @@ export function KeySetupScreen({ onKeySubmit }: Props) {
               ) : '开始探索论文 →'}
             </button>
 
-            <p className="text-center text-xs text-gray-400 mt-5">
+            <p className="text-center text-xs text-gray-400 mt-3">
               没有 Key？
               <a href="https://platform.deepseek.com" target="_blank" rel="noopener noreferrer"
                 className="text-blue-500 hover:underline ml-1">免费注册 DeepSeek →</a>
             </p>
 
-            <div className="mt-8 pt-6 border-t border-gray-100 text-center space-y-1.5">
+            <div className="mt-4 pt-4 border-t border-gray-100 text-center space-y-1">
               <p className="text-xs text-gray-400">
                 遇到问题或有改进建议？欢迎联系我们 👋
               </p>
