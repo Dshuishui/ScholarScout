@@ -222,13 +222,13 @@ export function KeySetupScreen({ onKeySubmit }: Props) {
           {/* ④ 特性卡片 2×2 + 链接 */}
           <div className="anim-in relative z-10"
             style={{ animationDelay: `${L1_END + LINE2.length * 70 + 600}ms` }}>
-            <div className="grid grid-cols-2 gap-2.5 mb-5">
+            <div className="grid grid-cols-4 gap-2 mb-5">
               {FEATURES.map(f => (
                 <div key={f.title}
                   className="border border-white/15 bg-white/8 backdrop-blur-sm rounded-xl p-3 hover:bg-white/12 transition-colors">
-                  <div className="text-xl mb-1.5">{f.icon}</div>
-                  <p className="text-sm font-semibold text-white leading-snug">{f.title}</p>
-                  <p className="text-[11px] text-blue-300 mt-0.5 leading-snug">{f.detail}</p>
+                  <div className="text-lg mb-1">{f.icon}</div>
+                  <p className="text-xs font-semibold text-white leading-snug">{f.title}</p>
+                  <p className="text-[10px] text-blue-300 mt-0.5 leading-snug">{f.detail}</p>
                 </div>
               ))}
             </div>
@@ -243,13 +243,13 @@ export function KeySetupScreen({ onKeySubmit }: Props) {
         </div>
 
         {/* ══ 右侧 38% ══════════════════════════════════════ */}
-        <div className="flex-1 flex items-center justify-center px-10 py-12 relative overflow-hidden"
+        <div className="flex-1 flex items-center justify-center px-6 py-10 relative overflow-hidden"
           style={{ background: '#f8fafc' }}>
           {/* 左上角淡蓝辉光 */}
           <div className="absolute -top-24 -left-24 w-80 h-80 rounded-full pointer-events-none"
             style={{ background: 'radial-gradient(circle,#bfdbfe 0%,transparent 70%)', filter: 'blur(60px)', opacity: .7 }} />
 
-          <div className="w-full max-w-xs relative z-10">
+          <div className="w-full max-w-sm relative z-10">
 
             {/* 移动端 logo */}
             <div className="lg:hidden flex items-center gap-2.5 mb-8">
@@ -266,11 +266,11 @@ export function KeySetupScreen({ onKeySubmit }: Props) {
             <div className="space-y-2.5 mb-8">
               {BENEFITS.map(b => (
                 <div key={b.title}
-                  className="flex items-start gap-3 bg-white border border-gray-100 rounded-xl px-4 py-3 shadow-sm">
-                  <span className="text-lg flex-shrink-0 mt-0.5">{b.icon}</span>
+                  className="flex items-start gap-3 bg-white border border-gray-100 rounded-xl px-4 py-3.5 shadow-sm">
+                  <span className="text-xl flex-shrink-0 mt-0.5">{b.icon}</span>
                   <div>
                     <p className="text-sm font-semibold text-gray-800 leading-snug">{b.title}</p>
-                    <p className="text-xs text-gray-400 mt-0.5 leading-snug">{b.desc}</p>
+                    <p className="text-xs text-gray-500 mt-0.5 leading-snug">{b.desc}</p>
                   </div>
                 </div>
               ))}
@@ -284,10 +284,10 @@ export function KeySetupScreen({ onKeySubmit }: Props) {
             </div>
 
             {/* 渐变标题 */}
-            <h2 className="text-2xl font-bold mb-1.5 bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-600 bg-clip-text text-transparent">
+            <h2 className="text-3xl font-bold mb-2 bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-600 bg-clip-text text-transparent">
               开始你的学术探索
             </h2>
-            <p className="text-gray-400 text-xs mb-5 leading-relaxed">
+            <p className="text-gray-400 text-sm mb-5 leading-relaxed">
               Key 仅存于本地浏览器，不会上传服务器。
             </p>
 
