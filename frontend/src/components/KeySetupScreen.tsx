@@ -117,48 +117,66 @@ export function KeySetupScreen({ onKeySubmit }: Props) {
   return (
     <>
       <style>{`
-        @keyframes gradientFlow {
-          0%,100% { background-position: 0% 60%; }
-          50%      { background-position: 100% 40%; }
-        }
         @keyframes floatY {
           0%,100% { transform: translateY(0); }
           50%      { transform: translateY(-8px); }
         }
-        @keyframes glowPulse {
-          0%,100% { opacity:.18; transform:scale(1); }
-          50%      { opacity:.30; transform:scale(1.07); }
+        @keyframes glowDrift {
+          0%,100% { opacity:.22; transform:scale(1) translate(0,0); }
+          33%      { opacity:.35; transform:scale(1.08) translate(20px,-15px); }
+          66%      { opacity:.18; transform:scale(0.95) translate(-10px,10px); }
         }
         @keyframes cursorBlink { 0%,100%{opacity:1} 50%{opacity:0} }
         @keyframes fadeIn {
-          from { opacity:0; transform:translateY(10px); }
+          from { opacity:0; transform:translateY(12px); }
           to   { opacity:1; transform:translateY(0); }
         }
-        .gradient-bg {
-          background: linear-gradient(-45deg,#0f172a,#1e1b4b,#0c1445,#1e3a8a,#0f172a);
-          background-size: 400% 400%;
-          animation: gradientFlow 14s ease infinite;
+        @keyframes cardIn {
+          from { opacity:0; transform:translateY(8px); }
+          to   { opacity:1; transform:translateY(0); }
         }
-        .float-logo  { animation: floatY 4s ease-in-out infinite; }
-        .glow-blue   { animation: glowPulse  7s ease-in-out infinite; }
-        .glow-purple { animation: glowPulse  9s ease-in-out infinite 1s; }
-        .glow-cyan   { animation: glowPulse  6s ease-in-out infinite 2s; }
-        .cursor      { animation: cursorBlink .9s step-end infinite; }
-        .anim-in     { animation: fadeIn .6s ease forwards; opacity:0; }
+        .float-logo    { animation: floatY 4s ease-in-out infinite; }
+        .glow-blue     { animation: glowDrift  9s ease-in-out infinite; }
+        .glow-purple   { animation: glowDrift 12s ease-in-out infinite 2s; }
+        .glow-cyan     { animation: glowDrift  7s ease-in-out infinite 4s; }
+        .cursor        { animation: cursorBlink .9s step-end infinite; }
+        .anim-in       { animation: fadeIn .7s ease forwards; opacity:0; }
+        .card-in       { animation: cardIn .5s ease forwards; opacity:0; }
+        .screenshot-tilt {
+          transform: perspective(1100px) rotateY(-6deg) rotateX(2deg);
+          transition: transform .7s ease;
+        }
+        .screenshot-tilt:hover {
+          transform: perspective(1100px) rotateY(-2deg) rotateX(0deg);
+        }
       `}</style>
 
       <div className="min-h-screen flex">
 
         {/* ══ 左侧 62% ══════════════════════════════════════ */}
-        <div className="hidden lg:flex w-[62%] gradient-bg flex-col p-10 text-white relative overflow-hidden">
+        <div className="hidden lg:flex w-[62%] flex-col p-10 text-white relative overflow-hidden"
+          style={{ backgroundColor: '#06060f', backgroundImage: 'radial-gradient(ellipse 75% 55% at 15% 10%, rgba(99,60,220,0.45) 0%, transparent 60%), radial-gradient(ellipse 55% 50% at 88% 88%, rgba(37,99,235,0.35) 0%, transparent 55%), radial-gradient(ellipse 45% 45% at 60% 42%, rgba(168,85,247,0.22) 0%, transparent 52%)' }}>
+
+          {/* 网格底纹 */}
+          <div className="absolute inset-0 pointer-events-none z-0"
+            style={{ backgroundImage: 'linear-gradient(rgba(255,255,255,0.035) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,0.035) 1px,transparent 1px)', backgroundSize: '52px 52px' }} />
+
+          {/* Noise 纹理 */}
+          <svg className="absolute inset-0 w-full h-full pointer-events-none z-0" style={{ opacity: 0.045 }} aria-hidden="true">
+            <filter id="ss-noise">
+              <feTurbulence type="fractalNoise" baseFrequency="0.68" numOctaves="3" stitchTiles="stitch"/>
+              <feColorMatrix type="saturate" values="0"/>
+            </filter>
+            <rect width="100%" height="100%" filter="url(#ss-noise)"/>
+          </svg>
 
           {/* 辉光球 */}
-          <div className="glow-blue absolute -top-20 -right-20 w-[500px] h-[500px] rounded-full pointer-events-none"
-            style={{ background: 'radial-gradient(circle,#3b82f6 0%,transparent 70%)', filter: 'blur(70px)' }} />
-          <div className="glow-purple absolute -bottom-32 -left-24 w-[560px] h-[560px] rounded-full pointer-events-none"
-            style={{ background: 'radial-gradient(circle,#7c3aed 0%,transparent 70%)', filter: 'blur(90px)' }} />
-          <div className="glow-cyan absolute top-[40%] right-[20%] w-56 h-56 rounded-full pointer-events-none"
-            style={{ background: 'radial-gradient(circle,#22d3ee 0%,transparent 70%)', filter: 'blur(60px)' }} />
+          <div className="glow-blue absolute -top-16 -right-16 w-[480px] h-[480px] rounded-full pointer-events-none z-0"
+            style={{ background: 'radial-gradient(circle,rgba(59,130,246,0.7) 0%,transparent 68%)', filter: 'blur(80px)' }} />
+          <div className="glow-purple absolute -bottom-28 -left-20 w-[520px] h-[520px] rounded-full pointer-events-none z-0"
+            style={{ background: 'radial-gradient(circle,rgba(124,58,237,0.65) 0%,transparent 68%)', filter: 'blur(100px)' }} />
+          <div className="glow-cyan absolute top-[38%] right-[18%] w-48 h-48 rounded-full pointer-events-none z-0"
+            style={{ background: 'radial-gradient(circle,rgba(34,211,238,0.5) 0%,transparent 68%)', filter: 'blur(55px)' }} />
 
           {/* ① Logo */}
           <div className="relative z-10 flex items-center gap-3">
@@ -173,63 +191,75 @@ export function KeySetupScreen({ onKeySubmit }: Props) {
 
           {/* ② 标题 */}
           <div className="relative z-10 mt-6 mb-4">
-            <h2 className="text-7xl font-black leading-[1.05] tracking-tight" style={{ minHeight: '8rem' }}>
+            <h2 className="text-7xl font-black leading-[1.05]" style={{ minHeight: '8rem', letterSpacing: '-0.03em' }}>
               <span className="block">{line1}{line1.length < LINE1.length && <span className="cursor text-blue-300">|</span>}</span>
               <span className="block bg-gradient-to-r from-white via-blue-100 to-cyan-300 bg-clip-text text-transparent">
                 {line2}{line1.length >= LINE1.length && line2.length < LINE2.length && <span className="cursor text-blue-300">|</span>}
               </span>
             </h2>
-            <p className="anim-in text-blue-200 text-base mt-3 leading-relaxed"
+            <p className="anim-in text-white/50 text-base mt-3 leading-relaxed"
               style={{ animationDelay: `${L1_END + LINE2.length * 70 + 200}ms` }}>
               AI 驱动 · 自然语言描述 · 秒级返回结果
             </p>
           </div>
 
           {/* ③ App 预览窗口 */}
-          <div className="anim-in relative z-10 mb-4"
+          <div className="anim-in relative z-10 mb-5"
             style={{ animationDelay: `${L1_END + LINE2.length * 70 + 350}ms` }}>
-            <div className="rounded-xl overflow-hidden w-full"
-              style={{ boxShadow: '0 30px 70px rgba(0,0,0,.55), 0 0 0 1px rgba(255,255,255,.1)' }}>
-              {/* macOS 标题栏 */}
-              <div className="flex items-center gap-1.5 px-3 py-2 bg-gray-100 border-b border-gray-200">
-                <div className="w-3 h-3 rounded-full bg-red-400" />
-                <div className="w-3 h-3 rounded-full bg-yellow-400" />
-                <div className="w-3 h-3 rounded-full bg-green-400" />
-                <div className="flex-1 mx-3">
-                  <div className="bg-white border border-gray-200 rounded px-2 py-0.5 text-[9px] text-gray-400 text-center truncate">
-                    RAG · retrieval augmented generation — ScholarScout
+            {/* 底部辉光 */}
+            <div className="absolute -bottom-5 left-1/2 -translate-x-1/2 w-3/4 h-10 pointer-events-none"
+              style={{ background: 'radial-gradient(ellipse, rgba(99,60,220,0.65) 0%, transparent 70%)', filter: 'blur(18px)' }} />
+            {/* 3D 倾斜容器 */}
+            <div className="screenshot-tilt relative"
+              style={{ borderRadius: '12px', boxShadow: '0 0 0 1px rgba(255,255,255,0.1), 0 28px 80px rgba(99,60,220,0.45), 0 6px 24px rgba(0,0,0,0.7)' }}>
+              {/* 顶部高光线 */}
+              <div className="absolute top-0 left-0 right-0 h-px z-10 rounded-t-xl"
+                style={{ background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.55), transparent)' }} />
+              <div className="rounded-xl overflow-hidden">
+                {/* macOS 标题栏 */}
+                <div className="flex items-center gap-1.5 px-3 py-2 bg-gray-100 border-b border-gray-200">
+                  <div className="w-3 h-3 rounded-full bg-red-400" />
+                  <div className="w-3 h-3 rounded-full bg-yellow-400" />
+                  <div className="w-3 h-3 rounded-full bg-green-400" />
+                  <div className="flex-1 mx-3">
+                    <div className="bg-white border border-gray-200 rounded px-2 py-0.5 text-[9px] text-gray-400 text-center truncate">
+                      RAG · retrieval augmented generation — ScholarScout
+                    </div>
                   </div>
                 </div>
-              </div>
-              {/* 真实截图 */}
-              <div className="overflow-hidden bg-slate-50">
-                <img
-                  src="/preview.png"
-                  alt="ScholarScout AI 对话功能演示"
-                  className="w-full object-cover object-top"
-                  style={{ maxHeight: '240px' }}
-                />
+                {/* 真实截图 */}
+                <div className="overflow-hidden bg-slate-50">
+                  <img
+                    src="/preview.png"
+                    alt="ScholarScout AI 对话功能演示"
+                    className="w-full object-cover object-top"
+                    style={{ maxHeight: '240px' }}
+                  />
+                </div>
               </div>
             </div>
           </div>
 
-          {/* ④ 特性卡片 2×2 + 链接 */}
-          <div className="anim-in relative z-10"
-            style={{ animationDelay: `${L1_END + LINE2.length * 70 + 600}ms` }}>
+          {/* ④ 特性卡片一行 + 链接 */}
+          <div className="relative z-10">
             <div className="grid grid-cols-4 gap-2 mb-5">
-              {FEATURES.map(f => (
+              {FEATURES.map((f, i) => (
                 <div key={f.title}
-                  className="border border-white/15 bg-white/8 backdrop-blur-sm rounded-xl p-3 hover:bg-white/12 transition-colors">
+                  className="card-in relative border border-white/[0.08] bg-white/[0.04] backdrop-blur-sm rounded-xl p-3 overflow-hidden hover:border-purple-400/30 transition-all duration-300"
+                  style={{ animationDelay: `${L1_END + LINE2.length * 70 + 650 + i * 80}ms` }}>
+                  {/* 顶部高光线 */}
+                  <div className="absolute top-0 left-0 right-0 h-px"
+                    style={{ background: 'linear-gradient(90deg, transparent, rgba(167,139,250,0.55), transparent)' }} />
                   <div className="text-xl mb-1.5">{f.icon}</div>
-                  <p className="text-sm font-semibold text-white leading-snug">{f.title}</p>
-                  <p className="text-xs text-blue-300 mt-0.5 leading-snug">{f.detail}</p>
+                  <p className="text-sm font-semibold text-white/90 leading-snug">{f.title}</p>
+                  <p className="text-xs text-blue-300/80 mt-0.5 leading-snug">{f.detail}</p>
                 </div>
               ))}
             </div>
-            <div className="flex items-center gap-5 text-sm text-blue-400">
+            <div className="flex items-center gap-5 text-sm text-white/40">
               <a href="http://118.25.192.117" target="_blank" rel="noopener noreferrer"
                 className="hover:text-white transition-colors">在线体验 →</a>
-              <span className="text-blue-800">|</span>
+              <span className="text-white/15">|</span>
               <a href="https://github.com/Dshuishui/ScholarScout" target="_blank" rel="noopener noreferrer"
                 className="hover:text-white transition-colors">GitHub 开源</a>
             </div>
