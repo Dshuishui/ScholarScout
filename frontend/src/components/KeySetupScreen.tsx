@@ -391,6 +391,22 @@ export function KeySetupScreen({ onKeySubmit }: Props) {
               <a href="https://platform.deepseek.com" target="_blank" rel="noopener noreferrer"
                 className="text-blue-500 hover:underline ml-1">免费注册 DeepSeek →</a>
             </p>
+
+            <div className="mt-8 pt-6 border-t border-gray-100 text-center space-y-1.5">
+              <p className="text-xs text-gray-400">
+                遇到问题或有改进建议？欢迎联系我们 👋
+              </p>
+              <a href="mailto:dongyucong@sjtu.edu.cn"
+                className="text-xs text-blue-500 hover:text-blue-700 hover:underline transition-colors block">
+                dongyucong@sjtu.edu.cn
+              </a>
+              <p className="text-[11px] text-gray-300 pt-1">
+                Built with{' '}
+                <a href="https://claude.ai/code" target="_blank" rel="noopener noreferrer"
+                  className="text-gray-400 hover:text-gray-600 transition-colors">Claude Code</a>
+                {' '}· vibe coding ✨
+              </p>
+            </div>
           </div>
         </div>
 
