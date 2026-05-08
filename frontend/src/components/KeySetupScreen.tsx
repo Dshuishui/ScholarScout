@@ -1,4 +1,7 @@
 import { useState, useEffect } from 'react'
+import { DEEPSEEK_MODELS, DEFAULT_MODEL } from '../hooks/useModel'
+
+const MODEL_STORAGE_KEY = 'scholarscout_model'
 
 interface Props {
   onKeySubmit: (key: string) => void
@@ -66,6 +69,14 @@ export function KeySetupScreen({ onKeySubmit }: Props) {
   const [error, setError] = useState('')
   const [isValidating, setIsValidating] = useState(false)
   const [savedKeys, setSavedKeys] = useState<SavedKey[]>(() => loadSavedKeys())
+  const [selectedModel, setSelectedModel] = useState<string>(
+    () => localStorage.getItem(MODEL_STORAGE_KEY) ?? DEFAULT_MODEL
+  )
+
+  const handleModelChange = (id: string) => {
+    localStorage.setItem(MODEL_STORAGE_KEY, id)
+    setSelectedModel(id)
+  }
   const line1 = useTypewriter(LINE1, 400)
   const line2 = useTypewriter(LINE2, L1_END + 180)
 
@@ -333,6 +344,30 @@ export function KeySetupScreen({ onKeySubmit }: Props) {
                 className="w-full bg-white border border-gray-200 rounded-xl px-4 py-3 text-sm placeholder-gray-300 shadow-sm transition-all focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-400/20 focus:shadow-[0_0_0_4px_rgba(59,130,246,0.08)]"
               />
               {error && <p className="text-red-500 text-xs mt-1.5">{error}</p>}
+            </div>
+
+            {/* 模型选择 */}
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-2">模型选择</label>
+              <div className="grid grid-cols-2 gap-2">
+                {DEEPSEEK_MODELS.map(m => (
+                  <button
+                    key={m.id}
+                    type="button"
+                    onClick={() => handleModelChange(m.id)}
+                    className={`text-left px-3 py-2.5 rounded-xl border text-xs transition-all ${
+                      selectedModel === m.id
+                        ? 'border-blue-400 bg-blue-50 text-blue-800 shadow-sm shadow-blue-100'
+                        : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300 hover:bg-gray-50'
+                    }`}
+                  >
+                    <p className="font-semibold leading-snug">{m.name}</p>
+                    <p className={`mt-0.5 leading-snug ${selectedModel === m.id ? 'text-blue-500' : 'text-gray-400'}`}>
+                      {m.desc}
+                    </p>
+                  </button>
+                ))}
+              </div>
             </div>
 
             {/* 按钮 */}

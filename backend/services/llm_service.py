@@ -44,7 +44,7 @@ VALIDATE_PROMPT = """用户的原始需求：{query}
 ]"""
 
 
-async def classify_intent(user_query: str, api_key: str, history: list[dict] = []) -> dict:
+async def classify_intent(user_query: str, api_key: str, history: list[dict] = [], model: str = DEEPSEEK_MODEL) -> dict:
     """返回 {"intent": "search"} 或 {"intent": "chat", "reply": "..."}"""
     client = AsyncOpenAI(api_key=api_key, base_url=DEEPSEEK_BASE_URL)
     messages = (
@@ -53,7 +53,7 @@ async def classify_intent(user_query: str, api_key: str, history: list[dict] = [
         + [{"role": "user", "content": user_query}]
     )
     response = await client.chat.completions.create(
-        model=DEEPSEEK_MODEL,
+        model=model,
         messages=messages,
         response_format={"type": "json_object"},
         temperature=0.1,
@@ -61,7 +61,7 @@ async def classify_intent(user_query: str, api_key: str, history: list[dict] = [
     return json.loads(response.choices[0].message.content)
 
 
-async def parse_query(user_query: str, api_key: str, history: list[dict] = []) -> ParsedQuery:
+async def parse_query(user_query: str, api_key: str, history: list[dict] = [], model: str = DEEPSEEK_MODEL) -> ParsedQuery:
     client = AsyncOpenAI(api_key=api_key, base_url=DEEPSEEK_BASE_URL)
     messages = (
         [{"role": "system", "content": PARSE_SYSTEM}]
@@ -69,7 +69,7 @@ async def parse_query(user_query: str, api_key: str, history: list[dict] = []) -
         + [{"role": "user", "content": user_query}]
     )
     response = await client.chat.completions.create(
-        model=DEEPSEEK_MODEL,
+        model=model,
         messages=messages,
         response_format={"type": "json_object"},
         temperature=0.1,
@@ -81,7 +81,7 @@ async def parse_query(user_query: str, api_key: str, history: list[dict] = []) -
 
 
 async def validate_papers(
-    papers: list[Paper], user_query: str, api_key: str
+    papers: list[Paper], user_query: str, api_key: str, model: str = DEEPSEEK_MODEL
 ) -> tuple[list[Paper], list[Paper]]:
     """返回 (accepted, rejected) 两个列表。"""
     if not papers:
@@ -96,7 +96,7 @@ async def validate_papers(
         )
         client = AsyncOpenAI(api_key=api_key, base_url=DEEPSEEK_BASE_URL)
         response = await client.chat.completions.create(
-            model=DEEPSEEK_MODEL,
+            model=model,
             messages=[{"role": "user", "content": VALIDATE_PROMPT.format(
                 query=user_query, papers_text=papers_text
             )}],

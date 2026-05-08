@@ -7,6 +7,7 @@ import { ToastContainer } from './Toast'
 import { useSearch } from '../hooks/useSearch'
 import { useSettings } from '../hooks/useSettings'
 import { usePaperChat } from '../hooks/usePaperChat'
+import { useModel } from '../hooks/useModel'
 
 interface Props {
   apiKey: string
@@ -15,14 +16,15 @@ interface Props {
 
 export function MainLayout({ apiKey, onClearKey }: Props) {
   const { settings, updateSettings } = useSettings()
+  const { model } = useModel()
   const {
     messages, papers, rejectedPapers, isLoading, statusMessage, sourceStatuses,
     search, pendingKeywords, confirmedKeywords, confirmSearch, cancelSearch, reSearch,
     history, removeHistory, searchFromHistory,
-  } = useSearch(apiKey, settings)
+  } = useSearch(apiKey, settings, model)
 
   const [activePaper, setActivePaper] = useState<Paper | null>(null)
-  const { getMessages, sendMessage, isStreaming, streamingPaperId } = usePaperChat(apiKey)
+  const { getMessages, sendMessage, isStreaming, streamingPaperId } = usePaperChat(apiKey, model)
   const chatInputRef = useRef<HTMLTextAreaElement>(null)
 
   const handleAnalyzePaper = (paper: Paper) => {

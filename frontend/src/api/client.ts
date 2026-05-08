@@ -5,12 +5,13 @@ const API_BASE = '/api'
 export async function parseQuery(
   query: string,
   apiKey: string,
-  history: { role: string; content: string }[] = []
+  history: { role: string; content: string }[] = [],
+  model?: string
 ): Promise<ParseResult> {
   const response = await fetch(`${API_BASE}/parse`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ query, api_key: apiKey, messages: history }),
+    body: JSON.stringify({ query, api_key: apiKey, messages: history, model }),
   })
   if (!response.ok) throw new Error(`请求失败: ${response.status}`)
   return response.json()
@@ -21,7 +22,8 @@ export async function* searchPapers(
   apiKey: string,
   history: { role: string; content: string }[] = [],
   settings: { limitPerSource?: number; validatedLimit?: number; selectedSources?: string[] } = {},
-  confirmed?: { keywords: string[]; date_from?: string | null; date_to?: string | null }
+  confirmed?: { keywords: string[]; date_from?: string | null; date_to?: string | null },
+  model?: string
 ): AsyncGenerator<SearchEvent> {
   const response = await fetch(`${API_BASE}/search`, {
     method: 'POST',
@@ -33,6 +35,7 @@ export async function* searchPapers(
       limit_per_source: settings.limitPerSource,
       validated_limit: settings.validatedLimit,
       sources: settings.selectedSources,
+      model,
       ...(confirmed && {
         keywords: confirmed.keywords,
         date_from: confirmed.date_from ?? null,

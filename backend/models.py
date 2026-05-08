@@ -11,6 +11,7 @@ class ParseRequest(BaseModel):
     query: str = Field(max_length=2000)
     api_key: str
     messages: list[HistoryMessage] = Field(default=[], max_length=30)
+    model: Optional[str] = Field(default=None, max_length=100)
 
 class SearchRequest(BaseModel):
     query: str = Field(default="", max_length=2000)
@@ -22,6 +23,7 @@ class SearchRequest(BaseModel):
     date_from: Optional[str] = Field(default=None, max_length=20)
     date_to: Optional[str] = Field(default=None, max_length=20)
     sources: Optional[list[str]] = Field(default=None, max_length=15)
+    model: Optional[str] = Field(default=None, max_length=100)
 
 
 class Paper(BaseModel):

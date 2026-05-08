@@ -21,7 +21,7 @@ interface PendingSearch {
 
 export type SourceStatus = { status: 'pending' | 'done'; count: number }
 
-export function useSearch(apiKey: string, settings: SearchSettings) {
+export function useSearch(apiKey: string, settings: SearchSettings, model?: string) {
   const [messages, setMessages] = useState<Message[]>([WELCOME])
   const [papers, setPapers] = useState<Paper[]>([])
   const [rejectedPapers, setRejectedPapers] = useState<Paper[]>([])
@@ -50,7 +50,8 @@ export function useSearch(apiKey: string, settings: SearchSettings) {
     try {
       for await (const event of searchPapers(
         pending.query, apiKey, pending.history, settings,
-        { keywords, date_from: pending.date_from, date_to: pending.date_to }
+        { keywords, date_from: pending.date_from, date_to: pending.date_to },
+        model
       )) {
         if (event.type === 'search_start') {
           const init: Record<string, SourceStatus> = {}
@@ -115,7 +116,7 @@ export function useSearch(apiKey: string, settings: SearchSettings) {
         .slice(-8)
         .map(m => ({ role: m.role, content: m.content }))
 
-      const result = await parseQuery(query, apiKey, history)
+      const result = await parseQuery(query, apiKey, history, model)
 
       if (result.intent === 'chat') {
         updateAssistant(assistantId, { content: result.reply, isLoading: false })

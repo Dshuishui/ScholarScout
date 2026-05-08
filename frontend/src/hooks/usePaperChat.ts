@@ -7,7 +7,7 @@ export interface ChatMessage {
   isStreaming?: boolean
 }
 
-export function usePaperChat(apiKey: string) {
+export function usePaperChat(apiKey: string, model: string = 'deepseek-v4-flash') {
   const [histories, setHistories] = useState<Map<string, ChatMessage[]>>(new Map())
   const [streamingPaperId, setStreamingPaperId] = useState<string | null>(null)
 
@@ -34,7 +34,7 @@ export function usePaperChat(apiKey: string) {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
           body: JSON.stringify({
-            model: 'deepseek-chat',
+            model,
             stream: true,
             messages: [
               { role: 'system', content: buildSystemPrompt(paper) },
