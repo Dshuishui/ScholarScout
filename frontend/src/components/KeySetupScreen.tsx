@@ -178,7 +178,7 @@ export function KeySetupScreen({ onKeySubmit }: Props) {
           </div>
 
           {/* ② 标题 */}
-          <div className="relative z-10 mt-8 mb-6">
+          <div className="relative z-10 mt-6 mb-4">
             <h2 className="text-7xl font-black leading-[1.05] tracking-tight" style={{ minHeight: '8rem' }}>
               <span className="block">{line1}{line1.length < LINE1.length && <span className="cursor text-blue-300">|</span>}</span>
               <span className="block bg-gradient-to-r from-white via-blue-100 to-cyan-300 bg-clip-text text-transparent">
@@ -192,7 +192,7 @@ export function KeySetupScreen({ onKeySubmit }: Props) {
           </div>
 
           {/* ③ App 预览窗口 */}
-          <div className="anim-in relative z-10 flex-1 flex flex-col justify-center mb-6"
+          <div className="anim-in relative z-10 mb-4"
             style={{ animationDelay: `${L1_END + LINE2.length * 70 + 350}ms` }}>
             <div className="rounded-xl overflow-hidden w-full"
               style={{ boxShadow: '0 30px 70px rgba(0,0,0,.55), 0 0 0 1px rgba(255,255,255,.1)' }}>
