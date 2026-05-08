@@ -33,12 +33,6 @@ const FEATURES = [
   { icon: '📄', title: 'PDF 查找', detail: '8 个备用平台入口' },
 ]
 
-// 右侧优势条目
-const BENEFITS = [
-  { icon: '⚡', title: '10 个学术数据库并发搜索', desc: 'arXiv · Semantic Scholar · PubMed · CrossRef 等' },
-  { icon: '✦', title: 'AI 智能筛选 + 论文独立对话', desc: '自动过滤低相关结果，每篇论文可开启独立 AI 分析' },
-  { icon: '📄', title: 'PDF 深度查找 + Google Scholar 直达', desc: '多平台备用入口，跨库引用与引文一键可达' },
-]
 
 const STATS = [
   { value: '10+', label: '数据源' },
@@ -226,9 +220,9 @@ export function KeySetupScreen({ onKeySubmit }: Props) {
               {FEATURES.map(f => (
                 <div key={f.title}
                   className="border border-white/15 bg-white/8 backdrop-blur-sm rounded-xl p-3 hover:bg-white/12 transition-colors">
-                  <div className="text-lg mb-1">{f.icon}</div>
-                  <p className="text-xs font-semibold text-white leading-snug">{f.title}</p>
-                  <p className="text-[10px] text-blue-300 mt-0.5 leading-snug">{f.detail}</p>
+                  <div className="text-xl mb-1.5">{f.icon}</div>
+                  <p className="text-sm font-semibold text-white leading-snug">{f.title}</p>
+                  <p className="text-xs text-blue-300 mt-0.5 leading-snug">{f.detail}</p>
                 </div>
               ))}
             </div>
@@ -262,40 +256,20 @@ export function KeySetupScreen({ onKeySubmit }: Props) {
               <span className="text-lg font-bold text-gray-900">ScholarScout</span>
             </div>
 
-            {/* 优势列表（填充右侧空间） */}
-            <div className="space-y-2 mb-5">
-              {BENEFITS.map(b => (
-                <div key={b.title}
-                  className="flex items-start gap-3 bg-white border border-gray-100 rounded-xl px-4 py-2.5 shadow-sm">
-                  <span className="text-xl flex-shrink-0 mt-0.5">{b.icon}</span>
-                  <div>
-                    <p className="text-sm font-semibold text-gray-800 leading-snug">{b.title}</p>
-                    <p className="text-xs text-gray-500 mt-0.5 leading-snug">{b.desc}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            {/* 分隔线 */}
-            <div className="flex items-center gap-3 mb-4">
-              <div className="flex-1 h-px bg-gray-200" />
-              <span className="text-xs text-gray-400 flex-shrink-0">输入 Key 开始使用</span>
-              <div className="flex-1 h-px bg-gray-200" />
-            </div>
-
             {/* 渐变标题 */}
-            <h2 className="text-3xl font-bold mb-2 bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-600 bg-clip-text text-transparent">
-              开始你的学术探索
+            <h2 className="text-5xl font-black mb-3 bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-600 bg-clip-text text-transparent leading-tight">
+              开始你的<br />学术探索
             </h2>
-            <p className="text-gray-400 text-sm mb-3 leading-relaxed">
-              Key 仅存于本地浏览器，不会上传服务器。
+            <p className="text-gray-400 text-base mb-6 leading-relaxed">
+              AI 驱动 · 自然语言描述 · 秒级返回结果<br />
+              Key 仅存于本地，不会上传服务器。
             </p>
 
             {/* 数据徽章 */}
-            <div className="flex items-center gap-2 mb-3">
+            <div className="flex items-center gap-2 mb-6">
               {STATS.map(s => (
                 <div key={s.label}
-                  className="flex items-center gap-1 text-xs bg-white border border-slate-200 rounded-full px-2.5 py-1 shadow-sm">
+                  className="flex items-center gap-1.5 text-sm bg-white border border-slate-200 rounded-full px-3 py-1.5 shadow-sm">
                   <span className="font-bold text-slate-700">{s.value}</span>
                   <span className="text-slate-400">{s.label}</span>
                 </div>
@@ -305,7 +279,7 @@ export function KeySetupScreen({ onKeySubmit }: Props) {
             {/* 历史 Key */}
             {savedKeys.length > 0 && (
               <div className="mb-3">
-                <p className="text-xs text-gray-400 mb-2">历史 Key</p>
+                <p className="text-sm text-gray-400 mb-2">历史 Key</p>
                 <div className="space-y-1.5">
                   {savedKeys.map(({ key }) => (
                     <div key={key} className="flex items-center gap-2 bg-white border border-gray-200 rounded-xl px-3 py-2.5 group hover:border-blue-200 transition-colors">
@@ -332,7 +306,7 @@ export function KeySetupScreen({ onKeySubmit }: Props) {
 
             {/* 输入框 */}
             <div className="mb-3">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-base font-semibold text-gray-700 mb-2">
                 {savedKeys.length > 0 ? '输入新的 Key' : 'DeepSeek API Key'}
               </label>
               <input
@@ -341,32 +315,29 @@ export function KeySetupScreen({ onKeySubmit }: Props) {
                 onChange={e => { setInput(e.target.value); setError('') }}
                 onKeyDown={e => { if (e.key === 'Enter' && !isValidating) handleSubmit() }}
                 placeholder="sk-xxxxxxxxxxxxxxxx"
-                className="w-full bg-white border border-gray-200 rounded-xl px-4 py-3 text-sm placeholder-gray-300 shadow-sm transition-all focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-400/20 focus:shadow-[0_0_0_4px_rgba(59,130,246,0.08)]"
+                className="w-full bg-white border border-gray-200 rounded-xl px-4 py-3.5 text-base placeholder-gray-300 shadow-sm transition-all focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-400/20 focus:shadow-[0_0_0_4px_rgba(59,130,246,0.08)]"
               />
               {error && <p className="text-red-500 text-xs mt-1.5">{error}</p>}
             </div>
 
             {/* 模型选择 */}
-            <div className="mb-3">
-              <label className="block text-sm font-medium text-gray-700 mb-2">模型选择</label>
-              <div className="grid grid-cols-2 gap-2">
-                {DEEPSEEK_MODELS.map(m => (
-                  <button
-                    key={m.id}
-                    type="button"
-                    onClick={() => handleModelChange(m.id)}
-                    className={`text-left px-3 py-2.5 rounded-xl border text-xs transition-all ${
-                      selectedModel === m.id
-                        ? 'border-blue-400 bg-blue-50 text-blue-800 shadow-sm shadow-blue-100'
-                        : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300 hover:bg-gray-50'
-                    }`}
-                  >
-                    <p className="font-semibold leading-snug">{m.name}</p>
-                    <p className={`mt-0.5 leading-snug ${selectedModel === m.id ? 'text-blue-500' : 'text-gray-400'}`}>
-                      {m.desc}
-                    </p>
-                  </button>
-                ))}
+            <div className="mb-4">
+              <label className="block text-base font-semibold text-gray-700 mb-2">模型选择</label>
+              <div className="relative">
+                <select
+                  value={selectedModel}
+                  onChange={e => handleModelChange(e.target.value)}
+                  className="w-full appearance-none bg-white border border-gray-200 rounded-xl px-4 py-3.5 text-base text-gray-700 shadow-sm cursor-pointer pr-10 focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-400/20"
+                >
+                  {DEEPSEEK_MODELS.map(m => (
+                    <option key={m.id} value={m.id}>{m.name} · {m.desc}</option>
+                  ))}
+                </select>
+                <div className="absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </div>
               </div>
             </div>
 
@@ -374,7 +345,7 @@ export function KeySetupScreen({ onKeySubmit }: Props) {
             <button
               onClick={handleSubmit}
               disabled={isValidating || !input.trim()}
-              className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 disabled:from-blue-400 disabled:to-indigo-400 text-white rounded-xl py-3 text-sm font-semibold transition-all shadow-md shadow-blue-200/60 cursor-pointer hover:-translate-y-0.5 hover:shadow-lg hover:shadow-blue-300/40 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:shadow-none"
+              className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 disabled:from-blue-400 disabled:to-indigo-400 text-white rounded-xl py-3.5 text-base font-semibold transition-all shadow-md shadow-blue-200/60 cursor-pointer hover:-translate-y-0.5 hover:shadow-lg hover:shadow-blue-300/40 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:shadow-none"
             >
               {isValidating ? (
                 <span className="flex items-center justify-center gap-2">
@@ -386,21 +357,21 @@ export function KeySetupScreen({ onKeySubmit }: Props) {
               ) : '开始探索论文 →'}
             </button>
 
-            <p className="text-center text-xs text-gray-400 mt-3">
+            <p className="text-center text-sm text-gray-400 mt-3">
               没有 Key？
               <a href="https://platform.deepseek.com" target="_blank" rel="noopener noreferrer"
                 className="text-blue-500 hover:underline ml-1">免费注册 DeepSeek →</a>
             </p>
 
             <div className="mt-auto pt-4 border-t border-gray-100 text-center space-y-1">
-              <p className="text-xs text-gray-400">
+              <p className="text-sm text-gray-400">
                 遇到问题或有改进建议？欢迎联系我们 👋
               </p>
               <a href="mailto:dongyucong@sjtu.edu.cn"
-                className="text-xs text-blue-500 hover:text-blue-700 hover:underline transition-colors block">
+                className="text-sm text-blue-500 hover:text-blue-700 hover:underline transition-colors block">
                 dongyucong@sjtu.edu.cn
               </a>
-              <p className="text-[11px] text-gray-300 pt-1">
+              <p className="text-xs text-gray-300 pt-1">
                 Built with{' '}
                 <a href="https://claude.ai/code" target="_blank" rel="noopener noreferrer"
                   className="text-gray-400 hover:text-gray-600 transition-colors">Claude Code</a>
