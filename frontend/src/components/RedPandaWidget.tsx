@@ -45,14 +45,20 @@ export function RedPandaWidget({ isSearching = false }: { isSearching?: boolean 
     <div className="fixed top-0 left-1/2 -translate-x-1/2 z-40 flex flex-col items-center select-none">
       {/* 小熊猫从顶部探出，脚踩在导航栏上 */}
 
-      {/* 气泡在熊猫下方 */}
+      {/* 气泡：固定宽度，居中显示在熊猫下方 */}
       {bubble && (
         <div
-          className="mt-14 bg-white border border-gray-200 rounded-2xl rounded-tl-sm px-3 py-2 shadow-lg text-xs text-gray-700 leading-relaxed max-w-[200px] whitespace-pre-line absolute top-0"
-          style={{ animation: 'fadeInUp 0.2s ease', left: '50%', transform: 'translateX(10%)' }}
+          style={{
+            position: 'absolute',
+            top: '58px',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            width: '200px',
+            animation: 'fadeInUp 0.2s ease',
+          }}
+          className="bg-white border border-gray-200 rounded-2xl px-3 py-2 shadow-lg text-xs text-gray-700 leading-relaxed whitespace-pre-line text-center"
         >
           {bubble}
-          <div className="absolute -top-1.5 left-4 w-3 h-3 bg-white border-l border-t border-gray-200 rotate-45" />
         </div>
       )}
 
