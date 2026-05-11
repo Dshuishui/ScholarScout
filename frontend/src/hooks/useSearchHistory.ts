@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react'
 
 const STORAGE_KEY = 'scholarscout_search_history'
-const MAX_ITEMS = 10
+const MAX_ITEMS = 3
 
 export interface HistoryItem {
   keywords: string[]

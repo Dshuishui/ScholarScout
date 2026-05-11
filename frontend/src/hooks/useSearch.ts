@@ -108,7 +108,6 @@ export function useSearch(apiKey: string, settings: SearchSettings, model?: stri
       { id: userMsgId, role: 'user', content: query },
       { id: assistantId, role: 'assistant', content: '正在理解您的需求...', isLoading: true },
     ])
-    setIsLoading(true)
     setStatusMessage('')
 
     try {
