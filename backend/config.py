@@ -21,3 +21,6 @@ POLITE_EMAIL = "sasakinakamura9@gmail.com"  # 用于 CrossRef / OpenAlex / Unpay
 SEARCH_LIMIT_PER_SOURCE = 50
 VALIDATED_LIMIT = 50
 CORS_ORIGINS = ["*"]
+
+import os as _os
+JWT_SECRET = _os.environ.get("JWT_SECRET", "dev-secret-change-in-production")
