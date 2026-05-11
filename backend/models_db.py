@@ -27,3 +27,10 @@ class ReadingHistory(Base):
     user_id = Column(Integer, nullable=False)
     paper_json = Column(Text, nullable=False)
     viewed_at = Column(DateTime, default=datetime.utcnow)
+
+
+class Feedback(Base):
+    __tablename__ = "feedback"
+    id = Column(Integer, primary_key=True)
+    content = Column(String(200), nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
