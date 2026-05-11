@@ -44,6 +44,14 @@ VALIDATE_PROMPT = """用户的原始需求：{query}
 ]"""
 
 
+_REASONING_MODELS = {"deepseek-reasoner"}
+
+
+def _json_model(model: str) -> str:
+    """deepseek-reasoner 不支持 json_object 格式，降级到默认模型。"""
+    return DEEPSEEK_MODEL if model in _REASONING_MODELS else model
+
+
 async def classify_intent(user_query: str, api_key: str, history: list[dict] = [], model: str = DEEPSEEK_MODEL) -> dict:
     """返回 {"intent": "search"} 或 {"intent": "chat", "reply": "..."}"""
     client = AsyncOpenAI(api_key=api_key, base_url=DEEPSEEK_BASE_URL)
@@ -53,7 +61,7 @@ async def classify_intent(user_query: str, api_key: str, history: list[dict] = [
         + [{"role": "user", "content": user_query}]
     )
     response = await client.chat.completions.create(
-        model=model,
+        model=_json_model(model),
         messages=messages,
         response_format={"type": "json_object"},
         temperature=0.1,
@@ -69,7 +77,7 @@ async def parse_query(user_query: str, api_key: str, history: list[dict] = [], m
         + [{"role": "user", "content": user_query}]
     )
     response = await client.chat.completions.create(
-        model=model,
+        model=_json_model(model),
         messages=messages,
         response_format={"type": "json_object"},
         temperature=0.1,
@@ -96,7 +104,7 @@ async def validate_papers(
         )
         client = AsyncOpenAI(api_key=api_key, base_url=DEEPSEEK_BASE_URL)
         response = await client.chat.completions.create(
-            model=model,
+            model=_json_model(model),
             messages=[{"role": "user", "content": VALIDATE_PROMPT.format(
                 query=user_query, papers_text=papers_text
             )}],
@@ -126,4 +134,7 @@ async def validate_papers(
             a, rej = r
             accepted.extend(a)
             rejected.extend(rej)
+    # 如果所有 batch 都报错（如模型不支持），兜底返回全部论文
+    if not accepted and not rejected and papers:
+        return papers, []
     return accepted, rejected

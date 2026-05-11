@@ -25,7 +25,7 @@ async def _search_arxiv(parsed: ParsedQuery, limit: int) -> list[Paper]:
 
         async with httpx.AsyncClient(timeout=20) as client:
             resp = await client.get(
-                "http://export.arxiv.org/api/query",
+                "https://export.arxiv.org/api/query",
                 params={"search_query": search_query, "max_results": limit,
                         "sortBy": sort_by, "sortOrder": "descending"},
             )
