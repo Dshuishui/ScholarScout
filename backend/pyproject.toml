@@ -10,6 +10,11 @@ dependencies = [
     "python-dotenv==1.0.1",
     "feedparser>=6.0.12",
     "scholarly>=1.7.11",
+    "python-jose[cryptography]",
+    "passlib[bcrypt]",
+    "sqlalchemy[asyncio]",
+    "aiosqlite",
+    "email-validator",
 ]
 
 [dependency-groups]
