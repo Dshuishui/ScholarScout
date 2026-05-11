@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useAuth } from '../hooks/useAuth'
+import { AuthModal } from './AuthModal'
 import JSZip from 'jszip'
 import type { Paper } from '../types'
 import type { SearchSettings } from '../hooks/useSettings'
@@ -139,6 +140,7 @@ export function ResultsPanel({ papers, rejectedPapers = [], isLoading, statusMes
 
   const { token, isLoggedIn } = useAuth()
   const [savedMap, setSavedMap] = useState<Map<string, string>>(new Map())
+  const [showAuthModal, setShowAuthModal] = useState(false)
 
   useEffect(() => {
     if (!isLoggedIn || !token) { setSavedMap(new Map()); return }
@@ -739,7 +741,7 @@ const addKeyword = () => {
                           onAnalyze={onAnalyzePaper ? () => onAnalyzePaper(paper) : undefined}
                           compact={density === 'compact'}
                           isSaved={savedMap.has(paper.paper_id)}
-                          onSave={isLoggedIn ? () => handleSave(paper) : undefined}
+                          onSave={() => isLoggedIn ? handleSave(paper) : setShowAuthModal(true)}
                         />
                       </div>
                     ))}
@@ -768,6 +770,8 @@ const addKeyword = () => {
           </>
         )}
       </div>
+
+      {showAuthModal && <AuthModal onClose={() => setShowAuthModal(false)} />}
 
       {/* 下载进度浮层 */}
       {downloadProgress && (
