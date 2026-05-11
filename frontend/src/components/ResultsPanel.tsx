@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
+import { useAuth } from '../hooks/useAuth'
 import JSZip from 'jszip'
 import type { Paper } from '../types'
 import type { SearchSettings } from '../hooks/useSettings'
@@ -134,6 +135,42 @@ export function ResultsPanel({ papers, rejectedPapers = [], isLoading, statusMes
   const setDensity = (d: Density) => {
     setDensityState(d)
     localStorage.setItem('scholarscout_density', d)
+  }
+
+  const { token, isLoggedIn } = useAuth()
+  const [savedMap, setSavedMap] = useState<Map<string, string>>(new Map())
+
+  useEffect(() => {
+    if (!isLoggedIn || !token) { setSavedMap(new Map()); return }
+    fetch('/api/user/saved', { headers: { Authorization: `Bearer ${token}` } })
+      .then(r => r.json())
+      .then((items: { paper_id_hash: string; paper: { paper_id: string } }[]) => {
+        setSavedMap(new Map(items.map(i => [i.paper.paper_id, i.paper_id_hash])))
+      })
+      .catch(() => {})
+  }, [isLoggedIn, token])
+
+  const handleSave = async (paper: Paper) => {
+    if (!token) return
+    const existingHash = savedMap.get(paper.paper_id)
+    if (existingHash) {
+      await fetch(`/api/user/saved/${existingHash}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      setSavedMap(prev => { const m = new Map(prev); m.delete(paper.paper_id); return m })
+    } else {
+      const r = await fetch('/api/user/saved', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ paper }),
+      })
+      if (r.ok) {
+        const saved = await fetch('/api/user/saved', { headers: { Authorization: `Bearer ${token}` } })
+          .then(res => res.json()) as { paper_id_hash: string; paper: { paper_id: string } }[]
+        setSavedMap(new Map(saved.map(i => [i.paper.paper_id, i.paper_id_hash])))
+      }
+    }
   }
 
   // 新搜索完成时重置到筛选后视图
@@ -701,6 +738,8 @@ const addKeyword = () => {
                           isRejected={rejectedIds.has(paper.paper_id)}
                           onAnalyze={onAnalyzePaper ? () => onAnalyzePaper(paper) : undefined}
                           compact={density === 'compact'}
+                          isSaved={savedMap.has(paper.paper_id)}
+                          onSave={isLoggedIn ? () => handleSave(paper) : undefined}
                         />
                       </div>
                     ))}
@@ -720,6 +759,8 @@ const addKeyword = () => {
                   isRejected={rejectedIds.has(paper.paper_id)}
                   onAnalyze={onAnalyzePaper ? () => onAnalyzePaper(paper) : undefined}
                   compact={density === 'compact'}
+                  isSaved={savedMap.has(paper.paper_id)}
+                  onSave={isLoggedIn ? () => handleSave(paper) : undefined}
                 />
               </div>
             ))}

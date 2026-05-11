@@ -8,6 +8,10 @@ import { useSearch } from '../hooks/useSearch'
 import { useSettings } from '../hooks/useSettings'
 import { usePaperChat } from '../hooks/usePaperChat'
 import { useModel } from '../hooks/useModel'
+import { useAuth } from '../hooks/useAuth'
+import { UserMenu } from './UserMenu'
+import { SavedPage } from '../pages/SavedPage'
+import { HistoryPage } from '../pages/HistoryPage'
 
 interface Props {
   apiKey: string
@@ -17,6 +21,8 @@ interface Props {
 export function MainLayout({ apiKey, onClearKey }: Props) {
   const { settings, updateSettings } = useSettings()
   const { model } = useModel()
+  const { token, isLoggedIn } = useAuth()
+  const [activePage, setActivePage] = useState<'saved' | 'history' | null>(null)
   const {
     messages, papers, rejectedPapers, isLoading, statusMessage, sourceStatuses,
     search, pendingKeywords, confirmedKeywords, confirmSearch, cancelSearch, reSearch,
@@ -28,7 +34,17 @@ export function MainLayout({ apiKey, onClearKey }: Props) {
   const chatInputRef = useRef<HTMLTextAreaElement>(null)
 
   const handleAnalyzePaper = (paper: Paper) => {
-    setActivePaper(prev => prev?.paper_id === paper.paper_id ? null : paper)
+    setActivePaper(prev => {
+      if (prev?.paper_id === paper.paper_id) return null
+      if (isLoggedIn && token) {
+        fetch('/api/user/history', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ paper }),
+        }).catch(() => {})
+      }
+      return paper
+    })
   }
 
   // 动态 Tab 标题
@@ -75,6 +91,9 @@ export function MainLayout({ apiKey, onClearKey }: Props) {
         />
       </div>
       <div className="flex-1 min-w-0 relative">
+        <div className="absolute top-3 right-4 z-30 flex items-center gap-2">
+          <UserMenu onNavigate={setActivePage} />
+        </div>
         <ResultsPanel
           papers={papers}
           rejectedPapers={rejectedPapers}
@@ -98,6 +117,16 @@ export function MainLayout({ apiKey, onClearKey }: Props) {
         onSend={content => activePaper && sendMessage(activePaper, content)}
         onClose={() => setActivePaper(null)}
       />
+      {activePage === 'saved' && token && (
+        <div className="fixed inset-0 z-40 bg-white">
+          <SavedPage token={token} onClose={() => setActivePage(null)} />
+        </div>
+      )}
+      {activePage === 'history' && token && (
+        <div className="fixed inset-0 z-40 bg-white">
+          <HistoryPage token={token} onClose={() => setActivePage(null)} />
+        </div>
+      )}
     </div>
   )
 }
