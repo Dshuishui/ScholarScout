@@ -24,11 +24,10 @@ def sse(event: str, data: dict) -> str:
 async def parse(request: ParseRequest):
     """Phase 1: 意图识别 + 关键词提取，返回普通 JSON 供前端展示确认。"""
     history = [{"role": m.role, "content": m.content} for m in request.messages]
-    model = request.model or DEEPSEEK_MODEL
-    intent = await classify_intent(request.query, request.api_key, history, model)
+    intent = await classify_intent(request.query, request.api_key, history)
     if intent.get("intent") == "chat":
         return {"intent": "chat", "reply": intent.get("reply", "请问有什么可以帮您？")}
-    parsed = await parse_query(request.query, request.api_key, history, model)
+    parsed = await parse_query(request.query, request.api_key, history)
     return {
         "intent": "search",
         "keywords": parsed.keywords,
@@ -44,7 +43,6 @@ async def search(request: SearchRequest):
     async def generate():
         try:
             history = [{"role": m.role, "content": m.content} for m in request.messages]
-            model = request.model or DEEPSEEK_MODEL
 
             if request.keywords:
                 # 前端已确认关键词，直接构造 ParsedQuery
@@ -56,12 +54,12 @@ async def search(request: SearchRequest):
                 )
             else:
                 # 旧路径：兼容不带关键词的调用
-                intent = await classify_intent(request.query, request.api_key, history, model)
+                intent = await classify_intent(request.query, request.api_key, history)
                 if intent.get("intent") == "chat":
                     yield sse("chat", {"message": intent.get("reply", "请问有什么可以帮您？")})
                     return
                 yield sse("progress", {"message": "正在理解您的需求..."})
-                parsed = await parse_query(request.query, request.api_key, history, model)
+                parsed = await parse_query(request.query, request.api_key, history)
 
             kw_str = "、".join(parsed.keywords)
             yield sse("progress", {"message": f"正在搜索关键词：{kw_str}..."})
@@ -102,7 +100,7 @@ async def search(request: SearchRequest):
             papers = await enhance_with_unpaywall(papers)
 
             yield sse("progress", {"message": f"正在验证相关性..."})
-            accepted, rejected = await validate_papers(papers, request.query, request.api_key, model)
+            accepted, rejected = await validate_papers(papers, request.query, request.api_key)
             final = accepted[:request.validated_limit]
 
             papers_dict = [p.model_dump() for p in final]

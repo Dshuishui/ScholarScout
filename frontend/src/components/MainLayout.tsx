@@ -74,39 +74,54 @@ export function MainLayout({ apiKey, onClearKey }: Props) {
   }, [])
 
   return (
-    <div className="h-screen flex overflow-hidden">
-      <div className="w-96 flex-shrink-0">
-        <ChatPanel
-          messages={messages}
-          isLoading={isLoading}
-          onSearch={search}
-          onClearKey={onClearKey}
-          pendingKeywords={pendingKeywords}
-          onConfirmKeywords={confirmSearch}
-          onCancelSearch={cancelSearch}
-          history={history}
-          onSearchFromHistory={searchFromHistory}
-          onRemoveHistory={removeHistory}
-          inputRef={chatInputRef}
-        />
-      </div>
-      <div className="flex-1 min-w-0 relative">
-        <div className="absolute top-3 right-4 z-30 flex items-center gap-2">
+    <div className="h-screen flex flex-col overflow-hidden">
+      {/* 全宽顶部导航栏 */}
+      <header className="h-11 flex-shrink-0 bg-white border-b border-gray-200 flex items-center px-4 justify-between z-20">
+        <span className="text-sm font-semibold text-gray-800 tracking-tight select-none">ScholarScout</span>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={onClearKey}
+            className="text-xs text-gray-400 hover:text-gray-600 transition-colors"
+            title="更换 API Key"
+          >
+            换 Key
+          </button>
           <UserMenu onNavigate={setActivePage} />
         </div>
-        <ResultsPanel
-          papers={papers}
-          rejectedPapers={rejectedPapers}
-          isLoading={isLoading}
-          statusMessage={statusMessage}
-          sourceStatuses={sourceStatuses}
-          settings={settings}
-          onSettingsChange={updateSettings}
-          onReSearch={reSearch}
-          confirmedKeywords={confirmedKeywords}
-          onAnalyzePaper={handleAnalyzePaper}
-          onExampleSearch={search}
-        />
+      </header>
+
+      {/* 主内容区 */}
+      <div className="flex-1 flex overflow-hidden">
+        <div className="w-96 flex-shrink-0">
+          <ChatPanel
+            messages={messages}
+            isLoading={isLoading}
+            onSearch={search}
+            onClearKey={onClearKey}
+            pendingKeywords={pendingKeywords}
+            onConfirmKeywords={confirmSearch}
+            onCancelSearch={cancelSearch}
+            history={history}
+            onSearchFromHistory={searchFromHistory}
+            onRemoveHistory={removeHistory}
+            inputRef={chatInputRef}
+          />
+        </div>
+        <div className="flex-1 min-w-0">
+          <ResultsPanel
+            papers={papers}
+            rejectedPapers={rejectedPapers}
+            isLoading={isLoading}
+            statusMessage={statusMessage}
+            sourceStatuses={sourceStatuses}
+            settings={settings}
+            onSettingsChange={updateSettings}
+            onReSearch={reSearch}
+            confirmedKeywords={confirmedKeywords}
+            onAnalyzePaper={handleAnalyzePaper}
+            onExampleSearch={search}
+          />
+        </div>
       </div>
 
       <ToastContainer />

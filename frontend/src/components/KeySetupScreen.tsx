@@ -355,7 +355,7 @@ export function KeySetupScreen({ onKeySubmit }: Props) {
 
             {/* 模型选择 */}
             <div className="mb-4">
-              <label className="block text-base font-semibold text-gray-700 mb-2">模型选择</label>
+              <label className="block text-base font-semibold text-gray-700 mb-2">论文 AI 对话模型</label>
               <div className="relative">
                 <select
                   value={selectedModel}
