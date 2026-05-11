@@ -37,9 +37,11 @@ interface Props {
   isRejected?: boolean
   onAnalyze?: () => void
   compact?: boolean
+  isSaved?: boolean
+  onSave?: () => void
 }
 
-export function PaperCard({ paper, selected = false, onToggle, isRejected = false, onAnalyze, compact = false }: Props) {
+export function PaperCard({ paper, selected = false, onToggle, isRejected = false, onAnalyze, compact = false, isSaved = false, onSave }: Props) {
   const [copied, setCopied] = useState(false)
   const [expanded, setExpanded] = useState(false)
   const showAbstract = !compact || expanded
@@ -276,6 +278,19 @@ export function PaperCard({ paper, selected = false, onToggle, isRejected = fals
               </span>
               <span className="text-[10px] text-sky-400 leading-none">引用 · 全文 · 相关</span>
             </a>
+
+            {/* Bookmark — 常驻 */}
+            {onSave && (
+              <button
+                onClick={e => { e.stopPropagation(); onSave() }}
+                title={isSaved ? '取消收藏' : '收藏'}
+                className={`p-1.5 rounded-lg transition-colors ${isSaved ? 'text-blue-600 hover:text-blue-800' : 'text-gray-300 hover:text-blue-600'}`}
+              >
+                <svg className="w-4 h-4" fill={isSaved ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
+                </svg>
+              </button>
+            )}
 
             {/* AI 对话 — 常驻 */}
             {onAnalyze && (
