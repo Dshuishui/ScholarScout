@@ -13,6 +13,7 @@ import { UserMenu } from './UserMenu'
 import { SavedPage } from '../pages/SavedPage'
 import { HistoryPage } from '../pages/HistoryPage'
 import { FeedbackWidget } from './FeedbackWidget'
+import { RedPandaWidget } from './RedPandaWidget'
 
 interface Props {
   apiKey: string
@@ -125,6 +126,7 @@ export function MainLayout({ apiKey, onClearKey }: Props) {
         </div>
       </div>
 
+      <RedPandaWidget />
       <FeedbackWidget />
       <ToastContainer />
       <PaperChatDrawer

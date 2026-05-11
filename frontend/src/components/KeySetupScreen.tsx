@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { DEEPSEEK_MODELS, DEFAULT_MODEL } from '../hooks/useModel'
 import { FeedbackWidget } from './FeedbackWidget'
+import { RedPandaWidget } from './RedPandaWidget'
 
 const MODEL_STORAGE_KEY = 'scholarscout_model'
 
@@ -416,6 +417,7 @@ export function KeySetupScreen({ onKeySubmit }: Props) {
         </div>
 
       </div>
+      <RedPandaWidget />
       <FeedbackWidget />
     </>
   )
