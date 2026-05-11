@@ -42,14 +42,17 @@ export function RedPandaWidget({ isSearching = false }: { isSearching?: boolean 
   }, [isSearching])
 
   return (
-    <div className="fixed bottom-4 left-4 z-40 flex flex-col items-center select-none">
-      {/* 气泡 */}
+    <div className="fixed top-0 left-1/2 -translate-x-1/2 z-40 flex flex-col items-center select-none">
+      {/* 小熊猫从顶部探出，脚踩在导航栏上 */}
+
+      {/* 气泡在熊猫下方 */}
       {bubble && (
         <div
-          className="mb-2 bg-white border border-gray-200 rounded-2xl rounded-bl-sm px-3 py-2 shadow-lg text-xs text-gray-700 leading-relaxed max-w-[180px] whitespace-pre-line animate-fade-in"
-          style={{ animation: 'fadeInUp 0.2s ease' }}
+          className="mt-14 bg-white border border-gray-200 rounded-2xl rounded-tl-sm px-3 py-2 shadow-lg text-xs text-gray-700 leading-relaxed max-w-[200px] whitespace-pre-line absolute top-0"
+          style={{ animation: 'fadeInUp 0.2s ease', left: '50%', transform: 'translateX(10%)' }}
         >
           {bubble}
+          <div className="absolute -top-1.5 left-4 w-3 h-3 bg-white border-l border-t border-gray-200 rotate-45" />
         </div>
       )}
 
@@ -64,7 +67,7 @@ export function RedPandaWidget({ isSearching = false }: { isSearching?: boolean 
         }}
         title="点我！"
       >
-        <svg width="72" height="90" viewBox="0 0 72 90" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <svg width="52" height="65" viewBox="0 0 72 90" fill="none" xmlns="http://www.w3.org/2000/svg">
           {/* 尾巴（在身体后面） */}
           <ellipse cx="60" cy="72" rx="10" ry="7" fill="#C1440E" transform="rotate(-30 60 72)" />
           <ellipse cx="62" cy="70" rx="6" ry="4" fill="#3D1A00" transform="rotate(-30 62 70)" />
