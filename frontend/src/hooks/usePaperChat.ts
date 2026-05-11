@@ -1,5 +1,6 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import type { Paper } from '../types'
+import { useAuth } from './useAuth'
 
 export interface ChatMessage {
   role: 'user' | 'assistant'
@@ -8,8 +9,37 @@ export interface ChatMessage {
 }
 
 export function usePaperChat(apiKey: string, model: string = 'deepseek-v4-flash') {
+  const { token, isLoggedIn } = useAuth()
   const [histories, setHistories] = useState<Map<string, ChatMessage[]>>(new Map())
   const [streamingPaperId, setStreamingPaperId] = useState<string | null>(null)
+
+  // 登录后从后端加载历史对话
+  useEffect(() => {
+    if (!isLoggedIn || !token) return
+    fetch('/api/user/chats', { headers: { Authorization: `Bearer ${token}` } })
+      .then(r => r.json())
+      .then((items: { paper_id_hash: string; paper: Paper; messages: ChatMessage[] }[]) => {
+        setHistories(prev => {
+          const next = new Map(prev)
+          for (const item of items) {
+            if (!next.has(item.paper.paper_id)) {
+              next.set(item.paper.paper_id, item.messages)
+            }
+          }
+          return next
+        })
+      })
+      .catch(() => {})
+  }, [isLoggedIn, token])
+
+  const _saveToBackend = useCallback((paper: Paper, msgs: ChatMessage[], tok: string) => {
+    const messages = msgs.filter(m => !m.isStreaming).map(m => ({ role: m.role, content: m.content }))
+    fetch('/api/user/chats', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${tok}` },
+      body: JSON.stringify({ paper, messages }),
+    }).catch(() => {})
+  }, [])
 
   const getMessages = useCallback(
     (paperId: string) => histories.get(paperId) ?? [],
@@ -77,6 +107,8 @@ export function usePaperChat(apiKey: string, model: string = 'deepseek-v4-flash'
           const msgs = [...(prev.get(paperId) ?? [])]
           msgs[msgs.length - 1] = { role: 'assistant', content: accumulated }
           next.set(paperId, msgs)
+          // 登录后保存到后端
+          if (token) _saveToBackend(paper, msgs, token)
           return next
         })
       } catch (err) {
@@ -92,7 +124,7 @@ export function usePaperChat(apiKey: string, model: string = 'deepseek-v4-flash'
         setStreamingPaperId(null)
       }
     },
-    [apiKey, histories],
+    [apiKey, histories, token, _saveToBackend],
   )
 
   return {

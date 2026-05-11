@@ -34,3 +34,14 @@ class Feedback(Base):
     id = Column(Integer, primary_key=True)
     content = Column(String(200), nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class PaperChat(Base):
+    __tablename__ = "paper_chats"
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, nullable=False)
+    paper_id_hash = Column(String(64), nullable=False)
+    paper_json = Column(Text, nullable=False)
+    messages_json = Column(Text, nullable=False, default="[]")
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    __table_args__ = (UniqueConstraint("user_id", "paper_id_hash"),)

@@ -10,7 +10,9 @@ const BUBBLES = [
   '论文找到了吗？加油！',
 ]
 
-export function RedPandaWidget() {
+const SLOW_SEARCH_BUBBLE = '搜索有点慢，耐心等一下 🐾\n后面作者有空会改进滴！'
+
+export function RedPandaWidget({ isSearching = false }: { isSearching?: boolean }) {
   const [bubble, setBubble] = useState<string | null>(null)
   const [bouncing, setBouncing] = useState(false)
   const [bubbleIdx, setBubbleIdx] = useState(0)
@@ -28,6 +30,16 @@ export function RedPandaWidget() {
     const t = setTimeout(showBubble, 8000 + Math.random() * 12000)
     return () => clearTimeout(t)
   }, [bubbleIdx]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // 搜索超过 8 秒自动吐槽
+  useEffect(() => {
+    if (!isSearching) return
+    const t = setTimeout(() => {
+      setBubble(SLOW_SEARCH_BUBBLE)
+      setTimeout(() => setBubble(null), 5000)
+    }, 8000)
+    return () => clearTimeout(t)
+  }, [isSearching])
 
   return (
     <div className="fixed bottom-4 left-4 z-40 flex flex-col items-center select-none">

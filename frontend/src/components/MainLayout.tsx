@@ -126,7 +126,7 @@ export function MainLayout({ apiKey, onClearKey }: Props) {
         </div>
       </div>
 
-      <RedPandaWidget />
+      <RedPandaWidget isSearching={isLoading} />
       <FeedbackWidget />
       <ToastContainer />
       <PaperChatDrawer
@@ -143,7 +143,7 @@ export function MainLayout({ apiKey, onClearKey }: Props) {
       )}
       {activePage === 'history' && token && (
         <div className="fixed inset-0 z-40 bg-white">
-          <HistoryPage token={token} onClose={() => setActivePage(null)} />
+          <HistoryPage token={token} onClose={() => setActivePage(null)} onOpenChat={handleAnalyzePaper} />
         </div>
       )}
     </div>

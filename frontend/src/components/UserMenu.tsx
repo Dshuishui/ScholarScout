@@ -52,7 +52,7 @@ export function UserMenu({ onNavigate }: Props) {
           <button
             onClick={() => { onNavigate('history'); setOpen(false) }}
             className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50 transition-colors"
-          >阅读历史</button>
+          >AI 对话记录</button>
           <hr className="my-1 border-gray-100" />
           <button
             onClick={() => { logout(); setOpen(false); onNavigate(null) }}
