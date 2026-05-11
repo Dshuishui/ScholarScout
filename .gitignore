@@ -7,3 +7,4 @@ deploy/.umami.env
 node_modules/
 frontend/dist/
 docs/promotion.md
+backend/scholarscout.db
