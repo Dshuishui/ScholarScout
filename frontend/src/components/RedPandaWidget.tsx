@@ -50,13 +50,12 @@ export function RedPandaWidget({ isSearching = false }: { isSearching?: boolean 
         <div
           style={{
             position: 'absolute',
-            top: '58px',
-            left: '50%',
-            transform: 'translateX(-50%)',
+            top: '8px',
+            left: 'calc(50% + 32px)',
             width: '200px',
             animation: 'fadeInUp 0.2s ease',
           }}
-          className="bg-white border border-gray-200 rounded-2xl px-3 py-2 shadow-lg text-xs text-gray-700 leading-relaxed whitespace-pre-line text-center"
+          className="bg-white border border-gray-200 rounded-2xl rounded-tl-sm px-3 py-2 shadow-lg text-xs text-gray-700 leading-relaxed whitespace-pre-line"
         >
           {bubble}
         </div>
