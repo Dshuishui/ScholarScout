@@ -1,4 +1,5 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, createContext, useContext, createElement } from 'react'
+import type { ReactNode } from 'react'
 
 const STORAGE_KEY = 'scholarscout_token'
 const USER_KEY = 'scholarscout_user'
@@ -19,7 +20,18 @@ async function apiFetch(path: string, body: object): Promise<{ access_token?: st
   return data
 }
 
-export function useAuth() {
+interface AuthContextValue {
+  user: AuthUser | null
+  token: string | null
+  isLoggedIn: boolean
+  register: (email: string, password: string) => Promise<void>
+  login: (email: string, password: string) => Promise<void>
+  logout: () => void
+}
+
+const AuthContext = createContext<AuthContextValue | null>(null)
+
+function useAuthState(): AuthContextValue {
   const [user, setUser] = useState<AuthUser | null>(() => {
     try {
       const raw = localStorage.getItem(USER_KEY)
@@ -61,4 +73,15 @@ export function useAuth() {
   }, [])
 
   return { user, token, register, login, logout, isLoggedIn: !!user }
+}
+
+export function AuthProvider({ children }: { children: ReactNode }) {
+  const auth = useAuthState()
+  return createElement(AuthContext.Provider, { value: auth }, children)
+}
+
+export function useAuth(): AuthContextValue {
+  const ctx = useContext(AuthContext)
+  if (!ctx) throw new Error('useAuth must be used within AuthProvider')
+  return ctx
 }

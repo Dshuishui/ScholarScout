@@ -41,10 +41,7 @@ export function useSearch(apiKey: string, settings: SearchSettings, model?: stri
     keywords: string[]
   ) => {
     setIsLoading(true)
-    setPapers([])
-    setRejectedPapers([])
     setStatusMessage('')
-    setSourceStatuses({})
     updateAssistant(assistantId, { content: '正在搜索...', isLoading: true })
 
     try {
@@ -54,6 +51,10 @@ export function useSearch(apiKey: string, settings: SearchSettings, model?: stri
         model
       )) {
         if (event.type === 'search_start') {
+          // 真正开始搜索时才清空上一次结果
+          setPapers([])
+          setRejectedPapers([])
+          setSourceStatuses({})
           const init: Record<string, SourceStatus> = {}
           event.sources.forEach(s => { init[s] = { status: 'pending', count: 0 } })
           setSourceStatuses(init)
