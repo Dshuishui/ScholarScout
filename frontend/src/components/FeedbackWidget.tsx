@@ -29,7 +29,10 @@ export function FeedbackWidget() {
   const fetchFeedback = () => {
     fetch('/api/feedback')
       .then(r => r.json())
-      .then((data: FeedbackItem[]) => setItems(data))
+      .then((data: FeedbackItem[]) => {
+        setItems(data)
+        setTimeout(() => feedRef.current?.scrollTo({ top: feedRef.current.scrollHeight }), 50)
+      })
       .catch(() => {})
   }
 
@@ -69,7 +72,7 @@ export function FeedbackWidget() {
       setText('')
       setCooldown(60)
       fetchFeedback()
-      setTimeout(() => feedRef.current?.scrollTo({ top: 0, behavior: 'smooth' }), 100)
+      setTimeout(() => feedRef.current?.scrollTo({ top: feedRef.current.scrollHeight, behavior: 'smooth' }), 100)
     } catch {
       setError('网络错误，请重试')
     } finally {

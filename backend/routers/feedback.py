@@ -42,7 +42,7 @@ async def _get_location(ip: str) -> Optional[str]:
 @router.get("")
 async def get_feedback(db: AsyncSession = Depends(get_db)):
     result = await db.execute(
-        select(Feedback).order_by(Feedback.created_at.desc()).limit(50)
+        select(Feedback).order_by(Feedback.created_at.asc()).limit(50)
     )
     return [
         {
