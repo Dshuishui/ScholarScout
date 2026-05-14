@@ -283,12 +283,17 @@ export function PaperCard({ paper, selected = false, onToggle, isRejected = fals
             {onSave && (
               <button
                 onClick={e => { e.stopPropagation(); onSave() }}
-                title={isSaved ? '取消收藏' : '收藏'}
-                className={`p-1.5 rounded-lg transition-colors ${isSaved ? 'text-blue-600 bg-blue-50 hover:bg-blue-100' : 'text-gray-400 hover:text-blue-600 hover:bg-blue-50'}`}
+                title={isSaved ? '已收藏 · 点击取消' : '收藏到我的文献库（需登录）'}
+                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium border transition-all active:scale-95 ${
+                  isSaved
+                    ? 'bg-blue-600 text-white border-blue-600 hover:bg-blue-700 hover:border-blue-700'
+                    : 'bg-white text-gray-500 border-gray-200 hover:bg-blue-50 hover:text-blue-600 hover:border-blue-300'
+                }`}
               >
-                <svg className="w-4 h-4" fill={isSaved ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <svg className="w-3.5 h-3.5 flex-shrink-0" fill={isSaved ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
                 </svg>
+                {isSaved ? '已收藏' : '收藏'}
               </button>
             )}
 

@@ -8,7 +8,7 @@ export interface ChatMessage {
   isStreaming?: boolean
 }
 
-export type PdfStatus = 'idle' | 'loading' | 'ok' | 'failed'
+export type PdfStatus = 'idle' | 'ok'
 
 export function usePaperChat(apiKey: string, model: string = 'deepseek-v4-flash') {
   const { token, isLoggedIn } = useAuth()
@@ -55,37 +55,7 @@ export function usePaperChat(apiKey: string, model: string = 'deepseek-v4-flash'
     [pdfStatuses],
   )
 
-  // 自动获取论文 PDF
-  const fetchPdf = useCallback(async (paper: Paper) => {
-    const paperId = paper.paper_id
-    const current = pdfStatuses.get(paperId)
-    if (current === 'loading' || current === 'ok') return  // 已在进行中或已完成
-
-    if (!paper.pdf_url) {
-      setPdfStatuses(prev => new Map(prev).set(paperId, 'failed'))
-      return
-    }
-
-    setPdfStatuses(prev => new Map(prev).set(paperId, 'loading'))
-    try {
-      const r = await fetch('/api/paper/fetch-pdf', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pdf_url: paper.pdf_url }),
-      })
-      const data = await r.json()
-      if (data.text) {
-        setPdfTextsState(prev => new Map(prev).set(paperId, data.text))
-        setPdfStatuses(prev => new Map(prev).set(paperId, 'ok'))
-      } else {
-        setPdfStatuses(prev => new Map(prev).set(paperId, 'failed'))
-      }
-    } catch {
-      setPdfStatuses(prev => new Map(prev).set(paperId, 'failed'))
-    }
-  }, [pdfStatuses])
-
-  // 手动设置 PDF 文本（用户上传后）
+  // 用户手动上传 PDF 后设置文本
   const setPdfText = useCallback((paperId: string, text: string) => {
     setPdfTextsState(prev => new Map(prev).set(paperId, text))
     setPdfStatuses(prev => new Map(prev).set(paperId, 'ok'))
@@ -189,7 +159,6 @@ export function usePaperChat(apiKey: string, model: string = 'deepseek-v4-flash'
     sendMessage,
     isStreaming: streamingPaperId !== null,
     streamingPaperId,
-    fetchPdf,
     getPdfStatus,
     setPdfText,
     clearChat,

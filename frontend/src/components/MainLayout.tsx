@@ -32,7 +32,7 @@ export function MainLayout({ apiKey, onClearKey }: Props) {
   } = useSearch(apiKey, settings, model)
 
   const [activePaper, setActivePaper] = useState<Paper | null>(null)
-  const { getMessages, sendMessage, isStreaming, streamingPaperId, fetchPdf, getPdfStatus, setPdfText, clearChat } = usePaperChat(apiKey, model)
+  const { getMessages, sendMessage, isStreaming, streamingPaperId, getPdfStatus, setPdfText, clearChat } = usePaperChat(apiKey, model)
   const chatInputRef = useRef<HTMLTextAreaElement>(null)
 
   const handleAnalyzePaper = (paper: Paper) => {
@@ -45,7 +45,6 @@ export function MainLayout({ apiKey, onClearKey }: Props) {
           body: JSON.stringify({ paper }),
         }).catch(() => {})
       }
-      fetchPdf(paper)
       return paper
     })
   }
