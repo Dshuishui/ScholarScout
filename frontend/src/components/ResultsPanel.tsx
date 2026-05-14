@@ -681,7 +681,7 @@ const addKeyword = () => {
             </button>
           )}
           {!settingsChanged && (
-            <span className="text-xs text-gray-300">调整参数或勾选源后点击重新搜索</span>
+            <span className="text-xs text-gray-400">调整参数或勾选源后点击重新搜索</span>
           )}
         </div>
       </div>
@@ -694,15 +694,15 @@ const addKeyword = () => {
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
-                className={`px-4 py-3 text-base font-medium border-b-2 transition-colors ${
+                className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
                   activeTab === tab
-                    ? 'border-blue-600 text-blue-600'
-                    : 'border-transparent text-gray-400 hover:text-gray-600'
+                    ? 'border-indigo-600 text-indigo-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700'
                 }`}
               >
                 {tab === 'filtered' ? 'AI 筛选后' : '全部结果'}
                 <span className={`ml-1.5 text-xs rounded-full px-1.5 py-0.5 tabular-nums ${
-                  activeTab === tab ? 'bg-blue-100 text-blue-600' : 'bg-gray-100 text-gray-400'
+                  activeTab === tab ? 'bg-indigo-100 text-indigo-600' : 'bg-gray-100 text-gray-600'
                 }`}>
                   {tab === 'filtered' ? papers.length : papers.length + rejectedPapers.length}
                 </span>
@@ -798,7 +798,7 @@ const addKeyword = () => {
                         {source}
                       </span>
                       {st.status === 'done' && (
-                        <span className="text-xs text-gray-400 ml-auto tabular-nums flex-shrink-0">
+                        <span className="text-xs text-gray-500 ml-auto tabular-nums flex-shrink-0">
                           {st.count}
                         </span>
                       )}
@@ -808,8 +808,8 @@ const addKeyword = () => {
               </div>
             ) : statusMessage ? (
               <div className="flex items-center gap-2 px-1 pb-1">
-                <div className="w-4 h-4 rounded-full border-2 border-transparent border-t-blue-500 animate-spin flex-shrink-0" />
-                <p className="text-sm text-gray-400">{statusMessage}</p>
+                <div className="w-4 h-4 rounded-full border-2 border-transparent border-t-indigo-500 animate-spin flex-shrink-0" />
+                <p className="text-sm text-gray-600">{statusMessage}</p>
               </div>
             ) : null}
             {Array.from({ length: 4 }).map((_, i) => (
@@ -835,7 +835,7 @@ const addKeyword = () => {
               </p>
             </div>
             <div className="flex flex-col gap-2 w-full max-w-xs">
-              <p className="text-xs text-gray-300 mb-1">点击示例快速开始 ↓</p>
+              <p className="text-xs text-gray-400 mb-1">点击示例快速开始 ↓</p>
               {[
                 '找 2023 年后关于大模型幻觉问题的论文',
                 'diffusion model 在医学图像的应用综述',

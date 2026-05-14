@@ -350,29 +350,35 @@ export function KeySetupScreen({ onKeySubmit }: Props) {
                 onChange={e => { setInput(e.target.value); setError('') }}
                 onKeyDown={e => { if (e.key === 'Enter' && !isValidating) handleSubmit() }}
                 placeholder="sk-xxxxxxxxxxxxxxxx"
-                className="w-full bg-white border border-gray-200 rounded-xl px-4 py-3.5 text-base placeholder-gray-300 shadow-sm transition-all focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-400/20 focus:shadow-[0_0_0_4px_rgba(59,130,246,0.08)]"
+                className="w-full bg-white border border-gray-200 rounded-xl px-4 py-3.5 text-base placeholder-gray-300 shadow-sm transition-all focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/30"
               />
               {error && <p className="text-red-500 text-xs mt-1.5">{error}</p>}
             </div>
 
-            {/* 模型选择 */}
+            {/* 模型选择 — 卡片式 */}
             <div className="mb-4">
-              <label className="block text-base font-semibold text-gray-700 mb-2">论文 AI 对话模型</label>
-              <div className="relative">
-                <select
-                  value={selectedModel}
-                  onChange={e => handleModelChange(e.target.value)}
-                  className="w-full appearance-none bg-white border border-gray-200 rounded-xl px-4 py-3.5 text-base text-gray-700 shadow-sm cursor-pointer pr-10 focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-400/20"
-                >
-                  {DEEPSEEK_MODELS.map(m => (
-                    <option key={m.id} value={m.id}>{m.name} · {m.desc}</option>
-                  ))}
-                </select>
-                <div className="absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400">
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                  </svg>
-                </div>
+              <label className="block text-base font-semibold text-gray-700 mb-2">
+                论文 AI 对话模型
+                <span className="ml-1.5 text-xs font-normal text-gray-400">仅影响论文对话，搜索始终用 Flash</span>
+              </label>
+              <div className="grid grid-cols-2 gap-2">
+                {DEEPSEEK_MODELS.map(m => (
+                  <button
+                    key={m.id}
+                    type="button"
+                    onClick={() => handleModelChange(m.id)}
+                    className={`text-left p-3 rounded-xl border transition-all focus:outline-none focus:ring-2 ${
+                      selectedModel === m.id
+                        ? 'border-blue-400 bg-blue-50 ring-blue-300/40 shadow-sm'
+                        : 'border-gray-200 bg-white hover:border-blue-200 hover:bg-blue-50/30 ring-transparent'
+                    }`}
+                  >
+                    <p className={`text-sm font-semibold leading-tight ${selectedModel === m.id ? 'text-blue-700' : 'text-gray-800'}`}>
+                      {m.name}
+                    </p>
+                    <p className="text-xs text-gray-500 mt-0.5 leading-snug">{m.desc}</p>
+                  </button>
+                ))}
               </div>
             </div>
 
