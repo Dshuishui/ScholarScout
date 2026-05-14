@@ -77,27 +77,13 @@ export function ChatPanel({
   }
 
   return (
-    <div className="flex flex-col h-full bg-white border-r border-gray-200">
-      {/* Header */}
-      <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-        <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center flex-shrink-0">
-            <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-            </svg>
-          </div>
-          <div>
-            <h1 className="text-base font-bold text-gray-900 leading-none mb-0.5">ScholarScout</h1>
-            <p className="text-sm text-gray-400 leading-none">AI 学术论文搜索</p>
-          </div>
-        </div>
-        <button
-          onClick={onClearKey}
-          className="text-xs text-gray-400 hover:text-gray-600 transition-colors px-2.5 py-1.5 rounded-lg hover:bg-gray-100"
-        >
-          更换 Key
-        </button>
+    <div className="flex flex-col h-full bg-white/80 border-r border-indigo-100/60">
+      {/* Section label — 顶栏已有品牌，这里只标注功能区 */}
+      <div className="flex items-center gap-2 px-5 py-3 border-b border-gray-100/80">
+        <div className="w-1.5 h-4 rounded-full bg-indigo-500/70" />
+        <span className="text-[11px] font-semibold text-indigo-500/80 uppercase tracking-widest select-none">
+          搜索对话
+        </span>
       </div>
 
       {/* Messages */}

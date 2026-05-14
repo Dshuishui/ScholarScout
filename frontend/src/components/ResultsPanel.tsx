@@ -504,10 +504,18 @@ const addKeyword = () => {
   }
 
   return (
-    <div className="flex flex-col h-full bg-slate-50">
+    <div className="flex flex-col h-full" style={{ background: 'transparent' }}>
       {/* 顶部标题栏 */}
-      <div className="px-5 py-3 border-b border-gray-200 bg-white flex items-center justify-between gap-3">
-        <h2 className="text-sm font-semibold text-gray-800 flex-shrink-0">搜索结果</h2>
+      <div className="px-5 py-3 border-b border-gray-200/80 bg-white/70 backdrop-blur-sm flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <div className="w-1.5 h-4 rounded-full bg-gray-300" />
+          <h2 className="text-[11px] font-semibold text-gray-400 uppercase tracking-widest">搜索结果</h2>
+          {papers.length > 0 && (
+            <span className="text-xs font-semibold text-gray-700 bg-gray-100 rounded-full px-2 py-0.5 ml-1">
+              {sortedPapers.length}
+            </span>
+          )}
+        </div>
 
         {papers.length > 0 && (
           <div className="flex items-center gap-1.5 flex-wrap">

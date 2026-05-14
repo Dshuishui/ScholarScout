@@ -25,7 +25,7 @@ export function UserMenu({ onNavigate }: Props) {
       <>
         <button
           onClick={() => setShowModal(true)}
-          className="text-sm text-gray-500 hover:text-gray-800 border border-gray-200 rounded-lg px-3 py-1.5 transition-colors"
+          className="text-xs font-medium text-indigo-200 hover:text-white border border-indigo-500/30 hover:border-indigo-400/50 hover:bg-white/5 rounded-lg px-3 py-1.5 transition-all"
         >登录</button>
         {showModal && <AuthModal onClose={() => setShowModal(false)} />}
       </>
