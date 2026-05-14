@@ -1,5 +1,6 @@
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker, DeclarativeBase
+from sqlalchemy import text
 
 DATABASE_URL = "sqlite+aiosqlite:///./scholarscout.db"
 engine = create_async_engine(DATABASE_URL, echo=False)
@@ -13,6 +14,15 @@ class Base(DeclarativeBase):
 async def init_db():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        # 为已存在的 feedback 表补充新列（SQLite 不支持 IF NOT EXISTS，用 try/except）
+        for sql in [
+            "ALTER TABLE feedback ADD COLUMN location TEXT",
+            "ALTER TABLE feedback ADD COLUMN is_author INTEGER DEFAULT 0",
+        ]:
+            try:
+                await conn.execute(text(sql))
+            except Exception:
+                pass
 
 
 async def get_db():

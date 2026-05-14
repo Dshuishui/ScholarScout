@@ -1,20 +1,22 @@
 import { useState, useEffect, useRef } from 'react'
+import { useAuth } from '../hooks/useAuth'
 
 interface FeedbackItem {
   id: number
   content: string
+  location: string | null
+  is_author: boolean
   created_at: string
 }
 
-function timeAgo(iso: string): string {
-  const diff = Math.floor((Date.now() - new Date(iso).getTime()) / 1000)
-  if (diff < 60) return '刚刚'
-  if (diff < 3600) return `${Math.floor(diff / 60)} 分钟前`
-  if (diff < 86400) return `${Math.floor(diff / 3600)} 小时前`
-  return `${Math.floor(diff / 86400)} 天前`
+function formatTime(iso: string): string {
+  const d = new Date(iso)
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
 
 export function FeedbackWidget() {
+  const { token } = useAuth()
   const [open, setOpen] = useState(false)
   const [items, setItems] = useState<FeedbackItem[]>([])
   const [text, setText] = useState('')
@@ -55,9 +57,11 @@ export function FeedbackWidget() {
     setSubmitting(true)
     setError('')
     try {
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+      if (token) headers['Authorization'] = `Bearer ${token}`
       const r = await fetch('/api/feedback', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({ content }),
       })
       if (r.status === 429) { setError('发送太频繁，请稍后再试'); return }
@@ -79,7 +83,7 @@ export function FeedbackWidget() {
       <button
         onClick={() => setOpen(v => !v)}
         className="fixed bottom-6 right-6 z-50 w-12 h-12 rounded-full bg-blue-600 hover:bg-blue-700 text-white shadow-lg flex items-center justify-center transition-all hover:scale-105"
-        title="用户反馈"
+        title="用户留言板"
       >
         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
@@ -89,26 +93,53 @@ export function FeedbackWidget() {
 
       {/* 反馈面板 */}
       {open && (
-        <div className="fixed bottom-22 right-6 z-50 w-80 bg-white rounded-2xl shadow-2xl border border-gray-100 flex flex-col overflow-hidden"
-          style={{ height: '460px' }}>
+        <div
+          className="fixed right-6 z-50 w-80 bg-white rounded-2xl shadow-2xl border border-gray-100 flex flex-col overflow-hidden"
+          style={{ bottom: '88px', height: '480px' }}
+        >
           {/* 头部 */}
-          <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 flex-shrink-0">
+          <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 flex-shrink-0 bg-gradient-to-r from-blue-50 to-white">
             <div>
               <h3 className="text-sm font-semibold text-gray-800">用户留言板</h3>
-              <p className="text-xs text-gray-400">公开 · 所有人可见</p>
+              <p className="text-xs text-gray-400">公开 · 所有人可见 · 实时更新</p>
             </div>
             <button onClick={() => setOpen(false)} className="text-gray-400 hover:text-gray-600 text-lg leading-none">×</button>
           </div>
 
           {/* 留言流 */}
-          <div ref={feedRef} className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
+          <div ref={feedRef} className="flex-1 overflow-y-auto px-3 py-3 space-y-2.5">
             {items.length === 0 && (
               <p className="text-center text-gray-400 text-sm mt-8">还没有留言，来说点什么吧 👋</p>
             )}
             {items.map(item => (
-              <div key={item.id} className="bg-gray-50 rounded-xl px-3 py-2.5">
+              <div
+                key={item.id}
+                className={`rounded-xl px-3 py-2.5 border ${item.is_author ? 'bg-blue-50 border-blue-100' : 'bg-gray-50 border-gray-100'}`}
+              >
+                {/* 头部：作者标签 + 时间 */}
+                <div className="flex items-center gap-1.5 mb-1.5">
+                  {item.is_author ? (
+                    <span className="text-[10px] font-bold text-white bg-blue-500 rounded-full px-1.5 py-0.5 leading-none">作者</span>
+                  ) : (
+                    <span className="text-[10px] text-gray-400">匿名</span>
+                  )}
+                  <span className="text-[10px] text-gray-300">·</span>
+                  <span className="text-[10px] text-gray-400">{formatTime(item.created_at)}</span>
+                  {item.location && (
+                    <>
+                      <span className="text-[10px] text-gray-300">·</span>
+                      <span className="text-[10px] text-gray-400 flex items-center gap-0.5">
+                        <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                        </svg>
+                        {item.location}
+                      </span>
+                    </>
+                  )}
+                </div>
+                {/* 内容 */}
                 <p className="text-sm text-gray-700 leading-relaxed break-words">{item.content}</p>
-                <p className="text-xs text-gray-400 mt-1">{timeAgo(item.created_at)}</p>
               </div>
             ))}
           </div>

@@ -33,6 +33,8 @@ class Feedback(Base):
     __tablename__ = "feedback"
     id = Column(Integer, primary_key=True)
     content = Column(String(200), nullable=False)
+    location = Column(String(100), nullable=True)
+    is_author = Column(Integer, default=0)
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
