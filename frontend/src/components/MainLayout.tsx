@@ -151,7 +151,6 @@ export function MainLayout({ apiKey, onClearKey }: Props) {
             messages={messages}
             isLoading={isLoading}
             onSearch={search}
-            onClearKey={onClearKey}
             pendingKeywords={pendingKeywords}
             onConfirmKeywords={confirmSearch}
             onCancelSearch={cancelSearch}

@@ -8,7 +8,6 @@ interface Props {
   messages: Message[]
   isLoading: boolean
   onSearch: (query: string) => void
-  onClearKey: () => void
   pendingKeywords: string[] | null
   onConfirmKeywords: (keywords: string[]) => void
   onCancelSearch: () => void
@@ -19,7 +18,7 @@ interface Props {
 }
 
 export function ChatPanel({
-  messages, isLoading, onSearch, onClearKey,
+  messages, isLoading, onSearch,
   pendingKeywords, onConfirmKeywords, onCancelSearch,
   history, onSearchFromHistory, onRemoveHistory, inputRef,
 }: Props) {
