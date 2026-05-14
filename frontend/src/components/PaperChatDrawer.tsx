@@ -38,13 +38,15 @@ interface Props {
   onSend: (content: string) => void
   onClose: () => void
   onUploadPdf: (file: File) => Promise<void>
+  onNewChat: () => void
 }
 
-export function PaperChatDrawer({ paper, messages, isStreaming, pdfStatus, onSend, onClose, onUploadPdf }: Props) {
+export function PaperChatDrawer({ paper, messages, isStreaming, pdfStatus, onSend, onClose, onUploadPdf, onNewChat }: Props) {
   const [input, setInput] = useState('')
   const [editingPrompts, setEditingPrompts] = useState(false)
   const [newPrompt, setNewPrompt] = useState('')
   const [uploading, setUploading] = useState(false)
+  const [resumeCount, setResumeCount] = useState(0)
   const bottomRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -59,8 +61,10 @@ export function PaperChatDrawer({ paper, messages, isStreaming, pdfStatus, onSen
     if (isOpen) {
       setTimeout(() => textareaRef.current?.focus(), 300)
       setInput('')
+      // 记录打开时的已有消息数，用于显示"恢复"提示
+      setResumeCount(messages.filter(m => !m.isStreaming).length)
     }
-  }, [isOpen, paper?.paper_id])
+  }, [isOpen, paper?.paper_id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleSend = () => {
     const q = input.trim()
@@ -130,6 +134,23 @@ export function PaperChatDrawer({ paper, messages, isStreaming, pdfStatus, onSen
                   </svg>
                 </button>
               </div>
+
+              {/* 恢复对话提示 */}
+              {resumeCount > 0 && (
+                <div className="mt-2 flex items-center gap-1.5 text-xs text-gray-500">
+                  <svg className="w-3.5 h-3.5 text-blue-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                  </svg>
+                  <span>已加载上次 {resumeCount} 条对话</span>
+                  <span className="text-gray-300">·</span>
+                  <button
+                    onClick={() => { onNewChat(); setResumeCount(0) }}
+                    className="text-blue-500 hover:text-blue-700 hover:underline transition-colors"
+                  >
+                    新建会话
+                  </button>
+                </div>
+              )}
 
               {/* PDF 状态栏 */}
               <div className="mt-2">

@@ -5,6 +5,7 @@ import JSZip from 'jszip'
 import type { Paper } from '../types'
 import type { SearchSettings } from '../hooks/useSettings'
 import type { SourceStatus } from '../hooks/useSearch'
+import type { ChatMessage } from '../hooks/usePaperChat'
 import { ALL_SOURCES } from '../hooks/useSettings'
 import { PaperCard } from './PaperCard'
 import { PaperCardSkeleton } from './PaperCardSkeleton'
@@ -43,6 +44,7 @@ interface Props {
   onAnalyzePaper?: (paper: Paper) => void
   onExampleSearch?: (query: string) => void
   apiKey?: string
+  getMessages?: (paperId: string) => ChatMessage[]
 }
 
 interface DownloadProgress {
@@ -77,6 +79,50 @@ async function translateTitles(titles: string[], apiKey: string): Promise<string
     const line = lines.find(l => l.startsWith(`${i + 1}.`))
     return line ? line.replace(/^\d+\.\s*/, '').trim() : ''
   })
+}
+
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+}
+
+function generateChatsHTML(papers: Paper[], getMessages: (id: string) => ChatMessage[]): string {
+  const dated = new Date().toLocaleString('zh-CN')
+  const sections = papers
+    .map(p => ({ p, msgs: getMessages(p.paper_id).filter(m => !m.isStreaming) }))
+    .filter(({ msgs }) => msgs.length > 0)
+    .map(({ p, msgs }) => {
+      const bubbles = msgs.map(m => {
+        const isUser = m.role === 'user'
+        const style = isUser
+          ? 'background:#2563eb;color:#fff;border-radius:18px 18px 4px 18px;margin-left:auto'
+          : 'background:#f3f4f6;color:#1f2937;border-radius:18px 18px 18px 4px;margin-right:auto'
+        return `<div style="display:flex;${isUser ? 'justify-content:flex-end' : 'justify-content:flex-start'};margin-bottom:10px">
+          <div style="${style};padding:10px 14px;max-width:78%;font-size:14px;line-height:1.6;white-space:pre-wrap;word-break:break-word">${escapeHtml(m.content)}</div>
+        </div>`
+      }).join('')
+      const meta = [
+        p.authors.slice(0, 3).join(', ') + (p.authors.length > 3 ? ' 等' : ''),
+        p.published_date?.slice(0, 4),
+        p.venue,
+      ].filter(Boolean).join(' · ')
+      return `<div style="margin-bottom:36px;border:1px solid #e5e7eb;border-radius:14px;overflow:hidden">
+        <div style="background:#f9fafb;padding:16px;border-bottom:1px solid #e5e7eb">
+          <div style="font-size:15px;font-weight:600;color:#111827;margin-bottom:4px">${escapeHtml(p.title)}</div>
+          <div style="font-size:12px;color:#6b7280">${escapeHtml(meta)}</div>
+        </div>
+        <div style="padding:16px;display:flex;flex-direction:column">${bubbles}</div>
+      </div>`
+    })
+
+  if (sections.length === 0) return ''
+  return `<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="UTF-8">
+<title>ScholarScout AI 对话记录</title></head>
+<body style="font-family:system-ui,-apple-system,sans-serif;max-width:860px;margin:0 auto;padding:24px;color:#1f2937">
+<h1 style="font-size:20px;font-weight:700;margin-bottom:4px">ScholarScout AI 对话记录</h1>
+<p style="color:#6b7280;font-size:13px;margin-bottom:32px">导出时间：${escapeHtml(dated)} · 共 ${sections.length} 篇论文有对话记录</p>
+${sections.join('\n')}
+</body></html>`
 }
 
 function downloadCSV(rows: string[][], filename: string) {
@@ -132,7 +178,7 @@ function Pagination({ current, total, onChange }: {
   )
 }
 
-export function ResultsPanel({ papers, rejectedPapers = [], isLoading, statusMessage, sourceStatuses = {}, settings, onSettingsChange, onReSearch, confirmedKeywords, onAnalyzePaper, onExampleSearch, apiKey }: Props) {
+export function ResultsPanel({ papers, rejectedPapers = [], isLoading, statusMessage, sourceStatuses = {}, settings, onSettingsChange, onReSearch, confirmedKeywords, onAnalyzePaper, onExampleSearch, apiKey, getMessages }: Props) {
   const [currentPage, setCurrentPage] = useState(1)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [downloadProgress, setDownloadProgress] = useState<DownloadProgress | null>(null)
@@ -155,7 +201,7 @@ export function ResultsPanel({ papers, rejectedPapers = [], isLoading, statusMes
   const [savedMap, setSavedMap] = useState<Map<string, string>>(new Map())
   const [showAuthModal, setShowAuthModal] = useState(false)
   const [showExportModal, setShowExportModal] = useState(false)
-  const [exportOpts, setExportOpts] = useState({ aiAnalysis: true, translate: true })
+  const [exportOpts, setExportOpts] = useState({ aiAnalysis: true, translate: true, chats: true })
   const [exporting, setExporting] = useState(false)
 
   useEffect(() => {
@@ -194,6 +240,7 @@ export function ResultsPanel({ papers, rejectedPapers = [], isLoading, statusMes
   const handleExport = async () => {
     setExporting(true)
     try {
+      const dateStr = new Date().toISOString().slice(0, 10)
       const headers: string[] = ['标题', '作者', '年份', '来源', '引用数', '摘要', '论文链接', 'PDF链接']
       if (exportOpts.translate) headers.splice(1, 0, '中文标题')
       if (exportOpts.aiAnalysis) headers.push('AI相关性分析')
@@ -219,7 +266,31 @@ export function ResultsPanel({ papers, rejectedPapers = [], isLoading, statusMes
         return row
       })
 
-      downloadCSV([headers, ...rows], `scholarscout-${new Date().toISOString().slice(0, 10)}.csv`)
+      const csvContent = [headers, ...rows]
+        .map(row => row.map(cell => `"${cell.replace(/"/g, '""')}"`).join(','))
+        .join('\n')
+
+      // 判断是否需要附带对话记录
+      const chatsHTML = (exportOpts.chats && getMessages)
+        ? generateChatsHTML(papers, getMessages)
+        : ''
+
+      if (chatsHTML) {
+        // 打包成 ZIP
+        const zip = new JSZip()
+        zip.file('papers.csv', '﻿' + csvContent)
+        zip.file('chats.html', chatsHTML)
+        const blob = await zip.generateAsync({ type: 'blob' })
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = `scholarscout-${dateStr}.zip`
+        a.click()
+        URL.revokeObjectURL(url)
+      } else {
+        downloadCSV([headers, ...rows], `scholarscout-${dateStr}.csv`)
+      }
+
       setShowExportModal(false)
     } finally {
       setExporting(false)
@@ -857,6 +928,21 @@ const addKeyword = () => {
                   <p className="text-xs text-gray-400">AI 批量翻译，导出会稍慢</p>
                 </div>
               </label>
+
+              {getMessages && (
+                <label className="flex items-start gap-3 cursor-pointer group">
+                  <input
+                    type="checkbox"
+                    checked={exportOpts.chats}
+                    onChange={e => setExportOpts(o => ({ ...o, chats: e.target.checked }))}
+                    className="mt-0.5 w-4 h-4 rounded accent-blue-600 cursor-pointer"
+                  />
+                  <div>
+                    <p className="text-sm text-gray-700 group-hover:text-gray-900">包含 AI 对话记录</p>
+                    <p className="text-xs text-gray-400">有对话的论文附带 chats.html，打包为 ZIP</p>
+                  </div>
+                </label>
+              )}
             </div>
 
             <div className="flex gap-2 mt-5">

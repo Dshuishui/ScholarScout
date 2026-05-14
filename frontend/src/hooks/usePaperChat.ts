@@ -172,6 +172,18 @@ export function usePaperChat(apiKey: string, model: string = 'deepseek-v4-flash'
     [apiKey, histories, token, _saveToBackend, pdfTexts, model],
   )
 
+  const clearChat = useCallback((paper: Paper) => {
+    const paperId = paper.paper_id
+    setHistories(prev => new Map(prev).set(paperId, []))
+    if (token) {
+      fetch('/api/user/chats', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ paper, messages: [] }),
+      }).catch(() => {})
+    }
+  }, [token])
+
   return {
     getMessages,
     sendMessage,
@@ -180,6 +192,7 @@ export function usePaperChat(apiKey: string, model: string = 'deepseek-v4-flash'
     fetchPdf,
     getPdfStatus,
     setPdfText,
+    clearChat,
   }
 }
 

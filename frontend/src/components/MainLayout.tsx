@@ -32,7 +32,7 @@ export function MainLayout({ apiKey, onClearKey }: Props) {
   } = useSearch(apiKey, settings, model)
 
   const [activePaper, setActivePaper] = useState<Paper | null>(null)
-  const { getMessages, sendMessage, isStreaming, streamingPaperId, fetchPdf, getPdfStatus, setPdfText } = usePaperChat(apiKey, model)
+  const { getMessages, sendMessage, isStreaming, streamingPaperId, fetchPdf, getPdfStatus, setPdfText, clearChat } = usePaperChat(apiKey, model)
   const chatInputRef = useRef<HTMLTextAreaElement>(null)
 
   const handleAnalyzePaper = (paper: Paper) => {
@@ -136,6 +136,7 @@ export function MainLayout({ apiKey, onClearKey }: Props) {
             onAnalyzePaper={handleAnalyzePaper}
             onExampleSearch={search}
             apiKey={apiKey}
+            getMessages={getMessages}
           />
         </div>
       </div>
@@ -151,6 +152,7 @@ export function MainLayout({ apiKey, onClearKey }: Props) {
         onSend={content => activePaper && sendMessage(activePaper, content)}
         onClose={() => setActivePaper(null)}
         onUploadPdf={handleUploadPdf}
+        onNewChat={() => activePaper && clearChat(activePaper)}
       />
       {activePage === 'saved' && token && (
         <div className="fixed inset-0 z-40 bg-white">
