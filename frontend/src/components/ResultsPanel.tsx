@@ -45,6 +45,7 @@ interface Props {
   onExampleSearch?: (query: string) => void
   apiKey?: string
   getMessages?: (paperId: string) => ChatMessage[]
+  hasSearchError?: boolean
 }
 
 interface DownloadProgress {
@@ -178,7 +179,7 @@ function Pagination({ current, total, onChange }: {
   )
 }
 
-export function ResultsPanel({ papers, rejectedPapers = [], isLoading, statusMessage, sourceStatuses = {}, settings, onSettingsChange, onReSearch, confirmedKeywords, onAnalyzePaper, onExampleSearch, apiKey, getMessages }: Props) {
+export function ResultsPanel({ papers, rejectedPapers = [], isLoading, statusMessage, sourceStatuses = {}, settings, onSettingsChange, onReSearch, confirmedKeywords, onAnalyzePaper, onExampleSearch, apiKey, getMessages, hasSearchError = false }: Props) {
   const [currentPage, setCurrentPage] = useState(1)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [downloadProgress, setDownloadProgress] = useState<DownloadProgress | null>(null)
@@ -824,7 +825,7 @@ const addKeyword = () => {
         )}
 
         {/* 空状态：示例查询可点击 */}
-        {!isLoading && papers.length === 0 && !statusMessage && (
+        {!isLoading && papers.length === 0 && rejectedPapers.length === 0 && !hasSearchError && !statusMessage && (
           <div className="flex flex-col items-center justify-center h-full min-h-[360px] text-center gap-5 px-8">
             <div className="w-16 h-16 rounded-2xl bg-white border border-gray-200 shadow-sm flex items-center justify-center">
               <svg className="w-8 h-8 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -869,6 +870,59 @@ const addKeyword = () => {
                 <span className="text-gray-200">·</span>
                 <span>过滤 {rejectedPapers.length} 篇低相关</span>
               </>
+            )}
+          </div>
+        )}
+
+        {/* AI 筛选后 0 篇引导 */}
+        {!isLoading && activeTab === 'filtered' && papers.length === 0 && rejectedPapers.length > 0 && (
+          <div className="flex flex-col items-center justify-center min-h-[280px] text-center gap-4 px-8">
+            <div className="w-14 h-14 rounded-2xl bg-amber-50 border border-amber-100 flex items-center justify-center">
+              <svg className="w-7 h-7 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+              </svg>
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-gray-700 mb-1">AI 筛选后无相关论文</p>
+              <p className="text-xs text-gray-400 leading-relaxed">
+                共找到 <span className="font-medium text-gray-600">{rejectedPapers.length}</span> 篇，但均被 AI 判为低相关<br />
+                可切换到「全部结果」查看原始结果，或调整关键词重搜
+              </p>
+            </div>
+            <button
+              onClick={() => setActiveTab('all')}
+              className="text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl px-4 py-2 transition-colors"
+            >
+              查看全部 {rejectedPapers.length} 篇
+            </button>
+          </div>
+        )}
+
+        {/* 搜索出错 — 重试 */}
+        {hasSearchError && !isLoading && papers.length === 0 && confirmedKeywords != null && (
+          <div className="flex flex-col items-center justify-center min-h-[280px] text-center gap-4 px-8">
+            <div className="w-14 h-14 rounded-2xl bg-red-50 border border-red-100 flex items-center justify-center">
+              <svg className="w-7 h-7 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-gray-700 mb-1">搜索遇到问题</p>
+              <p className="text-xs text-gray-400 leading-relaxed">
+                可能是网络波动或服务暂时不可用<br />
+                请检查 API Key 是否正确，或稍后点击重试
+              </p>
+            </div>
+            {onReSearch && (
+              <button
+                onClick={() => onReSearch(editKeywords)}
+                className="flex items-center gap-1.5 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl px-4 py-2 transition-colors"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                重新搜索
+              </button>
             )}
           </div>
         )}

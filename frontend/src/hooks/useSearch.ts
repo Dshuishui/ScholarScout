@@ -27,9 +27,9 @@ export function useSearch(apiKey: string, settings: SearchSettings, model?: stri
   const [rejectedPapers, setRejectedPapers] = useState<Paper[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [statusMessage, setStatusMessage] = useState('')
-  const [pendingSearch, setPendingSearch] = useState<PendingSearch | null>(null)
   const [lastConfirmed, setLastConfirmed] = useState<PendingSearch | null>(null)
   const [sourceStatuses, setSourceStatuses] = useState<Record<string, SourceStatus>>({})
+  const [hasSearchError, setHasSearchError] = useState(false)
   const { history, addHistory, removeHistory } = useSearchHistory()
 
   const updateAssistant = (assistantId: string, patch: Partial<Message>) =>
@@ -42,6 +42,7 @@ export function useSearch(apiKey: string, settings: SearchSettings, model?: stri
   ) => {
     setIsLoading(true)
     setStatusMessage('')
+    setHasSearchError(false)
     updateAssistant(assistantId, { content: '正在搜索...', isLoading: true })
 
     try {
@@ -88,10 +89,12 @@ export function useSearch(apiKey: string, settings: SearchSettings, model?: stri
           setStatusMessage(event.message)
         } else if (event.type === 'error') {
           setStatusMessage('')
+          setHasSearchError(true)
           updateAssistant(assistantId, { content: `出错了：${event.message}`, isLoading: false })
         }
       }
     } catch {
+      setHasSearchError(true)
       updateAssistant(assistantId, { content: '网络错误，请稍后重试', isLoading: false })
     } finally {
       setIsLoading(false)
@@ -102,13 +105,13 @@ export function useSearch(apiKey: string, settings: SearchSettings, model?: stri
     const userMsgId = Date.now().toString()
     const assistantId = (Date.now() + 1).toString()
 
-    setPendingSearch(null)
     setMessages(prev => [
       ...prev,
       { id: userMsgId, role: 'user', content: query },
       { id: assistantId, role: 'assistant', content: '正在理解您的需求...', isLoading: true },
     ])
     setStatusMessage('')
+    setHasSearchError(false)
 
     try {
       const history = messages
@@ -124,18 +127,20 @@ export function useSearch(apiKey: string, settings: SearchSettings, model?: stri
       } else {
         const kwPreview = result.keywords.join('、')
         updateAssistant(assistantId, {
-          content: `已提取关键词：**${kwPreview}**\n\n请在下方确认或编辑关键词后开始搜索。`,
-          isLoading: false,
+          content: `已提取关键词：**${kwPreview}**\n\n开始搜索...`,
+          isLoading: true,
         })
-        setPendingSearch({
+        const confirmed: PendingSearch = {
           assistantId,
           keywords: result.keywords,
           date_from: result.date_from,
           date_to: result.date_to,
           query,
           history,
-        })
-        setIsLoading(false)
+        }
+        setLastConfirmed(confirmed)
+        addHistory(result.keywords)
+        await runSearchStream(assistantId, confirmed, result.keywords)
       }
     } catch {
       updateAssistant(assistantId, {
@@ -146,22 +151,9 @@ export function useSearch(apiKey: string, settings: SearchSettings, model?: stri
     }
   }
 
-  const confirmSearch = async (keywords: string[]) => {
-    if (!pendingSearch) return
-    const snapshot = pendingSearch
-    setPendingSearch(null)
-    setLastConfirmed({ ...snapshot, keywords })
-    addHistory(keywords)
-    await runSearchStream(snapshot.assistantId, snapshot, keywords)
-  }
-
-  const cancelSearch = () => {
-    if (!pendingSearch) return
-    const { assistantId } = pendingSearch
-    setPendingSearch(null)
-    updateAssistant(assistantId, { content: '搜索已取消。', isLoading: false })
-    setIsLoading(false)
-  }
+  // Stubs for interface compatibility — pendingKeywords is always null now
+  const confirmSearch = async (_keywords: string[]) => {}
+  const cancelSearch = () => {}
 
   const reSearch = async (keywords: string[]) => {
     if (!lastConfirmed) return
@@ -207,11 +199,12 @@ export function useSearch(apiKey: string, settings: SearchSettings, model?: stri
     statusMessage,
     sourceStatuses,
     search,
-    pendingKeywords: pendingSearch?.keywords ?? null,
+    pendingKeywords: null as string[] | null,
     confirmedKeywords: lastConfirmed?.keywords ?? null,
     confirmSearch,
     cancelSearch,
     reSearch: lastConfirmed ? reSearch : undefined,
+    hasSearchError,
     history,
     removeHistory,
     searchFromHistory,
