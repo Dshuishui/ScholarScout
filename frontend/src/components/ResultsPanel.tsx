@@ -42,6 +42,7 @@ interface Props {
   sourceStatuses?: Record<string, SourceStatus>
   onAnalyzePaper?: (paper: Paper) => void
   onExampleSearch?: (query: string) => void
+  apiKey?: string
 }
 
 interface DownloadProgress {
@@ -55,26 +56,38 @@ function sanitizeFilename(title: string): string {
   return title.replace(/[<>:"/\\|?*\x00-\x1f]/g, '').trim().slice(0, 80)
 }
 
-function exportCSV(papers: Paper[]) {
-  const headers = ['标题', '作者', '年份', '来源', '引用数', '摘要', '论文链接', 'PDF链接']
-  const rows = papers.map(p => [
-    p.title,
-    p.authors.join('; '),
-    p.published_date?.slice(0, 4) ?? '',
-    p.source,
-    String(p.citations),
-    (p.abstract ?? '').replace(/\n/g, ' '),
-    p.url ?? '',
-    p.pdf_url ?? '',
-  ])
-  const csv = [headers, ...rows]
+async function translateTitles(titles: string[], apiKey: string): Promise<string[]> {
+  const numbered = titles.map((t, i) => `${i + 1}. ${t}`).join('\n')
+  const resp = await fetch('https://api.deepseek.com/chat/completions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+    body: JSON.stringify({
+      model: 'deepseek-v4-flash',
+      stream: false,
+      messages: [
+        { role: 'system', content: '你是学术翻译助手。将下列英文论文标题翻译为中文，保持学术术语准确。严格按"序号. 中文标题"格式逐行输出，不加任何解释。' },
+        { role: 'user', content: numbered },
+      ],
+    }),
+  })
+  const data = await resp.json()
+  const text: string = data.choices?.[0]?.message?.content ?? ''
+  const lines = text.split('\n').map(l => l.trim()).filter(l => /^\d+\./.test(l))
+  return titles.map((_, i) => {
+    const line = lines.find(l => l.startsWith(`${i + 1}.`))
+    return line ? line.replace(/^\d+\.\s*/, '').trim() : ''
+  })
+}
+
+function downloadCSV(rows: string[][], filename: string) {
+  const csv = rows
     .map(row => row.map(cell => `"${cell.replace(/"/g, '""')}"`).join(','))
     .join('\n')
   const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
-  a.download = `scholarscout-${new Date().toISOString().slice(0, 10)}.csv`
+  a.download = filename
   a.click()
   URL.revokeObjectURL(url)
 }
@@ -119,7 +132,7 @@ function Pagination({ current, total, onChange }: {
   )
 }
 
-export function ResultsPanel({ papers, rejectedPapers = [], isLoading, statusMessage, sourceStatuses = {}, settings, onSettingsChange, onReSearch, confirmedKeywords, onAnalyzePaper, onExampleSearch }: Props) {
+export function ResultsPanel({ papers, rejectedPapers = [], isLoading, statusMessage, sourceStatuses = {}, settings, onSettingsChange, onReSearch, confirmedKeywords, onAnalyzePaper, onExampleSearch, apiKey }: Props) {
   const [currentPage, setCurrentPage] = useState(1)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [downloadProgress, setDownloadProgress] = useState<DownloadProgress | null>(null)
@@ -141,6 +154,9 @@ export function ResultsPanel({ papers, rejectedPapers = [], isLoading, statusMes
   const { token, isLoggedIn } = useAuth()
   const [savedMap, setSavedMap] = useState<Map<string, string>>(new Map())
   const [showAuthModal, setShowAuthModal] = useState(false)
+  const [showExportModal, setShowExportModal] = useState(false)
+  const [exportOpts, setExportOpts] = useState({ aiAnalysis: true, translate: true })
+  const [exporting, setExporting] = useState(false)
 
   useEffect(() => {
     if (!isLoggedIn || !token) { setSavedMap(new Map()); return }
@@ -172,6 +188,41 @@ export function ResultsPanel({ papers, rejectedPapers = [], isLoading, statusMes
           .then(res => res.json()) as { paper_id_hash: string; paper: { paper_id: string } }[]
         setSavedMap(new Map(saved.map(i => [i.paper.paper_id, i.paper_id_hash])))
       }
+    }
+  }
+
+  const handleExport = async () => {
+    setExporting(true)
+    try {
+      const headers: string[] = ['标题', '作者', '年份', '来源', '引用数', '摘要', '论文链接', 'PDF链接']
+      if (exportOpts.translate) headers.splice(1, 0, '中文标题')
+      if (exportOpts.aiAnalysis) headers.push('AI相关性分析')
+
+      let chineseTitles: string[] = []
+      if (exportOpts.translate && apiKey) {
+        chineseTitles = await translateTitles(papers.map(p => p.title), apiKey)
+      }
+
+      const rows = papers.map((p, i) => {
+        const row = [
+          p.title,
+          p.authors.join('; '),
+          p.published_date?.slice(0, 4) ?? '',
+          p.source,
+          String(p.citations),
+          (p.abstract ?? '').replace(/\n/g, ' '),
+          p.url ?? '',
+          p.pdf_url ?? '',
+        ]
+        if (exportOpts.translate) row.splice(1, 0, chineseTitles[i] ?? '')
+        if (exportOpts.aiAnalysis) row.push(p.relevance_reason ?? '')
+        return row
+      })
+
+      downloadCSV([headers, ...rows], `scholarscout-${new Date().toISOString().slice(0, 10)}.csv`)
+      setShowExportModal(false)
+    } finally {
+      setExporting(false)
     }
   }
 
@@ -381,7 +432,7 @@ const addKeyword = () => {
             )}
 
             <button
-              onClick={() => exportCSV(papers)}
+              onClick={() => setShowExportModal(true)}
               className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700 border border-gray-200 hover:border-gray-300 bg-white hover:bg-gray-50 rounded-lg px-2.5 py-1 transition-all"
             >
               <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -772,6 +823,69 @@ const addKeyword = () => {
       </div>
 
       {showAuthModal && <AuthModal onClose={() => setShowAuthModal(false)} />}
+
+      {/* 导出 CSV 选项弹窗 */}
+      {showExportModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30" onClick={() => !exporting && setShowExportModal(false)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-80 p-5" onClick={e => e.stopPropagation()}>
+            <h3 className="text-sm font-semibold text-gray-800 mb-1">导出 CSV 选项</h3>
+            <p className="text-xs text-gray-400 mb-4">共 {papers.length} 篇论文</p>
+
+            <div className="space-y-3">
+              <label className="flex items-start gap-3 cursor-pointer group">
+                <input
+                  type="checkbox"
+                  checked={exportOpts.aiAnalysis}
+                  onChange={e => setExportOpts(o => ({ ...o, aiAnalysis: e.target.checked }))}
+                  className="mt-0.5 w-4 h-4 rounded accent-blue-600 cursor-pointer"
+                />
+                <div>
+                  <p className="text-sm text-gray-700 group-hover:text-gray-900">包含 AI 相关性分析</p>
+                  <p className="text-xs text-gray-400">每篇论文的 AI 解读说明</p>
+                </div>
+              </label>
+
+              <label className="flex items-start gap-3 cursor-pointer group">
+                <input
+                  type="checkbox"
+                  checked={exportOpts.translate}
+                  onChange={e => setExportOpts(o => ({ ...o, translate: e.target.checked }))}
+                  className="mt-0.5 w-4 h-4 rounded accent-blue-600 cursor-pointer"
+                />
+                <div>
+                  <p className="text-sm text-gray-700 group-hover:text-gray-900">翻译标题为中文</p>
+                  <p className="text-xs text-gray-400">AI 批量翻译，导出会稍慢</p>
+                </div>
+              </label>
+            </div>
+
+            <div className="flex gap-2 mt-5">
+              <button
+                onClick={() => setShowExportModal(false)}
+                disabled={exporting}
+                className="flex-1 text-sm text-gray-500 hover:text-gray-700 border border-gray-200 rounded-xl py-2 transition-colors disabled:opacity-40"
+              >
+                取消
+              </button>
+              <button
+                onClick={handleExport}
+                disabled={exporting}
+                className="flex-1 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-xl py-2 transition-colors disabled:opacity-60 flex items-center justify-center gap-1.5"
+              >
+                {exporting ? (
+                  <>
+                    <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+                    </svg>
+                    {exportOpts.translate ? '翻译中…' : '导出中…'}
+                  </>
+                ) : '确认导出'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 下载进度浮层 */}
       {downloadProgress && (

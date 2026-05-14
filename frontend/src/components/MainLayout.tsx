@@ -135,6 +135,7 @@ export function MainLayout({ apiKey, onClearKey }: Props) {
             confirmedKeywords={confirmedKeywords}
             onAnalyzePaper={handleAnalyzePaper}
             onExampleSearch={search}
+            apiKey={apiKey}
           />
         </div>
       </div>
