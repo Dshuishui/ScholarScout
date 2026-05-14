@@ -283,17 +283,22 @@ export function PaperCard({ paper, selected = false, onToggle, isRejected = fals
             {onSave && (
               <button
                 onClick={e => { e.stopPropagation(); onSave() }}
-                title={isSaved ? '已收藏 · 点击取消' : '收藏到我的文献库（需登录）'}
-                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium border transition-all active:scale-95 ${
+                title={isSaved ? '已收藏 · 点击取消收藏' : '收藏到我的文献库（需登录）'}
+                className={`flex-shrink-0 inline-flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-lg border transition-all active:scale-95 ${
                   isSaved
-                    ? 'bg-blue-600 text-white border-blue-600 hover:bg-blue-700 hover:border-blue-700'
-                    : 'bg-white text-gray-500 border-gray-200 hover:bg-blue-50 hover:text-blue-600 hover:border-blue-300'
+                    ? 'bg-blue-600 text-white border-blue-600 hover:bg-blue-700'
+                    : 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100 hover:border-blue-300'
                 }`}
               >
-                <svg className="w-3.5 h-3.5 flex-shrink-0" fill={isSaved ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
-                </svg>
-                {isSaved ? '已收藏' : '收藏'}
+                <span className="flex items-center gap-1 text-xs font-semibold leading-tight">
+                  <svg className="w-3.5 h-3.5 flex-shrink-0" fill={isSaved ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
+                  </svg>
+                  {isSaved ? '已收藏' : '收藏'}
+                </span>
+                <span className={`text-[10px] leading-none ${isSaved ? 'text-blue-200' : 'text-blue-400'}`}>
+                  {isSaved ? '点击取消' : '登录后使用'}
+                </span>
               </button>
             )}
 

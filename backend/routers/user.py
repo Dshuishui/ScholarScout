@@ -48,7 +48,7 @@ async def save_paper(body: PaperBody, user: User = Depends(get_current_user), db
         raise HTTPException(status_code=409, detail="已收藏")
     db.add(SavedPaper(user_id=user.id, paper_id_hash=h, paper_json=json.dumps(body.paper)))
     await db.commit()
-    return {"saved": True}
+    return {"saved": True, "paper_id_hash": h}
 
 
 @router.delete("/saved/{paper_hash}")

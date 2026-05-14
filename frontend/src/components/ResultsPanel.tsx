@@ -198,31 +198,46 @@ export function ResultsPanel({ papers, rejectedPapers = [], isLoading, statusMes
   }
 
   const { token, isLoggedIn } = useAuth()
-  const [savedMap, setSavedMap] = useState<Map<string, string>>(new Map())
+  const [savedMap, setSavedMap] = useState<Map<string, string>>(() => {
+    try {
+      const cached = localStorage.getItem('ss_saved_map')
+      return cached ? new Map(JSON.parse(cached) as [string, string][]) : new Map()
+    } catch { return new Map() }
+  })
   const [showAuthModal, setShowAuthModal] = useState(false)
   const [showExportModal, setShowExportModal] = useState(false)
   const [exportOpts, setExportOpts] = useState({ aiAnalysis: true, translate: true, chats: true })
   const [exporting, setExporting] = useState(false)
 
+  const _syncSaved = (items: { paper_id_hash: string; paper: { paper_id: string } }[]) => {
+    const m = new Map(items.map(i => [i.paper.paper_id, i.paper_id_hash]))
+    setSavedMap(m)
+    localStorage.setItem('ss_saved_map', JSON.stringify([...m.entries()]))
+  }
+
   useEffect(() => {
-    if (!isLoggedIn || !token) { setSavedMap(new Map()); return }
+    if (!isLoggedIn || !token) {
+      setSavedMap(new Map())
+      localStorage.removeItem('ss_saved_map')
+      return
+    }
     fetch('/api/user/saved', { headers: { Authorization: `Bearer ${token}` } })
       .then(r => r.json())
-      .then((items: { paper_id_hash: string; paper: { paper_id: string } }[]) => {
-        setSavedMap(new Map(items.map(i => [i.paper.paper_id, i.paper_id_hash])))
-      })
+      .then(_syncSaved)
       .catch(() => {})
-  }, [isLoggedIn, token])
+  }, [isLoggedIn, token]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleSave = async (paper: Paper) => {
     if (!token) return
     const existingHash = savedMap.get(paper.paper_id)
     if (existingHash) {
-      await fetch(`/api/user/saved/${existingHash}`, {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${token}` },
+      // 乐观更新
+      setSavedMap(prev => {
+        const m = new Map(prev); m.delete(paper.paper_id)
+        localStorage.setItem('ss_saved_map', JSON.stringify([...m.entries()]))
+        return m
       })
-      setSavedMap(prev => { const m = new Map(prev); m.delete(paper.paper_id); return m })
+      await fetch(`/api/user/saved/${existingHash}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } })
     } else {
       const r = await fetch('/api/user/saved', {
         method: 'POST',
@@ -230,9 +245,14 @@ export function ResultsPanel({ papers, rejectedPapers = [], isLoading, statusMes
         body: JSON.stringify({ paper }),
       })
       if (r.ok) {
-        const saved = await fetch('/api/user/saved', { headers: { Authorization: `Bearer ${token}` } })
-          .then(res => res.json()) as { paper_id_hash: string; paper: { paper_id: string } }[]
-        setSavedMap(new Map(saved.map(i => [i.paper.paper_id, i.paper_id_hash])))
+        // 乐观更新（无需重新拉取全量）
+        const data = await r.json() as { paper_id_hash?: string }
+        const hash = data.paper_id_hash ?? ''
+        setSavedMap(prev => {
+          const m = new Map(prev); m.set(paper.paper_id, hash)
+          localStorage.setItem('ss_saved_map', JSON.stringify([...m.entries()]))
+          return m
+        })
       }
     }
   }
