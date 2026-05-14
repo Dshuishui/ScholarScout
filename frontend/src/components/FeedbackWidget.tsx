@@ -30,15 +30,11 @@ function formatRelativeTime(iso: string): string {
   return `${d.getMonth() + 1}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
 
-// Rate limit: max 5 sends per 2 min, min 10s between sends
+// Rate limit: max 5 sends per 2 min
 function checkRateLimit(sendTimes: number[]): string | null {
   const now = Date.now()
   const recent = sendTimes.filter(t => now - t < 120000)
   if (recent.length >= 5) return '2 分钟内最多发送 5 条，请稍后再试'
-  if (recent.length > 0 && now - recent[recent.length - 1] < 10000) {
-    const wait = Math.ceil((10000 - (now - recent[recent.length - 1])) / 1000)
-    return `请等待 ${wait} 秒后再发送`
-  }
   return null
 }
 
@@ -105,10 +101,31 @@ export function FeedbackWidget() {
       })
       if (r.status === 429) { setError('服务器限流，请稍后再试'); return }
       if (!r.ok) { setError('发送失败，请重试'); return }
+
+      const result = await r.json() as { ok: boolean; id: number; created_at: string }
+
+      // 乐观更新：立刻显示，不等 GET 返回
+      const optimisticItem: FeedbackItem = {
+        id: result.id,
+        content,
+        recalled: false,
+        location: null,
+        is_author: false,
+        created_at: result.created_at,
+        can_recall: isLoggedIn,
+        reply_to: replyTo
+          ? { id: replyTo.id, content: (replyTo.content ?? '').slice(0, 80), recalled: replyTo.recalled }
+          : null,
+      }
+      setItems(prev => [...prev, optimisticItem])
+      scrollToBottom()
+
       setText('')
       setReplyTo(null)
       setSendTimes(prev => [...prev, Date.now()])
-      fetchFeedback()
+
+      // 后台刷新以获取准确数据（location、is_author 等）
+      setTimeout(fetchFeedback, 800)
     } catch {
       setError('网络错误，请重试')
     } finally {
