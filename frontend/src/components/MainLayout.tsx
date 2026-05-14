@@ -32,7 +32,7 @@ export function MainLayout({ apiKey, onClearKey }: Props) {
   } = useSearch(apiKey, settings, model)
 
   const [activePaper, setActivePaper] = useState<Paper | null>(null)
-  const { getMessages, sendMessage, isStreaming, streamingPaperId } = usePaperChat(apiKey, model)
+  const { getMessages, sendMessage, isStreaming, streamingPaperId, fetchPdf, getPdfStatus, setPdfText } = usePaperChat(apiKey, model)
   const chatInputRef = useRef<HTMLTextAreaElement>(null)
 
   const handleAnalyzePaper = (paper: Paper) => {
@@ -45,8 +45,21 @@ export function MainLayout({ apiKey, onClearKey }: Props) {
           body: JSON.stringify({ paper }),
         }).catch(() => {})
       }
+      fetchPdf(paper)
       return paper
     })
+  }
+
+  const handleUploadPdf = async (file: File) => {
+    if (!activePaper) return
+    const paperId = activePaper.paper_id
+    const formData = new FormData()
+    formData.append('file', file)
+    try {
+      const r = await fetch('/api/paper/parse-pdf', { method: 'POST', body: formData })
+      const data = await r.json()
+      if (data.text) setPdfText(paperId, data.text)
+    } catch { /* ignore */ }
   }
 
   // 动态 Tab 标题
@@ -133,8 +146,10 @@ export function MainLayout({ apiKey, onClearKey }: Props) {
         paper={activePaper}
         messages={activePaper ? getMessages(activePaper.paper_id) : []}
         isStreaming={!!activePaper && streamingPaperId === activePaper.paper_id && isStreaming}
+        pdfStatus={activePaper ? getPdfStatus(activePaper.paper_id) : 'idle'}
         onSend={content => activePaper && sendMessage(activePaper, content)}
         onClose={() => setActivePaper(null)}
+        onUploadPdf={handleUploadPdf}
       />
       {activePage === 'saved' && token && (
         <div className="fixed inset-0 z-40 bg-white">

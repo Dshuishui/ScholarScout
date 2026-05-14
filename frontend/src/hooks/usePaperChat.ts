@@ -8,10 +8,14 @@ export interface ChatMessage {
   isStreaming?: boolean
 }
 
+export type PdfStatus = 'idle' | 'loading' | 'ok' | 'failed'
+
 export function usePaperChat(apiKey: string, model: string = 'deepseek-v4-flash') {
   const { token, isLoggedIn } = useAuth()
   const [histories, setHistories] = useState<Map<string, ChatMessage[]>>(new Map())
   const [streamingPaperId, setStreamingPaperId] = useState<string | null>(null)
+  const [pdfStatuses, setPdfStatuses] = useState<Map<string, PdfStatus>>(new Map())
+  const [pdfTexts, setPdfTextsState] = useState<Map<string, string>>(new Map())
 
   // 登录后从后端加载历史对话
   useEffect(() => {
@@ -46,10 +50,52 @@ export function usePaperChat(apiKey: string, model: string = 'deepseek-v4-flash'
     [histories],
   )
 
+  const getPdfStatus = useCallback(
+    (paperId: string): PdfStatus => pdfStatuses.get(paperId) ?? 'idle',
+    [pdfStatuses],
+  )
+
+  // 自动获取论文 PDF
+  const fetchPdf = useCallback(async (paper: Paper) => {
+    const paperId = paper.paper_id
+    const current = pdfStatuses.get(paperId)
+    if (current === 'loading' || current === 'ok') return  // 已在进行中或已完成
+
+    if (!paper.pdf_url) {
+      setPdfStatuses(prev => new Map(prev).set(paperId, 'failed'))
+      return
+    }
+
+    setPdfStatuses(prev => new Map(prev).set(paperId, 'loading'))
+    try {
+      const r = await fetch('/api/paper/fetch-pdf', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pdf_url: paper.pdf_url }),
+      })
+      const data = await r.json()
+      if (data.text) {
+        setPdfTextsState(prev => new Map(prev).set(paperId, data.text))
+        setPdfStatuses(prev => new Map(prev).set(paperId, 'ok'))
+      } else {
+        setPdfStatuses(prev => new Map(prev).set(paperId, 'failed'))
+      }
+    } catch {
+      setPdfStatuses(prev => new Map(prev).set(paperId, 'failed'))
+    }
+  }, [pdfStatuses])
+
+  // 手动设置 PDF 文本（用户上传后）
+  const setPdfText = useCallback((paperId: string, text: string) => {
+    setPdfTextsState(prev => new Map(prev).set(paperId, text))
+    setPdfStatuses(prev => new Map(prev).set(paperId, 'ok'))
+  }, [])
+
   const sendMessage = useCallback(
     async (paper: Paper, userContent: string) => {
       const paperId = paper.paper_id
       const prevMessages = histories.get(paperId) ?? []
+      const pdfText = pdfTexts.get(paperId)
       const userMsg: ChatMessage = { role: 'user', content: userContent }
 
       setHistories(prev => {
@@ -67,7 +113,7 @@ export function usePaperChat(apiKey: string, model: string = 'deepseek-v4-flash'
             model,
             stream: true,
             messages: [
-              { role: 'system', content: buildSystemPrompt(paper) },
+              { role: 'system', content: buildSystemPrompt(paper, pdfText) },
               ...prevMessages.map(m => ({ role: m.role, content: m.content })),
               { role: 'user', content: userContent },
             ],
@@ -107,7 +153,6 @@ export function usePaperChat(apiKey: string, model: string = 'deepseek-v4-flash'
           const msgs = [...(prev.get(paperId) ?? [])]
           msgs[msgs.length - 1] = { role: 'assistant', content: accumulated }
           next.set(paperId, msgs)
-          // 登录后保存到后端
           if (token) _saveToBackend(paper, msgs, token)
           return next
         })
@@ -124,7 +169,7 @@ export function usePaperChat(apiKey: string, model: string = 'deepseek-v4-flash'
         setStreamingPaperId(null)
       }
     },
-    [apiKey, histories, token, _saveToBackend],
+    [apiKey, histories, token, _saveToBackend, pdfTexts, model],
   )
 
   return {
@@ -132,10 +177,13 @@ export function usePaperChat(apiKey: string, model: string = 'deepseek-v4-flash'
     sendMessage,
     isStreaming: streamingPaperId !== null,
     streamingPaperId,
+    fetchPdf,
+    getPdfStatus,
+    setPdfText,
   }
 }
 
-function buildSystemPrompt(paper: Paper): string {
+function buildSystemPrompt(paper: Paper, pdfText?: string): string {
   const lines = [
     '你是一个学术论文分析助手，请根据以下论文信息回答用户的问题。请用中文回答，简洁专业。',
     '',
@@ -146,6 +194,13 @@ function buildSystemPrompt(paper: Paper): string {
     lines.push(`作者：${paper.authors.slice(0, 5).join('、')}`)
   if (paper.venue) lines.push(`发表于：${paper.venue}`)
   if (paper.published_date) lines.push(`年份：${paper.published_date.slice(0, 4)}`)
-  if (paper.abstract) lines.push(`\n摘要：${paper.abstract}`)
+
+  if (pdfText) {
+    lines.push('\n【论文全文（节选）】')
+    lines.push(pdfText)
+  } else if (paper.abstract) {
+    lines.push(`\n摘要：${paper.abstract}`)
+  }
+
   return lines.join('\n')
 }

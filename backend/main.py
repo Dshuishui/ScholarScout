@@ -2,7 +2,7 @@ import logging
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from routers import search, auth as auth_router, user as user_router, feedback as feedback_router
+from routers import search, auth as auth_router, user as user_router, feedback as feedback_router, paper as paper_router
 from database import init_db
 from config import CORS_ORIGINS
 
@@ -32,3 +32,4 @@ app.include_router(search.router, prefix="/api")
 app.include_router(auth_router.router, prefix="/api/auth")
 app.include_router(user_router.router, prefix="/api/user")
 app.include_router(feedback_router.router, prefix="/api/feedback")
+app.include_router(paper_router.router, prefix="/api/paper")

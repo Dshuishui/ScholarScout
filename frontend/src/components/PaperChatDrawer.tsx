@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import type { Paper } from '../types'
-import type { ChatMessage } from '../hooks/usePaperChat'
+import type { ChatMessage, PdfStatus } from '../hooks/usePaperChat'
 
 const PROMPTS_KEY = 'scholarscout_quick_prompts'
 const DEFAULT_PROMPTS = [
@@ -34,16 +34,20 @@ interface Props {
   paper: Paper | null
   messages: ChatMessage[]
   isStreaming: boolean
+  pdfStatus: PdfStatus
   onSend: (content: string) => void
   onClose: () => void
+  onUploadPdf: (file: File) => Promise<void>
 }
 
-export function PaperChatDrawer({ paper, messages, isStreaming, onSend, onClose }: Props) {
+export function PaperChatDrawer({ paper, messages, isStreaming, pdfStatus, onSend, onClose, onUploadPdf }: Props) {
   const [input, setInput] = useState('')
   const [editingPrompts, setEditingPrompts] = useState(false)
   const [newPrompt, setNewPrompt] = useState('')
+  const [uploading, setUploading] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const { prompts, remove, add, reset } = useQuickPrompts()
   const isOpen = paper !== null
 
@@ -72,19 +76,32 @@ export function PaperChatDrawer({ paper, messages, isStreaming, onSend, onClose 
     }
   }
 
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    e.target.value = ''
+    setUploading(true)
+    try {
+      await onUploadPdf(file)
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  const gsUrl = paper
+    ? `https://scholar.google.com/scholar?q=${encodeURIComponent(paper.title)}`
+    : '#'
+
   return (
     <>
       {/* Backdrop */}
       {isOpen && (
-        <div
-          className="fixed inset-0 z-40 bg-black/10"
-          onClick={onClose}
-        />
+        <div className="fixed inset-0 z-40 bg-black/10" onClick={onClose} />
       )}
 
       {/* Drawer */}
       <div
-        className={`fixed top-0 right-0 h-full w-[400px] bg-white shadow-2xl z-50 flex flex-col transition-transform duration-300 ease-in-out ${
+        className={`fixed top-0 right-0 h-full w-[420px] bg-white shadow-2xl z-50 flex flex-col transition-transform duration-300 ease-in-out ${
           isOpen ? 'translate-x-0' : 'translate-x-full'
         }`}
       >
@@ -113,6 +130,35 @@ export function PaperChatDrawer({ paper, messages, isStreaming, onSend, onClose 
                   </svg>
                 </button>
               </div>
+
+              {/* PDF 状态栏 */}
+              <div className="mt-2">
+                {pdfStatus === 'loading' && (
+                  <div className="flex items-center gap-1.5 text-xs text-blue-500">
+                    <svg className="w-3.5 h-3.5 animate-spin flex-shrink-0" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+                    </svg>
+                    <span>正在读取论文 PDF，请稍等…</span>
+                  </div>
+                )}
+                {pdfStatus === 'ok' && (
+                  <div className="flex items-center gap-1.5 text-xs text-green-600">
+                    <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <span>已读取论文全文，AI 可深度分析</span>
+                  </div>
+                )}
+                {pdfStatus === 'failed' && (
+                  <div className="flex items-center gap-1.5 text-xs text-amber-600">
+                    <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <span>暂时无法获取 PDF，分析基于摘要</span>
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* Messages */}
@@ -124,6 +170,39 @@ export function PaperChatDrawer({ paper, messages, isStreaming, onSend, onClose 
                   </svg>
                   <p className="text-base font-medium">和 AI 讨论这篇论文</p>
                   <p className="text-sm mt-1 text-gray-300">可以询问方法、贡献、局限性等</p>
+
+                  {/* PDF 失败时的提示 */}
+                  {pdfStatus === 'failed' && (
+                    <div className="mt-4 w-full rounded-xl bg-amber-50 border border-amber-100 px-4 py-3 text-left">
+                      <p className="text-xs font-medium text-amber-700 mb-1">暂时无法自动获取 PDF</p>
+                      <p className="text-xs text-amber-600 leading-relaxed">
+                        AI 将基于摘要进行分析，深度有限。如需全文分析，可以：
+                      </p>
+                      <div className="flex flex-col gap-1.5 mt-2">
+                        <a
+                          href={gsUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs text-blue-600 hover:underline flex items-center gap-1"
+                        >
+                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                          </svg>
+                          前往谷歌学术下载论文 PDF
+                        </a>
+                        <button
+                          onClick={() => fileInputRef.current?.click()}
+                          disabled={uploading}
+                          className="text-xs text-blue-600 hover:underline flex items-center gap-1 disabled:opacity-50"
+                        >
+                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+                          </svg>
+                          {uploading ? '上传中…' : '上传 PDF 文件让 AI 读全文'}
+                        </button>
+                      </div>
+                    </div>
+                  )}
 
                   {/* Quick prompts */}
                   <div className="mt-4 space-y-1.5 w-full text-left">
@@ -211,6 +290,31 @@ export function PaperChatDrawer({ paper, messages, isStreaming, onSend, onClose 
             {/* Input */}
             <div className="flex-shrink-0 border-t border-gray-200 px-3 py-3">
               <div className="flex gap-2 items-end">
+                {/* 上传 PDF 按钮（始终显示，失败时高亮） */}
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={uploading || pdfStatus === 'loading'}
+                  title={pdfStatus === 'ok' ? '重新上传 PDF' : '上传 PDF 让 AI 读全文'}
+                  className={`flex-shrink-0 w-9 h-9 rounded-xl flex items-center justify-center transition-colors ${
+                    pdfStatus === 'ok'
+                      ? 'text-green-500 bg-green-50 hover:bg-green-100'
+                      : pdfStatus === 'failed'
+                      ? 'text-amber-500 bg-amber-50 hover:bg-amber-100 ring-1 ring-amber-200'
+                      : 'text-gray-400 bg-gray-50 hover:bg-gray-100'
+                  } disabled:opacity-40`}
+                >
+                  {uploading ? (
+                    <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+                    </svg>
+                  ) : (
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+                    </svg>
+                  )}
+                </button>
+
                 <textarea
                   ref={textareaRef}
                   value={input}
@@ -238,10 +342,18 @@ export function PaperChatDrawer({ paper, messages, isStreaming, onSend, onClose 
                 </button>
               </div>
             </div>
+
+            {/* 隐藏文件输入 */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".pdf"
+              className="hidden"
+              onChange={handleFileChange}
+            />
           </>
         )}
       </div>
     </>
   )
 }
-
