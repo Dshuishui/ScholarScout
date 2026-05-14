@@ -35,6 +35,9 @@ class Feedback(Base):
     content = Column(String(200), nullable=False)
     location = Column(String(100), nullable=True)
     is_author = Column(Integer, default=0)
+    user_id = Column(Integer, nullable=True)
+    reply_to_id = Column(Integer, nullable=True)
+    recalled = Column(Integer, default=0)
     created_at = Column(DateTime, default=datetime.utcnow)
 
 

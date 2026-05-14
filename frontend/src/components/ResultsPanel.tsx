@@ -463,9 +463,31 @@ const addKeyword = () => {
       zip.file('failed_downloads.csv', '﻿' + csvRows)
     }
 
+    // 如果有失败，加入 README 说明
+    if (failed.length > 0) {
+      const readme = [
+        'ScholarScout 批量下载失败说明',
+        '================================',
+        '',
+        `共 ${failed.length} 篇论文 PDF 下载失败。常见原因：`,
+        '1. 来源网站（如 arXiv）对服务器 IP 有访问限制',
+        '2. 需要登录或付费才能获取全文',
+        '',
+        '建议解决方案：',
+        '1. 打开 failed_downloads.csv，手动访问每篇论文的原始链接下载',
+        '2. 如需批量下载协助，请联系作者：',
+        '   📧 dongyucong@sjtu.edu.cn',
+        '3. 也可以在网站右下角留言板留言描述需求',
+        '   作者会看到并尽量协助。',
+        '',
+        '感谢您使用 ScholarScout！',
+      ].join('\n')
+      zip.file('README.txt', readme)
+    }
+
     const successCount = selectedWithPdf.length - failed.length
     const doneStatus = failed.length > 0
-      ? `${successCount} 篇成功，${failed.length} 篇失败（详见 failed_downloads.csv）`
+      ? `${successCount} 篇成功，${failed.length} 篇失败（详见 README.txt）`
       : '全部下载完成！'
 
     setDownloadProgress(prev => prev && ({ ...prev, status: '正在压缩打包...', current: selectedWithPdf.length }))
