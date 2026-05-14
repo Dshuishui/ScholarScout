@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import type { Paper } from '../types'
 import { useAuth } from './useAuth'
 
@@ -15,7 +15,7 @@ export function usePaperChat(apiKey: string, model: string = 'deepseek-v4-flash'
   const [histories, setHistories] = useState<Map<string, ChatMessage[]>>(new Map())
   const [streamingPaperId, setStreamingPaperId] = useState<string | null>(null)
   const [pdfStatuses, setPdfStatuses] = useState<Map<string, PdfStatus>>(new Map())
-  const [pdfTexts, setPdfTextsState] = useState<Map<string, string>>(new Map())
+  const pdfTextsRef = useRef<Map<string, string>>(new Map())
 
   // 登录后从后端加载历史对话
   useEffect(() => {
@@ -55,9 +55,9 @@ export function usePaperChat(apiKey: string, model: string = 'deepseek-v4-flash'
     [pdfStatuses],
   )
 
-  // 用户手动上传 PDF 后设置文本
+  // 用户手动上传 PDF 后设置文本（用 ref 保证 sendMessage 闭包始终读到最新值）
   const setPdfText = useCallback((paperId: string, text: string) => {
-    setPdfTextsState(prev => new Map(prev).set(paperId, text))
+    pdfTextsRef.current.set(paperId, text)
     setPdfStatuses(prev => new Map(prev).set(paperId, 'ok'))
   }, [])
 
@@ -65,7 +65,7 @@ export function usePaperChat(apiKey: string, model: string = 'deepseek-v4-flash'
     async (paper: Paper, userContent: string) => {
       const paperId = paper.paper_id
       const prevMessages = histories.get(paperId) ?? []
-      const pdfText = pdfTexts.get(paperId)
+      const pdfText = pdfTextsRef.current.get(paperId)
       const userMsg: ChatMessage = { role: 'user', content: userContent }
 
       setHistories(prev => {
@@ -139,11 +139,13 @@ export function usePaperChat(apiKey: string, model: string = 'deepseek-v4-flash'
         setStreamingPaperId(null)
       }
     },
-    [apiKey, histories, token, _saveToBackend, pdfTexts, model],
+    [apiKey, histories, token, _saveToBackend, model],
   )
 
   const clearChat = useCallback((paper: Paper) => {
     const paperId = paper.paper_id
+    pdfTextsRef.current.delete(paperId)
+    setPdfStatuses(prev => { const m = new Map(prev); m.delete(paperId); return m })
     setHistories(prev => new Map(prev).set(paperId, []))
     if (token) {
       fetch('/api/user/chats', {

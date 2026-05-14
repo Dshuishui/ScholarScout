@@ -441,7 +441,9 @@ const addKeyword = () => {
           if (resp.ok) {
             zip.file(filename, await resp.arrayBuffer())
           } else {
-            failed.push({ title: paper.title, authors: paper.authors.join('; '), year, url: paper.pdf_url!, reason: `HTTP ${resp.status}` })
+            let reason = `HTTP ${resp.status}`
+            try { const j = await resp.json(); reason = j.detail ?? reason } catch { /* ignore */ }
+            failed.push({ title: paper.title, authors: paper.authors.join('; '), year, url: paper.pdf_url!, reason })
           }
         } catch {
           failed.push({ title: paper.title, authors: paper.authors.join('; '), year, url: paper.pdf_url!, reason: '网络错误' })

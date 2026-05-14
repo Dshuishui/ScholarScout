@@ -36,8 +36,19 @@ async def fetch_pdf_bytes(url: str) -> tuple[bytes, str]:
     if not _is_allowed(url):
         raise ValueError("不支持的下载地址")
 
-    async with httpx.AsyncClient(follow_redirects=True, timeout=30) as client:
-        async with client.stream("GET", url, headers={"User-Agent": "ScholarScout/1.0"}) as response:
+    headers = {
+        "User-Agent": (
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/124.0.0.0 Safari/537.36"
+        ),
+        "Accept": "application/pdf,*/*;q=0.9",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Referer": "https://scholar.google.com/",
+    }
+
+    async with httpx.AsyncClient(follow_redirects=True, timeout=60) as client:
+        async with client.stream("GET", url, headers=headers) as response:
             response.raise_for_status()
 
             # 重定向后重新校验最终域名
@@ -46,8 +57,10 @@ async def fetch_pdf_bytes(url: str) -> tuple[bytes, str]:
                 raise ValueError("不支持的下载地址")
 
             content_type = response.headers.get("content-type", "application/pdf").split(";")[0].strip()
+            if content_type.startswith("text/html"):
+                raise ValueError("来源网站拒绝了下载请求（可能需要登录或有防爬限制），建议直接访问原网站下载")
             if not any(content_type.startswith(ct) for ct in ALLOWED_CONTENT_TYPES):
-                raise ValueError("文件类型不支持")
+                raise ValueError(f"文件类型不支持（{content_type}）")
 
             content_length = int(response.headers.get("content-length", 0))
             if content_length > MAX_FILE_SIZE:
