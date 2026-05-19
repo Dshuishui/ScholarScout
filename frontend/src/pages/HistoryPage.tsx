@@ -26,11 +26,16 @@ function timeAgo(iso: string): string {
 export function HistoryPage({ token, onClose, onOpenChat }: Props) {
   const [records, setRecords] = useState<ChatRecord[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(false)
 
   useEffect(() => {
+    setLoading(true)
+    setError(false)
     fetch('/api/user/chats', { headers: { Authorization: `Bearer ${token}` } })
-      .then(r => r.json())
-      .then((data: ChatRecord[]) => { setRecords(data); setLoading(false) })
+      .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json() })
+      .then((data: ChatRecord[]) => setRecords(Array.isArray(data) ? data : []))
+      .catch(() => setError(true))
+      .finally(() => setLoading(false))
   }, [token])
 
   const handleOpen = (paper: Paper) => {
@@ -49,7 +54,8 @@ export function HistoryPage({ token, onClose, onOpenChat }: Props) {
       </div>
       <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
         {loading && <p className="text-center text-gray-400 mt-8">加载中…</p>}
-        {!loading && records.length === 0 && (
+        {!loading && error && <p className="text-center text-red-400 mt-8">加载失败，请刷新重试</p>}
+        {!loading && !error && records.length === 0 && (
           <p className="text-center text-gray-400 mt-8">还没有 AI 对话记录，点击论文卡片的「AI 对话」开始吧</p>
         )}
         {records.map(rec => {
