@@ -1056,7 +1056,7 @@ const addKeyword = () => {
                   onAnalyze={onAnalyzePaper ? () => onAnalyzePaper(paper) : undefined}
                   compact={density === 'compact'}
                   isSaved={savedMap.has(paper.paper_id)}
-                  onSave={isLoggedIn ? () => handleSave(paper) : undefined}
+                  onSave={() => isLoggedIn ? handleSave(paper) : setShowAuthModal(true)}
                 />
               </div>
             ))}

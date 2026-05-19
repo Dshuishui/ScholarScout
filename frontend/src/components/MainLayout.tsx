@@ -92,7 +92,7 @@ export function MainLayout({ apiKey, onClearKey }: Props) {
     <div className="h-screen flex flex-col overflow-hidden">
       {/* 全宽顶部导航栏 */}
       <header
-        className="h-11 flex-shrink-0 flex items-center px-4 justify-between z-20 relative overflow-hidden"
+        className="h-11 flex-shrink-0 flex items-center px-4 justify-between z-20 relative"
         style={{
           background: '#080818',
           backgroundImage:
