@@ -24,3 +24,13 @@ CORS_ORIGINS = ["*"]
 
 import os as _os
 JWT_SECRET = _os.environ.get("JWT_SECRET", "dev-secret-change-in-production")
+
+# 服务器端 DeepSeek Key（订阅推送的 AI 筛选用，非用户 Key）
+DEEPSEEK_API_KEY = _os.environ.get("DEEPSEEK_API_KEY", "")
+
+# SMTP 配置（QQ 邮箱）：smtp.qq.com:465，密码为授权码
+SMTP_HOST = _os.environ.get("SMTP_HOST", "smtp.qq.com")
+SMTP_PORT = int(_os.environ.get("SMTP_PORT", "465"))
+SMTP_USER = _os.environ.get("SMTP_USER", "")   # 发件人 QQ 邮箱
+SMTP_PASS = _os.environ.get("SMTP_PASS", "")   # QQ 邮箱授权码
+SMTP_FROM_NAME = _os.environ.get("SMTP_FROM_NAME", "ScholarScout")

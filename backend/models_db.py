@@ -1,5 +1,5 @@
 from datetime import datetime
-from sqlalchemy import Column, Integer, String, Text, DateTime, UniqueConstraint
+from sqlalchemy import Column, Integer, String, Text, DateTime, UniqueConstraint, Boolean
 from database import Base
 
 
@@ -50,3 +50,13 @@ class PaperChat(Base):
     messages_json = Column(Text, nullable=False, default="[]")
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     __table_args__ = (UniqueConstraint("user_id", "paper_id_hash"),)
+
+
+class Subscription(Base):
+    __tablename__ = "subscriptions"
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, nullable=False, index=True)
+    keywords_json = Column(Text, nullable=False)   # JSON 数组，如 ["LLM", "RAG"]
+    active = Column(Boolean, default=True, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    last_sent = Column(DateTime, nullable=True)    # 上次成功发送时间，用于过滤新论文

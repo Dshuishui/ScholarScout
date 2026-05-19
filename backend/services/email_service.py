@@ -1,0 +1,109 @@
+"""SMTP 邮件发送服务（QQ 邮箱 SSL）。"""
+import logging
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+from datetime import date
+
+import aiosmtplib
+
+from config import SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM_NAME
+from models import Paper
+
+logger = logging.getLogger(__name__)
+
+
+def _paper_card_html(paper: Paper) -> str:
+    title_link = f'<a href="{paper.url}" style="color:#1d4ed8;text-decoration:none;font-weight:600;">{paper.title}</a>' if paper.url else f'<strong>{paper.title}</strong>'
+    meta_parts = []
+    if paper.authors:
+        authors_str = ", ".join(paper.authors[:3]) + (" 等" if len(paper.authors) > 3 else "")
+        meta_parts.append(authors_str)
+    if paper.published_date:
+        meta_parts.append(paper.published_date[:4])
+    if paper.venue:
+        meta_parts.append(paper.venue)
+    meta = " · ".join(meta_parts)
+    abstract_text = (paper.abstract or "")[:200].strip()
+    if abstract_text and len(paper.abstract or "") > 200:
+        abstract_text += "…"
+    return f"""
+<div style="margin-bottom:16px;padding:16px;border:1px solid #e5e7eb;border-radius:10px;background:#fff;">
+  <div style="font-size:15px;margin-bottom:6px;">{title_link}</div>
+  <div style="font-size:12px;color:#6b7280;margin-bottom:8px;">{meta}</div>
+  {"" if not abstract_text else f'<div style="font-size:13px;color:#374151;line-height:1.6;">{abstract_text}</div>'}
+</div>"""
+
+
+def build_email_html(keywords: list[str], papers: list[Paper]) -> str:
+    today = date.today().strftime("%Y年%m月%d日")
+    kw_str = " · ".join(keywords)
+    count = len(papers)
+    cards = "".join(_paper_card_html(p) for p in papers)
+
+    return f"""<!DOCTYPE html>
+<html lang="zh-CN">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="font-family:-apple-system,Arial,sans-serif;max-width:600px;margin:0 auto;padding:24px;color:#111827;background:#f9fafb;">
+<div style="background:#fff;border-radius:16px;padding:28px;box-shadow:0 1px 3px rgba(0,0,0,0.08);">
+
+  <!-- Header -->
+  <div style="margin-bottom:24px;padding-bottom:16px;border-bottom:1px solid #e5e7eb;">
+    <div style="font-size:20px;font-weight:700;color:#4f46e5;margin-bottom:2px;">ScholarScout</div>
+    <div style="color:#6b7280;font-size:13px;">每周学术摘要 · {today}</div>
+  </div>
+
+  <!-- Summary banner -->
+  <div style="background:#eef2ff;border-radius:10px;padding:14px 16px;margin-bottom:24px;">
+    <div style="font-size:14px;color:#3730a3;">
+      您订阅的关键词 <strong>{kw_str}</strong> 本周有
+      <strong style="font-size:16px;">{count}</strong> 篇新论文
+    </div>
+  </div>
+
+  <!-- Paper cards -->
+  {cards}
+
+  <!-- Footer -->
+  <div style="margin-top:24px;padding-top:16px;border-top:1px solid #e5e7eb;font-size:12px;color:#9ca3af;line-height:1.8;">
+    <div>下次推送：下周一早 8 点 · 由 ScholarScout 自动发送，请勿直接回复</div>
+    <div>如需停止接收，请登录 ScholarScout → 右上角头像 → 订阅管理 → 删除此订阅</div>
+  </div>
+</div>
+</body>
+</html>"""
+
+
+async def send_subscription_email(
+    to_email: str,
+    keywords: list[str],
+    papers: list[Paper],
+) -> bool:
+    if not SMTP_USER or not SMTP_PASS:
+        logger.warning("SMTP not configured, skipping email to %s", to_email)
+        return False
+
+    kw_str = " · ".join(keywords)
+    subject = f"ScholarScout 周报：{kw_str} 有 {len(papers)} 篇新论文"
+
+    msg = MIMEMultipart("alternative")
+    msg["Subject"] = subject
+    msg["From"] = f"{SMTP_FROM_NAME} <{SMTP_USER}>"
+    msg["To"] = to_email
+
+    html_body = build_email_html(keywords, papers)
+    msg.attach(MIMEText(html_body, "html", "utf-8"))
+
+    try:
+        await aiosmtplib.send(
+            msg,
+            hostname=SMTP_HOST,
+            port=SMTP_PORT,
+            use_tls=True,
+            username=SMTP_USER,
+            password=SMTP_PASS,
+        )
+        logger.info("Email sent to %s for keywords: %s", to_email, kw_str)
+        return True
+    except Exception as e:
+        logger.error("Failed to send email to %s: %s", to_email, e)
+        return False

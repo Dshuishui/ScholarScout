@@ -8,9 +8,6 @@ interface Props {
   messages: Message[]
   isLoading: boolean
   onSearch: (query: string) => void
-  pendingKeywords: string[] | null
-  onConfirmKeywords: (keywords: string[]) => void
-  onCancelSearch: () => void
   history: HistoryItem[]
   onSearchFromHistory: (keywords: string[]) => void
   onRemoveHistory: (timestamp: number) => void
@@ -19,32 +16,20 @@ interface Props {
 
 export function ChatPanel({
   messages, isLoading, onSearch,
-  pendingKeywords, onConfirmKeywords, onCancelSearch,
   history, onSearchFromHistory, onRemoveHistory, inputRef,
 }: Props) {
   const [input, setInput] = useState('')
-  const [editKeywords, setEditKeywords] = useState<string[]>([])
-  const [newKw, setNewKw] = useState('')
   const bottomRef = useRef<HTMLDivElement>(null)
-  const newKwRef = useRef<HTMLInputElement>(null)
   const localRef = useRef<HTMLTextAreaElement>(null)
   const textareaRef = (inputRef as RefObject<HTMLTextAreaElement>) ?? localRef
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages, pendingKeywords])
-
-  // Sync local edit state when pendingKeywords arrives
-  useEffect(() => {
-    if (pendingKeywords) {
-      setEditKeywords([...pendingKeywords])
-      setNewKw('')
-    }
-  }, [pendingKeywords])
+  }, [messages])
 
   const handleSend = () => {
     const q = input.trim()
-    if (!q || isLoading || pendingKeywords) return
+    if (!q || isLoading) return
     setInput('')
     onSearch(q)
   }
@@ -56,28 +41,9 @@ export function ChatPanel({
     }
   }
 
-  const removeKeyword = (index: number) => {
-    setEditKeywords(prev => prev.filter((_, i) => i !== index))
-  }
-
-  const addKeyword = () => {
-    const kw = newKw.trim()
-    if (!kw || editKeywords.includes(kw)) return
-    setEditKeywords(prev => [...prev, kw])
-    setNewKw('')
-    newKwRef.current?.focus()
-  }
-
-  const handleNewKwKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') {
-      e.preventDefault()
-      addKeyword()
-    }
-  }
-
   return (
     <div className="flex flex-col h-full bg-white/80 border-r border-indigo-100/60">
-      {/* Section label — 顶栏已有品牌，这里只标注功能区 */}
+      {/* Section label */}
       <div className="flex items-center gap-2 px-5 py-3 border-b border-gray-100/80">
         <div className="w-1.5 h-4 rounded-full bg-indigo-500/70" />
         <span className="text-[11px] font-semibold text-indigo-500/80 uppercase tracking-widest select-none">
@@ -93,66 +59,8 @@ export function ChatPanel({
         <div ref={bottomRef} />
       </div>
 
-      {/* Keyword editor — shown when pendingKeywords is set */}
-      {pendingKeywords && (
-        <div className="px-4 pb-3">
-          <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 space-y-2.5">
-            <p className="text-sm font-semibold text-blue-700">确认关键词后开始搜索</p>
-
-            {/* Tag list */}
-            <div className="flex flex-wrap gap-1.5">
-              {editKeywords.map((kw, i) => (
-                <span
-                  key={i}
-                  className="flex items-center gap-1 bg-white border border-blue-300 text-blue-700 text-xs rounded-full px-2.5 py-1 font-medium"
-                >
-                  {kw}
-                  <button
-                    onClick={() => removeKeyword(i)}
-                    className="text-blue-300 hover:text-blue-600 transition-colors leading-none"
-                  >
-                    ✕
-                  </button>
-                </span>
-              ))}
-
-              {/* Inline add input */}
-              <input
-                ref={newKwRef}
-                value={newKw}
-                onChange={e => setNewKw(e.target.value)}
-                onKeyDown={handleNewKwKeyDown}
-                onBlur={addKeyword}
-                placeholder="+ 添加关键词"
-                className="text-xs border border-dashed border-blue-300 rounded-full px-2.5 py-1 outline-none focus:border-blue-500 bg-transparent text-blue-700 placeholder-blue-300 min-w-24 w-28"
-              />
-            </div>
-
-            {/* Actions */}
-            <div className="flex items-center justify-between">
-              <p className="text-xs text-blue-400">回车添加，点 ✕ 删除关键词</p>
-              <div className="flex gap-2">
-                <button
-                  onClick={onCancelSearch}
-                  className="text-xs text-gray-500 hover:text-gray-700 px-3 py-1.5 rounded-lg hover:bg-gray-100 transition-colors"
-                >
-                  取消
-                </button>
-                <button
-                  onClick={() => onConfirmKeywords(editKeywords)}
-                  disabled={editKeywords.length === 0}
-                  className="text-xs text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed px-4 py-1.5 rounded-lg font-medium transition-colors"
-                >
-                  开始搜索 →
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* 最近搜索 — 无输入、无 pending、有历史时显示 */}
-      {!pendingKeywords && !input.trim() && history.length > 0 && (
+      {/* 最近搜索 — 无输入、有历史时显示 */}
+      {!input.trim() && history.length > 0 && (
         <div className="px-4 pt-2 pb-1 border-t border-gray-100">
           <p className="text-sm text-gray-400 mb-1.5">最近搜索</p>
           <div className="flex flex-col gap-0.5">
@@ -183,7 +91,7 @@ export function ChatPanel({
       {/* Input */}
       <div className="px-4 py-3 border-t border-gray-100">
         <div className={`rounded-2xl border transition-all bg-white overflow-hidden ${
-          isLoading || !!pendingKeywords
+          isLoading
             ? 'border-gray-100 opacity-60'
             : 'border-gray-200 focus-within:border-indigo-400 focus-within:ring-2 focus-within:ring-indigo-100'
         }`}>
@@ -192,8 +100,8 @@ export function ChatPanel({
             value={input}
             onChange={e => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder={pendingKeywords ? '请先确认或取消关键词…' : '描述你想找的论文，AI 会自动提取关键词…'}
-            disabled={isLoading || !!pendingKeywords}
+            placeholder="描述你想找的论文，AI 会自动提取关键词…"
+            disabled={isLoading}
             rows={2}
             style={{ minHeight: '52px', maxHeight: '120px' }}
             className="w-full px-4 pt-3 pb-1 text-sm text-gray-800 placeholder-gray-300 resize-none focus:outline-none bg-transparent leading-relaxed"
@@ -202,7 +110,7 @@ export function ChatPanel({
             <span className="text-[11px] text-gray-400">Enter 发送 · Shift+Enter 换行</span>
             <button
               onClick={handleSend}
-              disabled={isLoading || !input.trim() || !!pendingKeywords}
+              disabled={isLoading || !input.trim()}
               className="flex items-center gap-1.5 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-200 disabled:text-gray-400 disabled:cursor-not-allowed rounded-xl px-3.5 py-1.5 transition-colors"
             >
               {isLoading

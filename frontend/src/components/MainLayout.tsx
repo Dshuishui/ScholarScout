@@ -12,6 +12,7 @@ import { useAuth } from '../hooks/useAuth'
 import { UserMenu } from './UserMenu'
 import { SavedPage } from '../pages/SavedPage'
 import { HistoryPage } from '../pages/HistoryPage'
+import { SubscriptionsPage } from '../pages/SubscriptionsPage'
 import { FeedbackWidget } from './FeedbackWidget'
 import { RedPandaWidget } from './RedPandaWidget'
 
@@ -24,10 +25,10 @@ export function MainLayout({ apiKey, onClearKey }: Props) {
   const { settings, updateSettings } = useSettings()
   const { model } = useModel()
   const { token, isLoggedIn } = useAuth()
-  const [activePage, setActivePage] = useState<'saved' | 'history' | null>(null)
+  const [activePage, setActivePage] = useState<'saved' | 'history' | 'subscriptions' | null>(null)
   const {
     messages, papers, rejectedPapers, isLoading, statusMessage, sourceStatuses,
-    search, pendingKeywords, confirmedKeywords, confirmSearch, cancelSearch, reSearch,
+    search, confirmedKeywords, reSearch,
     hasSearchError, history, removeHistory, searchFromHistory,
   } = useSearch(apiKey, settings, model)
 
@@ -151,9 +152,6 @@ export function MainLayout({ apiKey, onClearKey }: Props) {
             messages={messages}
             isLoading={isLoading}
             onSearch={search}
-            pendingKeywords={pendingKeywords}
-            onConfirmKeywords={confirmSearch}
-            onCancelSearch={cancelSearch}
             history={history}
             onSearchFromHistory={searchFromHistory}
             onRemoveHistory={removeHistory}
@@ -201,6 +199,11 @@ export function MainLayout({ apiKey, onClearKey }: Props) {
       {activePage === 'history' && token && (
         <div className="fixed inset-0 z-40 bg-white">
           <HistoryPage token={token} onClose={() => setActivePage(null)} onOpenChat={handleAnalyzePaper} />
+        </div>
+      )}
+      {activePage === 'subscriptions' && token && (
+        <div className="fixed inset-0 z-40 bg-white">
+          <SubscriptionsPage token={token} onClose={() => setActivePage(null)} />
         </div>
       )}
     </div>

@@ -21,6 +21,7 @@ async def init_db():
             "ALTER TABLE feedback ADD COLUMN user_id INTEGER",
             "ALTER TABLE feedback ADD COLUMN reply_to_id INTEGER",
             "ALTER TABLE feedback ADD COLUMN recalled INTEGER DEFAULT 0",
+            # subscriptions 表由 create_all 自动创建，无需手动迁移
         ]:
             try:
                 await conn.execute(text(sql))

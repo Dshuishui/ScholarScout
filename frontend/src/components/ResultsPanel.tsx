@@ -205,6 +205,8 @@ export function ResultsPanel({ papers, rejectedPapers = [], isLoading, statusMes
       return cached ? new Map(JSON.parse(cached) as [string, string][]) : new Map()
     } catch { return new Map() }
   })
+  const [subscriptions, setSubscriptions] = useState<{ id: number; keywords: string[] }[]>([])
+  const [subLoading, setSubLoading] = useState(false)
   const [showAuthModal, setShowAuthModal] = useState(false)
   const [showExportModal, setShowExportModal] = useState(false)
   const [exportOpts, setExportOpts] = useState({ aiAnalysis: true, translate: true, chats: true })
@@ -221,13 +223,40 @@ export function ResultsPanel({ papers, rejectedPapers = [], isLoading, statusMes
     if (!isLoggedIn || !token) {
       setSavedMap(new Map())
       localStorage.removeItem('ss_saved_map')
+      setSubscriptions([])
       return
     }
     fetch('/api/user/saved', { headers: { Authorization: `Bearer ${token}` } })
       .then(r => r.json())
       .then(_syncSaved)
       .catch(() => {})
+    fetch('/api/subscriptions', { headers: { Authorization: `Bearer ${token}` } })
+      .then(r => r.json())
+      .then((data: { id: number; keywords: string[] }[]) => setSubscriptions(Array.isArray(data) ? data : []))
+      .catch(() => {})
   }, [isLoggedIn, token]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const isSubscribed = confirmedKeywords != null && subscriptions.some(
+    s => JSON.stringify([...s.keywords].sort()) === JSON.stringify([...confirmedKeywords].sort())
+  )
+
+  const handleSubscribe = async () => {
+    if (!token || !confirmedKeywords || isSubscribed || subLoading) return
+    setSubLoading(true)
+    try {
+      const r = await fetch('/api/subscriptions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ keywords: confirmedKeywords }),
+      })
+      if (r.ok) {
+        const sub: { id: number; keywords: string[] } = await r.json()
+        setSubscriptions(prev => [...prev, sub])
+      }
+    } finally {
+      setSubLoading(false)
+    }
+  }
 
   const handleSave = async (paper: Paper) => {
     if (!token) return
@@ -574,42 +603,74 @@ const addKeyword = () => {
 
       {/* 关键词行 */}
       {confirmedKeywords != null && (
-        <div className="px-5 py-2.5 bg-white border-b border-gray-100 flex items-center gap-2 flex-wrap">
-          <span className="text-sm font-medium text-gray-400 shrink-0">搜索词</span>
-          {editKeywords.map((kw, i) => (
-            <span
-              key={i}
-              className="flex items-center gap-1 bg-blue-600 text-white text-xs rounded-full px-2.5 py-1 font-medium shadow-sm"
-            >
-              {kw}
-              <button
-                onClick={() => setEditKeywords(prev => prev.filter((_, j) => j !== i))}
-                className="text-blue-200 hover:text-white transition-colors leading-none ml-0.5"
+        <div className="px-5 py-2.5 bg-white border-b border-gray-100 flex items-center gap-2 justify-between">
+          {/* 左侧：标签 + chips + 添加输入 + 重搜按钮 */}
+          <div className="flex items-center gap-2 flex-wrap flex-1 min-w-0">
+            <span className="text-sm font-medium text-gray-400 shrink-0">搜索词</span>
+            {editKeywords.map((kw, i) => (
+              <span
+                key={i}
+                className="flex items-center gap-1 bg-indigo-600 text-white text-xs rounded-full px-2.5 py-1 font-medium shadow-sm"
               >
-                ✕
+                {kw}
+                <button
+                  onClick={() => setEditKeywords(prev => prev.filter((_, j) => j !== i))}
+                  className="text-indigo-200 hover:text-white transition-colors leading-none ml-0.5"
+                >
+                  ✕
+                </button>
+              </span>
+            ))}
+            <input
+              value={newKw}
+              onChange={e => setNewKw(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addKeyword() } }}
+              onBlur={addKeyword}
+              placeholder="＋ 添加"
+              className="text-xs border border-dashed border-gray-300 rounded-full px-2.5 py-1 outline-none focus:border-indigo-400 bg-transparent text-gray-500 placeholder-gray-300 w-20"
+            />
+            {keywordsChanged && onReSearch && (
+              <button
+                onClick={() => onReSearch(editKeywords)}
+                disabled={isLoading || editKeywords.length === 0}
+                className="flex items-center gap-1.5 text-xs font-medium text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-full px-3 py-1 transition-all shadow-sm"
+              >
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                重新搜索
               </button>
-            </span>
-          ))}
-          <input
-            value={newKw}
-            onChange={e => setNewKw(e.target.value)}
-            onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addKeyword() } }}
-            onBlur={addKeyword}
-            placeholder="＋ 添加"
-            className="text-xs border border-dashed border-gray-300 rounded-full px-2.5 py-1 outline-none focus:border-blue-400 bg-transparent text-gray-500 placeholder-gray-300 w-20"
-          />
-          {keywordsChanged && onReSearch && (
-            <button
-              onClick={() => onReSearch(editKeywords)}
-              disabled={isLoading || editKeywords.length === 0}
-              className="ml-auto flex items-center gap-1.5 text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-full px-3 py-1 transition-all shadow-sm"
-            >
-              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            )}
+          </div>
+
+          {/* 右侧：订阅按钮 */}
+          <button
+            onClick={isLoggedIn ? handleSubscribe : () => setShowAuthModal(true)}
+            disabled={subLoading || isSubscribed}
+            title={isSubscribed ? '已订阅，可在订阅管理中查看' : '订阅关键词，每周一收到新论文邮件'}
+            className={`flex-shrink-0 flex items-center gap-1.5 text-xs font-semibold rounded-full px-3.5 py-1.5 transition-all ${
+              isSubscribed
+                ? 'bg-green-50 text-green-700 border border-green-200 cursor-default'
+                : 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-md hover:shadow-indigo-200/60 active:scale-95'
+            } ${subLoading ? 'opacity-60' : ''}`}
+          >
+            {subLoading ? (
+              <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
               </svg>
-              重新搜索
-            </button>
-          )}
+            ) : isSubscribed ? (
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+              </svg>
+            ) : (
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                  d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+              </svg>
+            )}
+            {isSubscribed ? '已订阅' : '订阅更新'}
+          </button>
         </div>
       )}
 

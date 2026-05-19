@@ -17,6 +17,8 @@ dependencies = [
     "email-validator",
     "pypdf>=4.0.0",
     "python-multipart>=0.0.9",
+    "apscheduler>=3.10.0,<4.0",
+    "aiosmtplib>=3.0",
 ]
 
 [dependency-groups]

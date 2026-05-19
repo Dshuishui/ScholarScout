@@ -151,9 +151,6 @@ export function useSearch(apiKey: string, settings: SearchSettings, model?: stri
     }
   }
 
-  // Stubs for interface compatibility — pendingKeywords is always null now
-  const confirmSearch = async (_keywords: string[]) => {}
-  const cancelSearch = () => {}
 
   const reSearch = async (keywords: string[]) => {
     if (!lastConfirmed) return
@@ -199,10 +196,7 @@ export function useSearch(apiKey: string, settings: SearchSettings, model?: stri
     statusMessage,
     sourceStatuses,
     search,
-    pendingKeywords: null as string[] | null,
     confirmedKeywords: lastConfirmed?.keywords ?? null,
-    confirmSearch,
-    cancelSearch,
     reSearch: lastConfirmed ? reSearch : undefined,
     hasSearchError,
     history,
