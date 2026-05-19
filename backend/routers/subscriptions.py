@@ -1,6 +1,6 @@
 """订阅管理 API（需登录）。"""
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -90,6 +90,29 @@ async def delete_subscription(
         raise HTTPException(status_code=404, detail="订阅不存在")
     await db.delete(sub)
     await db.commit()
+
+
+@router.post("/subscriptions/{sub_id}/test-send")
+async def test_send_subscription(
+    sub_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """立即触发一次发送（搜索过去 7 天的论文），用于验证邮件配置。"""
+    result = await db.execute(
+        select(Subscription).where(
+            Subscription.id == sub_id,
+            Subscription.user_id == current_user.id,
+        )
+    )
+    sub = result.scalar_one_or_none()
+    if not sub:
+        raise HTTPException(status_code=404, detail="订阅不存在")
+
+    from scheduler import _process_subscription
+    now = datetime.now(timezone.utc)
+    outcome = await _process_subscription(sub, current_user.email, now, force_days=7)
+    return outcome
 
 
 @router.patch("/subscriptions/{sub_id}/toggle", response_model=SubscriptionOut)
