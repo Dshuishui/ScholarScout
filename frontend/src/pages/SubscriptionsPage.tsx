@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useAuth } from '../hooks/useAuth'
 
 interface Subscription {
   id: number
@@ -28,6 +29,7 @@ function nextMonday() {
 }
 
 export function SubscriptionsPage({ token, onClose }: Props) {
+  const { sessionExpired } = useAuth()
   const [subs, setSubs] = useState<Subscription[]>([])
   const [loading, setLoading] = useState(true)
   const [togglingId, setTogglingId] = useState<number | null>(null)
@@ -35,11 +37,11 @@ export function SubscriptionsPage({ token, onClose }: Props) {
 
   useEffect(() => {
     fetch('/api/subscriptions', { headers: { Authorization: `Bearer ${token}` } })
-      .then(r => r.json())
-      .then(data => setSubs(Array.isArray(data) ? data : []))
-      .catch(() => setSubs([]))
+      .then(r => { if (r.status === 401) { sessionExpired(); return null } return r.json() })
+      .then(data => { if (data) setSubs(Array.isArray(data) ? data : []) })
+      .catch(() => {})
       .finally(() => setLoading(false))
-  }, [token])
+  }, [token]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleToggle = async (id: number) => {
     setTogglingId(id)

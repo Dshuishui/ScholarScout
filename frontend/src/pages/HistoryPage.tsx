@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { Paper } from '../types'
 import type { ChatMessage } from '../hooks/usePaperChat'
+import { useAuth } from '../hooks/useAuth'
 
 interface ChatRecord {
   paper_id_hash: string
@@ -24,6 +25,7 @@ function timeAgo(iso: string): string {
 }
 
 export function HistoryPage({ token, onClose, onOpenChat }: Props) {
+  const { sessionExpired } = useAuth()
   const [records, setRecords] = useState<ChatRecord[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(false)
@@ -32,8 +34,8 @@ export function HistoryPage({ token, onClose, onOpenChat }: Props) {
     setLoading(true)
     setError(false)
     fetch('/api/user/chats', { headers: { Authorization: `Bearer ${token}` } })
-      .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json() })
-      .then((data: ChatRecord[]) => setRecords(Array.isArray(data) ? data : []))
+      .then(r => { if (r.status === 401) { sessionExpired(); return null } if (!r.ok) throw new Error(); return r.json() })
+      .then((data: ChatRecord[] | null) => { if (data) setRecords(Array.isArray(data) ? data : []) })
       .catch(() => setError(true))
       .finally(() => setLoading(false))
   }

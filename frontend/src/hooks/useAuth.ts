@@ -27,6 +27,7 @@ interface AuthContextValue {
   register: (email: string, password: string) => Promise<void>
   login: (email: string, password: string) => Promise<void>
   logout: () => void
+  sessionExpired: () => void  // 401 时调用：清除 token + 触发 toast
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null)
@@ -68,11 +69,18 @@ function useAuthState(): AuthContextValue {
   const logout = useCallback(() => {
     localStorage.removeItem(STORAGE_KEY)
     localStorage.removeItem(USER_KEY)
+    localStorage.removeItem('ss_saved_map')
     setToken(null)
     setUser(null)
   }, [])
 
-  return { user, token, register, login, logout, isLoggedIn: !!user }
+  const sessionExpired = useCallback(() => {
+    logout()
+    // 用 CustomEvent 通知 Toast 层，避免循环依赖
+    window.dispatchEvent(new CustomEvent('auth:expired'))
+  }, [logout])
+
+  return { user, token, register, login, logout, sessionExpired, isLoggedIn: !!user }
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {

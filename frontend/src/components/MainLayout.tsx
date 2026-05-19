@@ -3,7 +3,7 @@ import type { Paper } from '../types'
 import { ChatPanel } from './ChatPanel'
 import { ResultsPanel } from './ResultsPanel'
 import { PaperChatDrawer } from './PaperChatDrawer'
-import { ToastContainer } from './Toast'
+import { ToastContainer, toast } from './Toast'
 import { useSearch } from '../hooks/useSearch'
 import { useSettings } from '../hooks/useSettings'
 import { usePaperChat } from '../hooks/usePaperChat'
@@ -70,6 +70,13 @@ export function MainLayout({ apiKey, onClearKey }: Props) {
       document.title = 'ScholarScout — AI 学术论文搜索'
     }
   }, [confirmedKeywords])
+
+  // 监听 token 过期事件
+  useEffect(() => {
+    const handler = () => toast.show('登录已过期，请重新登录')
+    window.addEventListener('auth:expired', handler)
+    return () => window.removeEventListener('auth:expired', handler)
+  }, [])
 
   // 键盘快捷键：/ 聚焦搜索框，Esc 关闭抽屉
   useEffect(() => {

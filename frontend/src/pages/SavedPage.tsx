@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { Paper } from '../types'
 import { PaperCard } from '../components/PaperCard'
+import { useAuth } from '../hooks/useAuth'
 
 interface SavedItem {
   id: number
@@ -14,19 +15,22 @@ interface Props {
 }
 
 export function SavedPage({ token, onClose }: Props) {
+  const { sessionExpired } = useAuth()
   const [items, setItems] = useState<SavedItem[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(false)
 
-  useEffect(() => {
+  const load = () => {
     setLoading(true)
     setError(false)
     fetch('/api/user/saved', { headers: { Authorization: `Bearer ${token}` } })
-      .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json() })
-      .then((data: SavedItem[]) => setItems(Array.isArray(data) ? data : []))
+      .then(r => { if (r.status === 401) { sessionExpired(); return null } if (!r.ok) throw new Error(); return r.json() })
+      .then((data: SavedItem[] | null) => { if (data) setItems(Array.isArray(data) ? data : []) })
       .catch(() => setError(true))
       .finally(() => setLoading(false))
-  }, [token])
+  }
+
+  useEffect(() => { load() }, [token]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const unsave = async (item: SavedItem) => {
     await fetch(`/api/user/saved/${item.paper_id_hash}`, {
@@ -71,12 +75,7 @@ export function SavedPage({ token, onClose }: Props) {
           <div className="text-center mt-12">
             <p className="text-gray-500 mb-3">加载失败，请重试</p>
             <button
-              onClick={() => { setLoading(true); setError(false);
-                fetch('/api/user/saved', { headers: { Authorization: `Bearer ${token}` } })
-                  .then(r => { if (!r.ok) throw new Error(); return r.json() })
-                  .then((d: SavedItem[]) => setItems(Array.isArray(d) ? d : []))
-                  .catch(() => setError(true))
-                  .finally(() => setLoading(false)) }}
+              onClick={load}
               className="text-sm text-indigo-600 hover:text-indigo-700 border border-indigo-200 rounded-lg px-4 py-1.5 transition-colors"
             >重新加载</button>
           </div>
