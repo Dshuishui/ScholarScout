@@ -9,6 +9,7 @@ import type { ChatMessage } from '../hooks/usePaperChat'
 import { ALL_SOURCES } from '../hooks/useSettings'
 import { PaperCard } from './PaperCard'
 import { PaperCardSkeleton } from './PaperCardSkeleton'
+import { ComparePanel } from './ComparePanel'
 import { getDownloadUrl } from '../api/client'
 
 const SOURCE_COLORS: Record<string, string> = {
@@ -207,6 +208,7 @@ export function ResultsPanel({ papers, rejectedPapers = [], isLoading, statusMes
   })
   const [subscriptions, setSubscriptions] = useState<{ id: number; keywords: string[] }[]>([])
   const [subLoading, setSubLoading] = useState(false)
+  const [showCompare, setShowCompare] = useState(false)
   const [showAuthModal, setShowAuthModal] = useState(false)
   const [showExportModal, setShowExportModal] = useState(false)
   const [exportOpts, setExportOpts] = useState({ aiAnalysis: true, translate: true, chats: true })
@@ -572,6 +574,18 @@ const addKeyword = () => {
               {selectedIds.size === papers.length ? '取消全选' : '全选'}
             </button>
 
+            {selectedIds.size >= 2 && (
+              <button
+                onClick={() => setShowCompare(true)}
+                className="flex items-center gap-1 text-xs font-medium text-white bg-violet-600 hover:bg-violet-700 rounded-lg px-2.5 py-1 transition-all shadow-sm"
+              >
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                </svg>
+                AI 多论文分析
+                <span className="bg-white/20 rounded px-1 text-[10px]">{selectedIds.size}</span>
+              </button>
+            )}
             {selectedIds.size > 0 && (
               <button
                 onClick={downloadSelected}
@@ -1066,6 +1080,14 @@ const addKeyword = () => {
       </div>
 
       {showAuthModal && <AuthModal onClose={() => setShowAuthModal(false)} />}
+
+      {showCompare && apiKey && (
+        <ComparePanel
+          papers={papers.filter(p => selectedIds.has(p.paper_id))}
+          apiKey={apiKey}
+          onClose={() => setShowCompare(false)}
+        />
+      )}
 
       {/* 导出 CSV 选项弹窗 */}
       {showExportModal && (
