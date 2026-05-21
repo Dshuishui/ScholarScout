@@ -19,13 +19,14 @@ interface FeedbackItem {
 }
 
 function formatRelativeTime(iso: string): string {
-  const diff = Date.now() - new Date(iso).getTime()
+  const utc = iso.endsWith('Z') || iso.includes('+') ? iso : iso + 'Z'
+  const diff = Date.now() - new Date(utc).getTime()
   const s = Math.floor(diff / 1000)
   if (s < 10) return '刚刚'
   if (s < 60) return `${s} 秒前`
   if (s < 3600) return `${Math.floor(s / 60)} 分钟前`
   if (s < 86400) return `${Math.floor(s / 3600)} 小时前`
-  const d = new Date(iso)
+  const d = new Date(utc)
   const pad = (n: number) => String(n).padStart(2, '0')
   return `${d.getMonth() + 1}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
 }

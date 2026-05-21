@@ -17,7 +17,8 @@ interface Props {
 }
 
 function timeAgo(iso: string): string {
-  const diff = Math.floor((Date.now() - new Date(iso).getTime()) / 1000)
+  const utc = iso.endsWith('Z') || iso.includes('+') ? iso : iso + 'Z'
+  const diff = Math.floor((Date.now() - new Date(utc).getTime()) / 1000)
   if (diff < 60) return '刚刚'
   if (diff < 3600) return `${Math.floor(diff / 60)} 分钟前`
   if (diff < 86400) return `${Math.floor(diff / 3600)} 小时前`
