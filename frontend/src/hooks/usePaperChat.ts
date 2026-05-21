@@ -8,7 +8,7 @@ export interface ChatMessage {
   isStreaming?: boolean
 }
 
-export type PdfStatus = 'idle' | 'ok'
+export type PdfStatus = 'idle' | 'ok' | 'error'
 
 export function usePaperChat(apiKey: string, model: string = 'deepseek-v4-flash') {
   const { token, isLoggedIn } = useAuth()
@@ -16,8 +16,8 @@ export function usePaperChat(apiKey: string, model: string = 'deepseek-v4-flash'
   const [streamingPaperId, setStreamingPaperId] = useState<string | null>(null)
   const [pdfStatuses, setPdfStatuses] = useState<Map<string, PdfStatus>>(new Map())
   const pdfTextsRef = useRef<Map<string, string>>(new Map())
+  const abortRef = useRef<AbortController | null>(null)
 
-  // 登录后从后端加载历史对话
   useEffect(() => {
     if (!isLoggedIn || !token) return
     fetch('/api/user/chats', { headers: { Authorization: `Bearer ${token}` } })
@@ -55,10 +55,17 @@ export function usePaperChat(apiKey: string, model: string = 'deepseek-v4-flash'
     [pdfStatuses],
   )
 
-  // 用户手动上传 PDF 后设置文本（用 ref 保证 sendMessage 闭包始终读到最新值）
   const setPdfText = useCallback((paperId: string, text: string) => {
     pdfTextsRef.current.set(paperId, text)
     setPdfStatuses(prev => new Map(prev).set(paperId, 'ok'))
+  }, [])
+
+  const setPdfError = useCallback((paperId: string) => {
+    setPdfStatuses(prev => new Map(prev).set(paperId, 'error'))
+  }, [])
+
+  const stopStreaming = useCallback(() => {
+    abortRef.current?.abort()
   }, [])
 
   const sendMessage = useCallback(
@@ -67,6 +74,9 @@ export function usePaperChat(apiKey: string, model: string = 'deepseek-v4-flash'
       const prevMessages = histories.get(paperId) ?? []
       const pdfText = pdfTextsRef.current.get(paperId)
       const userMsg: ChatMessage = { role: 'user', content: userContent }
+
+      const controller = new AbortController()
+      abortRef.current = controller
 
       setHistories(prev => {
         const next = new Map(prev)
@@ -78,6 +88,7 @@ export function usePaperChat(apiKey: string, model: string = 'deepseek-v4-flash'
       try {
         const resp = await fetch('https://api.deepseek.com/chat/completions', {
           method: 'POST',
+          signal: controller.signal,
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
           body: JSON.stringify({
             model,
@@ -127,15 +138,30 @@ export function usePaperChat(apiKey: string, model: string = 'deepseek-v4-flash'
           return next
         })
       } catch (err) {
-        const errMsg = err instanceof Error ? err.message : String(err)
-        setHistories(prev => {
-          const next = new Map(prev)
-          const msgs = [...(prev.get(paperId) ?? [])]
-          msgs[msgs.length - 1] = { role: 'assistant', content: `请求失败：${errMsg}` }
-          next.set(paperId, msgs)
-          return next
-        })
+        if ((err as Error).name === 'AbortError') {
+          // 用户手动停止：保留已生成内容，标记为非流式
+          setHistories(prev => {
+            const next = new Map(prev)
+            const msgs = [...(prev.get(paperId) ?? [])]
+            const last = msgs[msgs.length - 1]
+            if (last?.isStreaming) {
+              msgs[msgs.length - 1] = { role: 'assistant', content: last.content || '（已停止）' }
+            }
+            next.set(paperId, msgs)
+            return next
+          })
+        } else {
+          const errMsg = err instanceof Error ? err.message : String(err)
+          setHistories(prev => {
+            const next = new Map(prev)
+            const msgs = [...(prev.get(paperId) ?? [])]
+            msgs[msgs.length - 1] = { role: 'assistant', content: `请求失败：${errMsg}` }
+            next.set(paperId, msgs)
+            return next
+          })
+        }
       } finally {
+        abortRef.current = null
         setStreamingPaperId(null)
       }
     },
@@ -159,17 +185,19 @@ export function usePaperChat(apiKey: string, model: string = 'deepseek-v4-flash'
   return {
     getMessages,
     sendMessage,
+    stopStreaming,
     isStreaming: streamingPaperId !== null,
     streamingPaperId,
     getPdfStatus,
     setPdfText,
+    setPdfError,
     clearChat,
   }
 }
 
 function buildSystemPrompt(paper: Paper, pdfText?: string): string {
   const lines = [
-    '你是一个学术论文分析助手，请根据以下论文信息回答用户的问题。请用中文回答，简洁专业。',
+    '你是一个学术论文分析助手，请根据以下论文信息回答用户的问题。请用中文回答，简洁专业。支持 Markdown 格式输出。',
     '',
     '【论文信息】',
     `标题：${paper.title}`,
