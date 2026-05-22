@@ -1055,8 +1055,8 @@ const addKeyword = () => {
                 {/* 分组内论文列表 */}
                 {!isCollapsed && (
                   <div className="mt-2 space-y-3">
-                    {sourcePapers.map(paper => (
-                      <div key={paper.paper_id} className="card-enter" style={{ animationDelay: `${sourcePapers.indexOf(paper) * 55}ms` }}>
+                    {sourcePapers.map((paper, idx) => (
+                      <div key={paper.paper_id} className="card-enter" style={{ animationDelay: `${idx * 55}ms` }}>
                         <PaperCard
                           paper={paper}
                           selected={selectedIds.has(paper.paper_id)}
@@ -1077,8 +1077,8 @@ const addKeyword = () => {
           })
         ) : (
           <>
-            {pagePapers.map(paper => (
-              <div key={paper.paper_id} className="card-enter" style={{ animationDelay: `${pagePapers.indexOf(paper) * 55}ms` }}>
+            {pagePapers.map((paper, idx) => (
+              <div key={paper.paper_id} className="card-enter" style={{ animationDelay: `${idx * 55}ms` }}>
                 <PaperCard
                   paper={paper}
                   selected={selectedIds.has(paper.paper_id)}

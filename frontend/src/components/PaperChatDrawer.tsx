@@ -57,11 +57,12 @@ interface Props {
   onStop: () => void
   onClose: () => void
   onUploadPdf: (file: File) => Promise<boolean>
+  onRemovePdf?: () => void
   onNewChat: () => void
   onRegenerate?: () => void
 }
 
-export function PaperChatDrawer({ paper, messages, isStreaming, pdfStatus, onSend, onStop, onClose, onUploadPdf, onNewChat, onRegenerate }: Props) {
+export function PaperChatDrawer({ paper, messages, isStreaming, pdfStatus, onSend, onStop, onClose, onUploadPdf, onRemovePdf, onNewChat, onRegenerate }: Props) {
   const [input, setInput] = useState('')
   const [editingPrompts, setEditingPrompts] = useState(false)
   const [newPrompt, setNewPrompt] = useState('')
@@ -238,6 +239,17 @@ export function PaperChatDrawer({ paper, messages, isStreaming, pdfStatus, onSen
                     onClick={() => fileInputRef.current?.click()}
                     className="text-green-600 hover:text-green-800 underline underline-offset-2 whitespace-nowrap"
                   >重新上传</button>
+                  {onRemovePdf && (
+                    <button
+                      onClick={onRemovePdf}
+                      className="text-green-500 hover:text-red-500 transition-colors ml-1 flex-shrink-0"
+                      title="清除 PDF，回到摘要分析模式"
+                    >
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  )}
                 </>
               ) : pdfStatus === 'error' ? (
                 <>

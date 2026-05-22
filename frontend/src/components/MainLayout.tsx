@@ -34,7 +34,7 @@ export function MainLayout({ apiKey, onClearKey }: Props) {
   } = useSearch(apiKey, settings, model)
 
   const [activePaper, setActivePaper] = useState<Paper | null>(null)
-  const { getMessages, sendMessage, regenerate, stopStreaming, isStreaming, streamingPaperId, getPdfStatus, setPdfText, setPdfError, clearChat } = usePaperChat(apiKey, model)
+  const { getMessages, sendMessage, regenerate, stopStreaming, isStreaming, streamingPaperId, getPdfStatus, setPdfText, setPdfError, removePdf, clearChat } = usePaperChat(apiKey, model)
   const chatInputRef = useRef<HTMLTextAreaElement>(null)
 
   const handleAnalyzePaper = (paper: Paper) => {
@@ -243,6 +243,7 @@ export function MainLayout({ apiKey, onClearKey }: Props) {
         onStop={stopStreaming}
         onClose={() => setActivePaper(null)}
         onUploadPdf={handleUploadPdf}
+        onRemovePdf={activePaper ? () => removePdf(activePaper) : undefined}
         onNewChat={() => activePaper && clearChat(activePaper, true)}
         onRegenerate={() => activePaper && regenerate(activePaper)}
       />

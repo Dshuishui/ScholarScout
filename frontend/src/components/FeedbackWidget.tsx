@@ -183,6 +183,11 @@ export function FeedbackWidget() {
 
   const limitMsg = checkRateLimit(sendTimes)
   const unreadCount = items.filter(i => !i.recalled).length
+  const tabCounts: Record<Category, number> = {
+    suggest: items.filter(i => !i.recalled && i.category === 'suggest').length,
+    bug:     items.filter(i => !i.recalled && i.category === 'bug').length,
+    chat:    items.filter(i => !i.recalled && (!i.category || i.category === 'chat')).length,
+  }
 
   return (
     <>
@@ -245,10 +250,10 @@ export function FeedbackWidget() {
               >
                 <span>{tab.icon}</span>
                 {tab.label}
-                {tab.key === 'chat' && (
+                {tabCounts[tab.key] > 0 && (
                   <span className={`text-[10px] rounded-full px-1.5 py-0.5 tabular-nums ${
-                    activeTab === 'chat' ? 'bg-blue-100 text-blue-600' : 'bg-gray-100 text-gray-500'
-                  }`}>{unreadCount}</span>
+                    activeTab === tab.key ? 'bg-blue-100 text-blue-600' : 'bg-gray-100 text-gray-500'
+                  }`}>{tabCounts[tab.key]}</span>
                 )}
               </button>
             ))}

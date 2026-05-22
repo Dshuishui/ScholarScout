@@ -228,6 +228,22 @@ export function usePaperChat(apiKey: string, model: string = 'deepseek-v4-flash'
     await sendMessage(paper, lastUserContent)
   }, [histories, sendMessage])
 
+  const removePdf = useCallback((paper: Paper) => {
+    const paperId = paper.paper_id
+    pdfTextsRef.current.delete(paperId)
+    setPdfStatuses(prev => { const m = new Map(prev); m.delete(paperId); return m })
+    if (token) {
+      const msgs = (histories.get(paperId) ?? [])
+        .filter(m => !m.isStreaming)
+        .map(m => ({ role: m.role, content: m.content }))
+      fetch('/api/user/chats', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ paper, messages: msgs, pdf_text: null, update_pdf: true }),
+      }).catch(() => {})
+    }
+  }, [token, histories])
+
   const clearChat = useCallback((paper: Paper, keepPdf = false) => {
     const paperId = paper.paper_id
     if (!keepPdf) {
@@ -255,6 +271,7 @@ export function usePaperChat(apiKey: string, model: string = 'deepseek-v4-flash'
     getPdfStatus,
     setPdfText,
     setPdfError,
+    removePdf,
     clearChat,
   }
 }
