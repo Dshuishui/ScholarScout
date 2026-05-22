@@ -40,7 +40,7 @@ function checkRateLimit(sendTimes: number[]): string | null {
 }
 
 export function FeedbackWidget() {
-  const { token, isLoggedIn } = useAuth()
+  const { token, isLoggedIn } = useAuth() // isLoggedIn used in optimisticItem
   const [open, setOpen] = useState(false)
   const [items, setItems] = useState<FeedbackItem[]>([])
   const [text, setText] = useState('')
@@ -72,17 +72,19 @@ export function FeedbackWidget() {
       .catch(() => {})
   }, [token, scrollToBottom])
 
+  // 挂载时 fetch 一次，让徽标在面板打开前就显示条数
+  // fetchFeedback 依赖 token，登录/登出时也会自动重新获取
+  useEffect(() => {
+    fetchFeedback()
+  }, [fetchFeedback])
+
+  // 面板打开时立即刷新 + 每 20 秒轮询
   useEffect(() => {
     if (!open) return
     fetchFeedback()
     const interval = setInterval(fetchFeedback, 20000)
     return () => clearInterval(interval)
   }, [open, fetchFeedback])
-
-  // Re-fetch when login state changes (to get can_recall flags)
-  useEffect(() => {
-    if (open) fetchFeedback()
-  }, [isLoggedIn]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleSubmit = async () => {
     const content = text.trim()
