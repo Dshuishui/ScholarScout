@@ -21,6 +21,8 @@ echo ""
 echo ">>> [2/5] 更新后端依赖..."
 cd "$REPO_DIR/backend"
 "$UV" sync --no-dev
+# uv sync 在 Linux 上会写入平台特定的 wheel hash，丢弃以保持 git 干净
+git -C "$REPO_DIR" checkout -- backend/uv.lock 2>/dev/null || true
 
 echo ""
 echo ">>> [3/5] 构建前端..."

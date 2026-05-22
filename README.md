@@ -2,6 +2,8 @@
 
 > 用自然语言找论文，不需要懂技术。
 
+[English](README.en.md) | 中文
+
 [![Python](https://img.shields.io/badge/Python-3.11+-blue?logo=python&logoColor=white)](https://www.python.org)
 [![uv](https://img.shields.io/badge/package_manager-uv-purple?logo=python)](https://github.com/astral-sh/uv)
 [![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=white)](https://react.dev)
