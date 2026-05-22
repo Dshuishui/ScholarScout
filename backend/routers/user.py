@@ -20,6 +20,8 @@ class PaperBody(BaseModel):
 class ChatSaveBody(BaseModel):
     paper: dict[str, Any]
     messages: list[dict[str, Any]]
+    pdf_text: str | None = None        # None = 不更新；空字符串/文本 = 更新
+    update_pdf: bool = False           # True 时才写入 pdf_text（含清除）
 
 
 def _paper_hash(paper: dict) -> str:
@@ -95,6 +97,7 @@ async def get_chats(user: User = Depends(get_current_user), db: AsyncSession = D
             "paper_id_hash": row.paper_id_hash,
             "paper": json.loads(row.paper_json),
             "messages": json.loads(row.messages_json),
+            "pdf_text": row.pdf_text,
             "updated_at": row.updated_at.isoformat(),
         }
         for row in result.scalars()
@@ -111,6 +114,8 @@ async def save_chat(body: ChatSaveBody, user: User = Depends(get_current_user), 
     if existing:
         existing.paper_json = json.dumps(body.paper)
         existing.messages_json = json.dumps(body.messages)
+        if body.update_pdf:
+            existing.pdf_text = body.pdf_text or None
         existing.updated_at = datetime.utcnow()
     else:
         db.add(PaperChat(
@@ -118,6 +123,7 @@ async def save_chat(body: ChatSaveBody, user: User = Depends(get_current_user), 
             paper_id_hash=h,
             paper_json=json.dumps(body.paper),
             messages_json=json.dumps(body.messages),
+            pdf_text=body.pdf_text if body.update_pdf else None,
         ))
     await db.commit()
     return {"ok": True}

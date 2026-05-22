@@ -10,62 +10,61 @@ export interface ChatMessage {
 
 export type PdfStatus = 'idle' | 'ok' | 'error'
 
-const SS_PDF_PREFIX = 'ss_pdf_'
-
-function loadPdfFromStorage(): Map<string, string> {
-  const m = new Map<string, string>()
-  try {
-    for (const key of Object.keys(localStorage)) {
-      if (key.startsWith(SS_PDF_PREFIX)) {
-        const text = localStorage.getItem(key)
-        if (text) m.set(key.slice(SS_PDF_PREFIX.length), text)
-      }
-    }
-  } catch {}
-  return m
-}
-
 export function usePaperChat(apiKey: string, model: string = 'deepseek-v4-flash') {
   const { token, isLoggedIn } = useAuth()
   const [histories, setHistories] = useState<Map<string, ChatMessage[]>>(new Map())
   const [streamingPaperId, setStreamingPaperId] = useState<string | null>(null)
-  const [pdfStatuses, setPdfStatuses] = useState<Map<string, PdfStatus>>(() => {
-    const restored = new Map<string, PdfStatus>()
-    try {
-      for (const key of Object.keys(localStorage)) {
-        if (key.startsWith(SS_PDF_PREFIX)) restored.set(key.slice(SS_PDF_PREFIX.length), 'ok')
-      }
-    } catch {}
-    return restored
-  })
-  // useRef 不支持 factory，直接调用初始化函数
-  const pdfTextsRef = useRef<Map<string, string>>(loadPdfFromStorage())
+  const [pdfStatuses, setPdfStatuses] = useState<Map<string, PdfStatus>>(new Map())
+  const pdfTextsRef = useRef<Map<string, string>>(new Map())
   const abortRef = useRef<AbortController | null>(null)
 
+  // 清理旧版 localStorage 缓存（已改为后端存储）
+  useEffect(() => {
+    try {
+      for (const key of Object.keys(localStorage)) {
+        if (key.startsWith('ss_pdf_')) localStorage.removeItem(key)
+      }
+    } catch {}
+  }, [])
+
+  // 从后端加载对话记录和 PDF 文本（登录后恢复）
   useEffect(() => {
     if (!isLoggedIn || !token) return
     fetch('/api/user/chats', { headers: { Authorization: `Bearer ${token}` } })
       .then(r => r.json())
-      .then((items: { paper_id_hash: string; paper: Paper; messages: ChatMessage[] }[]) => {
+      .then((items: { paper_id_hash: string; paper: Paper; messages: ChatMessage[]; pdf_text: string | null }[]) => {
+        const newStatuses = new Map<string, PdfStatus>()
         setHistories(prev => {
           const next = new Map(prev)
           for (const item of items) {
             if (!next.has(item.paper.paper_id)) {
               next.set(item.paper.paper_id, item.messages)
             }
+            if (item.pdf_text) {
+              pdfTextsRef.current.set(item.paper.paper_id, item.pdf_text)
+              newStatuses.set(item.paper.paper_id, 'ok')
+            }
           }
           return next
         })
+        if (newStatuses.size > 0) {
+          setPdfStatuses(prev => {
+            const m = new Map(prev)
+            newStatuses.forEach((v, k) => m.set(k, v))
+            return m
+          })
+        }
       })
       .catch(() => {})
   }, [isLoggedIn, token])
 
-  const _saveToBackend = useCallback((paper: Paper, msgs: ChatMessage[], tok: string) => {
+  const _saveToBackend = useCallback((paper: Paper, msgs: ChatMessage[], tok: string, updatePdf = false) => {
     const messages = msgs.filter(m => !m.isStreaming).map(m => ({ role: m.role, content: m.content }))
+    const pdf_text = pdfTextsRef.current.get(paper.paper_id) ?? null
     fetch('/api/user/chats', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${tok}` },
-      body: JSON.stringify({ paper, messages }),
+      body: JSON.stringify({ paper, messages, pdf_text, update_pdf: updatePdf }),
     }).catch(() => {})
   }, [])
 
@@ -79,11 +78,22 @@ export function usePaperChat(apiKey: string, model: string = 'deepseek-v4-flash'
     [pdfStatuses],
   )
 
-  const setPdfText = useCallback((paperId: string, text: string) => {
+  // 接收完整 Paper 对象，上传后立即持久化到后端
+  const setPdfText = useCallback((paper: Paper, text: string) => {
+    const paperId = paper.paper_id
     pdfTextsRef.current.set(paperId, text)
     setPdfStatuses(prev => new Map(prev).set(paperId, 'ok'))
-    try { localStorage.setItem(`${SS_PDF_PREFIX}${paperId}`, text) } catch {}
-  }, [])
+    if (token) {
+      const msgs = (histories.get(paperId) ?? [])
+        .filter(m => !m.isStreaming)
+        .map(m => ({ role: m.role, content: m.content }))
+      fetch('/api/user/chats', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ paper, messages: msgs, pdf_text: text, update_pdf: true }),
+      }).catch(() => {})
+    }
+  }, [token, histories])
 
   const setPdfError = useCallback((paperId: string) => {
     setPdfStatuses(prev => new Map(prev).set(paperId, 'error'))
@@ -160,7 +170,6 @@ export function usePaperChat(apiKey: string, model: string = 'deepseek-v4-flash'
         })
       } catch (err) {
         if ((err as Error).name === 'AbortError') {
-          // 用户手动停止：保留已生成内容，标记为非流式
           setHistories(prev => {
             const next = new Map(prev)
             const msgs = [...(prev.get(paperId) ?? [])]
@@ -194,14 +203,14 @@ export function usePaperChat(apiKey: string, model: string = 'deepseek-v4-flash'
     if (!keepPdf) {
       pdfTextsRef.current.delete(paperId)
       setPdfStatuses(prev => { const m = new Map(prev); m.delete(paperId); return m })
-      try { localStorage.removeItem(`${SS_PDF_PREFIX}${paperId}`) } catch {}
     }
     setHistories(prev => new Map(prev).set(paperId, []))
     if (token) {
+      const pdf_text = keepPdf ? (pdfTextsRef.current.get(paperId) ?? null) : null
       fetch('/api/user/chats', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ paper, messages: [] }),
+        body: JSON.stringify({ paper, messages: [], pdf_text, update_pdf: !keepPdf }),
       }).catch(() => {})
     }
   }, [token])
@@ -231,7 +240,6 @@ function buildApiMessages(
   const msgs: { role: string; content: string }[] = [{ role: 'system', content: system }, ...history]
 
   // 模拟 Claude.ai 的 document block：PDF 作为对话时间线中的一个节点
-  // 放在历史消息之后、当前问题之前，AI 能清晰区分"上传前"和"上传后"
   if (pdfText) {
     msgs.push(
       { role: 'user', content: `【用户上传了论文全文，以下为完整内容】\n\n${pdfText}` },

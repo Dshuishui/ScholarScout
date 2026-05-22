@@ -59,7 +59,7 @@ export function MainLayout({ apiKey, onClearKey }: Props) {
       const r = await fetch('/api/paper/parse-pdf', { method: 'POST', body: formData })
       const data = await r.json()
       if (data.text) {
-        setPdfText(paperId, data.text)
+        setPdfText(activePaper, data.text)
         return true
       }
       setPdfError(paperId)

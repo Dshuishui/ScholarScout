@@ -48,6 +48,7 @@ class PaperChat(Base):
     paper_id_hash = Column(String(64), nullable=False)
     paper_json = Column(Text, nullable=False)
     messages_json = Column(Text, nullable=False, default="[]")
+    pdf_text = Column(Text, nullable=True)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     __table_args__ = (UniqueConstraint("user_id", "paper_id_hash"),)
 
