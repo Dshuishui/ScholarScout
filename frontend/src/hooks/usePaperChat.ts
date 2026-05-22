@@ -93,11 +93,7 @@ export function usePaperChat(apiKey: string, model: string = 'deepseek-v4-flash'
           body: JSON.stringify({
             model,
             stream: true,
-            messages: [
-              { role: 'system', content: buildSystemPrompt(paper, pdfText) },
-              ...prevMessages.map(m => ({ role: m.role, content: m.content })),
-              { role: 'user', content: userContent },
-            ],
+            messages: buildApiMessages(paper, prevMessages, pdfText, userContent),
           }),
         })
 
@@ -195,7 +191,31 @@ export function usePaperChat(apiKey: string, model: string = 'deepseek-v4-flash'
   }
 }
 
-function buildSystemPrompt(paper: Paper, pdfText?: string): string {
+function buildApiMessages(
+  paper: Paper,
+  prevMessages: ChatMessage[],
+  pdfText: string | undefined,
+  userContent: string,
+): { role: string; content: string }[] {
+  const system = buildSystemPrompt(paper)
+  const history = prevMessages.map(m => ({ role: m.role, content: m.content }))
+
+  const msgs: { role: string; content: string }[] = [{ role: 'system', content: system }, ...history]
+
+  // 模拟 Claude.ai 的 document block：PDF 作为对话时间线中的一个节点
+  // 放在历史消息之后、当前问题之前，AI 能清晰区分"上传前"和"上传后"
+  if (pdfText) {
+    msgs.push(
+      { role: 'user', content: `【用户上传了论文全文，以下为完整内容】\n\n${pdfText}` },
+      { role: 'assistant', content: '已收到论文全文，现在我将基于完整内容回答您后续的问题。' },
+    )
+  }
+
+  msgs.push({ role: 'user', content: userContent })
+  return msgs
+}
+
+function buildSystemPrompt(paper: Paper): string {
   const lines = [
     '你是一个学术论文分析助手，请根据以下论文信息回答用户的问题。请用中文回答，简洁专业。支持 Markdown 格式输出。',
     '',
@@ -206,13 +226,6 @@ function buildSystemPrompt(paper: Paper, pdfText?: string): string {
     lines.push(`作者：${paper.authors.slice(0, 5).join('、')}`)
   if (paper.venue) lines.push(`发表于：${paper.venue}`)
   if (paper.published_date) lines.push(`年份：${paper.published_date.slice(0, 4)}`)
-
-  if (pdfText) {
-    lines.push('\n【论文全文（节选）】')
-    lines.push(pdfText)
-  } else if (paper.abstract) {
-    lines.push(`\n摘要：${paper.abstract}`)
-  }
-
+  if (paper.abstract) lines.push(`\n摘要：${paper.abstract}`)
   return lines.join('\n')
 }
