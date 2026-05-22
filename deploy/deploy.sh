@@ -20,7 +20,7 @@ git pull origin master
 echo ""
 echo ">>> [2/5] 更新后端依赖..."
 cd "$REPO_DIR/backend"
-"$UV" sync --no-dev
+"$UV" sync --frozen --no-dev
 
 echo ""
 echo ">>> [3/5] 构建前端..."
