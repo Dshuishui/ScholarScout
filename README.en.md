@@ -55,8 +55,8 @@ ScholarScout is an academic paper search tool built for non-CS researchers. Desc
 
 ### AI Conversations
 - **Per-paper AI chat**: Each paper card has an "AI Chat" button that opens a right-side drawer for deep discussion (methods, contributions, limitations, etc.); each paper has its own independent conversation context
-- **Full-text analysis via PDF**: Upload the paper's PDF in the chat drawer and AI switches to full-text mode — context window handles entire papers (up to DeepSeek V4's 1M token limit)
-- **PDF state persistence**: Uploaded PDFs survive page refreshes and are restored automatically
+- **Full-text analysis via PDF**: Upload the paper's PDF in the chat drawer and AI switches to full-text mode — supports DeepSeek V4's 1M token context window, covering papers of any length
+- **Cloud PDF persistence**: Uploaded PDF text is saved server-side and tied to your account — just like Claude.ai, it's automatically restored after page refresh or when logging in from another device; no re-uploading needed
 - **Markdown rendering**: AI responses render tables, code blocks, and formatted text
 - **Stop button**: Interrupt streaming at any time, keeping the content generated so far
 - **Copy button**: Hover any AI message to copy it
@@ -248,7 +248,7 @@ After search, **Unpaywall** automatically finds legal open-access PDFs for paper
 
 🚧 **Actively developed** — early stage.
 
-**Completed**: Account system, bookmarks, chat history, subscriptions with daily email push, multi-paper AI analysis, full-text PDF chat.
+**Completed**: Account system, bookmarks, chat history, keyword subscriptions with daily email push, multi-paper AI analysis (compare / literature review / trends), full-text PDF chat with server-side persistence (no re-upload needed across sessions and devices).
 
 **Planned**: More model support (Claude, GPT), user stats dashboard, mobile-optimized landing page.
 
