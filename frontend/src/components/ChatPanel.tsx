@@ -50,12 +50,31 @@ export function ChatPanel({
 }: Props) {
   const [input, setInput] = useState('')
   const [activeGroup, setActiveGroup] = useState(0)
+  const [historyCollapsed, setHistoryCollapsed] = useState(true)
   const bottomRef = useRef<HTMLDivElement>(null)
   const localRef = useRef<HTMLTextAreaElement>(null)
   const textareaRef = (inputRef as RefObject<HTMLTextAreaElement>) ?? localRef
 
   // 是否是初始状态（只有 welcome 消息）
   const isInitial = messages.length <= 1 && messages[0]?.id === '0'
+
+  // 历史折叠：找最后一条 user 消息的索引
+  const lastUserIdx = messages.reduce((best, m, i) => m.role === 'user' ? i : best, -1)
+  const hasCollapsibleHistory = lastUserIdx > 1 // 有历史（index 1 之前还有消息）
+  const hiddenCount = hasCollapsibleHistory ? lastUserIdx - 1 : 0
+  const visibleMessages = (historyCollapsed && hasCollapsibleHistory)
+    ? messages.slice(lastUserIdx)
+    : messages
+
+  // 每次新搜索（新增 user 消息）自动重置为折叠
+  const userMsgCount = messages.filter(m => m.role === 'user').length
+  const prevCountRef = useRef(userMsgCount)
+  useEffect(() => {
+    if (userMsgCount > prevCountRef.current) {
+      setHistoryCollapsed(true)
+      prevCountRef.current = userMsgCount
+    }
+  }, [userMsgCount])
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -88,7 +107,7 @@ export function ChatPanel({
   }
 
   return (
-    <div className="flex flex-col h-full bg-white/80 border-r border-indigo-100/60">
+    <div className="flex flex-col h-full bg-white/80 md:border-r border-indigo-100/60">
       {/* Section label */}
       <div className="flex items-center gap-2 px-5 py-3 border-b border-gray-100/80">
         <div className="w-1.5 h-4 rounded-full bg-indigo-500/70" />
@@ -135,8 +154,9 @@ export function ChatPanel({
               {group.examples.map(ex => (
                 <button
                   key={ex}
-                  onClick={() => { if (!isLoading) { setInput(ex); textareaRef.current?.focus() } }}
-                  className={`text-xs text-left px-3 py-2.5 rounded-xl border transition-all ${colorMap[group.color]}`}
+                  onClick={() => { if (!isLoading) onSearch(ex) }}
+                  disabled={isLoading}
+                  className={`text-xs text-left px-3 py-2.5 rounded-xl border transition-all disabled:opacity-40 ${colorMap[group.color]}`}
                 >
                   {ex}
                 </button>
@@ -177,7 +197,25 @@ export function ChatPanel({
         <>
           {/* Messages */}
           <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
-            {messages.map(msg => (
+            {/* 历史折叠开关 */}
+            {hasCollapsibleHistory && (
+              <button
+                onClick={() => setHistoryCollapsed(c => !c)}
+                className="w-full flex items-center justify-center gap-1.5 text-xs text-gray-400 hover:text-indigo-500 py-1.5 rounded-lg hover:bg-gray-50 border border-dashed border-gray-200 transition-colors"
+              >
+                <svg
+                  className={`w-3 h-3 transition-transform ${historyCollapsed ? '' : 'rotate-180'}`}
+                  fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+                {historyCollapsed
+                  ? `显示 ${hiddenCount} 条早期对话`
+                  : '折叠早期对话'}
+              </button>
+            )}
+
+            {visibleMessages.map(msg => (
               <MessageBubble key={msg.id} message={msg} />
             ))}
             <div ref={bottomRef} />

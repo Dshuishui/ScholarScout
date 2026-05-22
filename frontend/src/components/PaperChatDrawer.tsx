@@ -60,9 +60,10 @@ interface Props {
   onRemovePdf?: () => void
   onNewChat: () => void
   onRegenerate?: () => void
+  isMobile?: boolean
 }
 
-export function PaperChatDrawer({ paper, messages, isStreaming, pdfStatus, onSend, onStop, onClose, onUploadPdf, onRemovePdf, onNewChat, onRegenerate }: Props) {
+export function PaperChatDrawer({ paper, messages, isStreaming, pdfStatus, onSend, onStop, onClose, onUploadPdf, onRemovePdf, onNewChat, onRegenerate, isMobile = false }: Props) {
   const [input, setInput] = useState('')
   const [editingPrompts, setEditingPrompts] = useState(false)
   const [newPrompt, setNewPrompt] = useState('')
@@ -163,11 +164,18 @@ export function PaperChatDrawer({ paper, messages, isStreaming, pdfStatus, onSen
 
   return (
     <>
-      {isOpen && <div className="fixed inset-0 z-40 bg-black/10" onClick={onClose} />}
+      {isOpen && (
+        <div
+          className={`fixed inset-0 z-40 ${isMobile ? 'bg-black/50' : 'bg-black/10'}`}
+          onClick={onClose}
+        />
+      )}
 
       <div
-        className={`fixed top-0 right-0 h-full w-[440px] bg-white shadow-2xl z-50 flex flex-col transition-transform duration-300 ease-in-out ${
-          isOpen ? 'translate-x-0' : 'translate-x-full'
+        className={`fixed bg-white shadow-2xl z-50 flex flex-col transition-transform duration-300 ease-in-out ${
+          isMobile
+            ? `inset-x-0 bottom-0 h-[88vh] rounded-t-2xl ${isOpen ? 'translate-y-0' : 'translate-y-full'}`
+            : `top-0 right-0 h-full w-[440px] ${isOpen ? 'translate-x-0' : 'translate-x-full'}`
         }`}
         onDragEnter={handleDragEnter}
         onDragLeave={handleDragLeave}
@@ -176,6 +184,13 @@ export function PaperChatDrawer({ paper, messages, isStreaming, pdfStatus, onSen
       >
         {paper && (
           <>
+            {/* ── Mobile drag handle ── */}
+            {isMobile && (
+              <div className="flex-shrink-0 flex items-center justify-center pt-2.5 pb-0">
+                <div className="w-9 h-1 rounded-full bg-gray-300" />
+              </div>
+            )}
+
             {/* ── Drag overlay ── */}
             {isDragging && (
               <div className="absolute inset-0 z-[60] bg-violet-600/90 flex flex-col items-center justify-center gap-3 rounded-none pointer-events-none">
