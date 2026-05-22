@@ -164,10 +164,12 @@ export function usePaperChat(apiKey: string, model: string = 'deepseek-v4-flash'
     [apiKey, histories, token, _saveToBackend, model],
   )
 
-  const clearChat = useCallback((paper: Paper) => {
+  const clearChat = useCallback((paper: Paper, keepPdf = false) => {
     const paperId = paper.paper_id
-    pdfTextsRef.current.delete(paperId)
-    setPdfStatuses(prev => { const m = new Map(prev); m.delete(paperId); return m })
+    if (!keepPdf) {
+      pdfTextsRef.current.delete(paperId)
+      setPdfStatuses(prev => { const m = new Map(prev); m.delete(paperId); return m })
+    }
     setHistories(prev => new Map(prev).set(paperId, []))
     if (token) {
       fetch('/api/user/chats', {

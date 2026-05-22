@@ -205,7 +205,7 @@ export function MainLayout({ apiKey, onClearKey }: Props) {
         onStop={stopStreaming}
         onClose={() => setActivePaper(null)}
         onUploadPdf={handleUploadPdf}
-        onNewChat={() => activePaper && clearChat(activePaper)}
+        onNewChat={() => activePaper && clearChat(activePaper, true)}
       />
       {activePage === 'saved' && token && (
         <div className="fixed inset-0 z-40 bg-white">
