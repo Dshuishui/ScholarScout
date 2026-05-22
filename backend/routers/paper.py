@@ -6,7 +6,7 @@ from typing import Optional
 
 router = APIRouter()
 
-MAX_CHARS = 12000  # ~3000 tokens
+MAX_CHARS = 60000  # ~15000 tokens，覆盖绝大多数完整论文
 
 
 def _extract_text(pdf_bytes: bytes) -> Optional[str]:
