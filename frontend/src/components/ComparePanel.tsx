@@ -45,6 +45,8 @@ interface Props {
 
 export function ComparePanel({ papers, apiKey, onClose }: Props) {
   const [mode, setMode] = useState<Mode>('compare')
+  // 各模式独立缓存，切换模式不丢失结果
+  const cacheRef = useRef<Partial<Record<Mode, string>>>({})
   const [content, setContent] = useState('')
   const [isStreaming, setIsStreaming] = useState(false)
   const [hasGenerated, setHasGenerated] = useState(false)
@@ -66,8 +68,14 @@ export function ComparePanel({ papers, apiKey, onClose }: Props) {
     return () => window.removeEventListener('keydown', handler)
   }, [onClose])
 
-  const generate = useCallback(async () => {
+  const generate = useCallback(async (forceRegen = false) => {
     if (!apiKey) return
+    // 有缓存且不强制重新生成，直接显示缓存
+    if (!forceRegen && cacheRef.current[mode]) {
+      setContent(cacheRef.current[mode]!)
+      setHasGenerated(true)
+      return
+    }
     setContent('')
     setIsStreaming(true)
     setHasGenerated(true)
@@ -107,6 +115,8 @@ export function ComparePanel({ papers, apiKey, onClose }: Props) {
           } catch { /* skip */ }
         }
       }
+      // 写入缓存
+      cacheRef.current[mode] = accumulated
     } catch (err) {
       if ((err as Error).name !== 'AbortError') {
         setContent(prev => prev + `\n\n> ⚠️ 生成失败：${(err as Error).message}`)
@@ -178,7 +188,15 @@ export function ComparePanel({ papers, apiKey, onClose }: Props) {
           {MODES.map(m => (
             <button
               key={m.key}
-              onClick={() => { setMode(m.key); setContent(''); setHasGenerated(false) }}
+              onClick={() => {
+                if (m.key !== mode) {
+                  setMode(m.key)
+                  // 切换 mode 时加载缓存（若无缓存则清空，等待用户点击生成）
+                  const cached = cacheRef.current[m.key]
+                  setContent(cached ?? '')
+                  setHasGenerated(!!cached)
+                }
+              }}
               disabled={isStreaming}
               className={`flex-1 flex items-center gap-2.5 px-3.5 py-3 rounded-xl border-2 text-left transition-all ${
                 mode === m.key
@@ -243,7 +261,7 @@ export function ComparePanel({ papers, apiKey, onClose }: Props) {
                   }
                 </button>
                 <button
-                  onClick={generate}
+                  onClick={() => generate(true)}
                   className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-700 border border-gray-200 hover:border-gray-300 bg-white hover:bg-gray-50 rounded-lg px-3 py-1.5 transition-all"
                 >
                   <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -265,7 +283,7 @@ export function ComparePanel({ papers, apiKey, onClose }: Props) {
               </button>
             ) : (
               <button
-                onClick={generate}
+                onClick={() => generate(false)}
                 disabled={!apiKey}
                 className="flex items-center gap-1.5 text-xs font-semibold text-white bg-violet-600 hover:bg-violet-700 disabled:opacity-40 rounded-xl px-4 py-2 transition-all shadow-sm hover:shadow-violet-200/60 shadow-md"
               >

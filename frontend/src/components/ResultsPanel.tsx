@@ -543,13 +543,43 @@ const addKeyword = () => {
     <div className="flex flex-col h-full" style={{ background: 'transparent' }}>
       {/* 顶部标题栏 */}
       <div className="px-5 py-3 border-b border-gray-200/80 bg-white/70 backdrop-blur-sm flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2 flex-shrink-0">
-          <div className="w-1.5 h-4 rounded-full bg-gray-300" />
-          <h2 className="text-[11px] font-semibold text-gray-400 uppercase tracking-widest">搜索结果</h2>
-          {papers.length > 0 && (
-            <span className="text-xs font-semibold text-gray-700 bg-gray-100 rounded-full px-2 py-0.5 ml-1">
-              {sortedPapers.length}
-            </span>
+        <div className="flex items-center gap-3 flex-shrink-0 flex-wrap">
+          <div className="flex items-center gap-2">
+            <div className="w-1.5 h-4 rounded-full bg-gray-300" />
+            <h2 className="text-[11px] font-semibold text-gray-400 uppercase tracking-widest">搜索结果</h2>
+          </div>
+          {/* 搜索摘要统计 */}
+          {!isLoading && papers.length > 0 && (
+            <div className="flex items-center gap-1.5 text-xs flex-wrap">
+              {Object.keys(sourceStatuses).length > 0 && (
+                <>
+                  <span className="font-medium text-gray-500">
+                    {Object.values(sourceStatuses).filter(s => s.count > 0).length} 个来源
+                  </span>
+                  <span className="text-gray-200">·</span>
+                </>
+              )}
+              <span className="text-gray-500">
+                共 <span className="font-semibold text-gray-700">{papers.length + rejectedPapers.length}</span> 篇
+              </span>
+              {rejectedPapers.length > 0 && (
+                <>
+                  <span className="text-gray-200">·</span>
+                  <span className="text-gray-500">
+                    AI 筛选 <span className="font-semibold text-indigo-600">{papers.length}</span> 篇相关
+                  </span>
+                </>
+              )}
+            </div>
+          )}
+          {isLoading && Object.keys(sourceStatuses).length > 0 && (
+            <div className="flex items-center gap-1.5 text-xs text-gray-400">
+              <div className="w-3 h-3 rounded-full border-2 border-indigo-400 border-t-transparent animate-spin flex-shrink-0" />
+              <span>
+                {Object.values(sourceStatuses).filter(s => s.status === 'done').length}
+                &nbsp;/&nbsp;{Object.keys(sourceStatuses).length} 个来源完成
+              </span>
+            </div>
           )}
         </div>
 
@@ -934,20 +964,6 @@ const addKeyword = () => {
           </div>
         )}
 
-        {/* 搜索统计 */}
-        {!isLoading && papers.length > 0 && (
-          <div className="flex items-center gap-2 px-1 pb-1 text-xs text-gray-400">
-            <span>共找到 <span className="font-medium text-gray-600">{papers.length + rejectedPapers.length}</span> 篇</span>
-            {rejectedPapers.length > 0 && (
-              <>
-                <span className="text-gray-200">·</span>
-                <span>AI 筛选保留 <span className="font-medium text-blue-600">{papers.length}</span> 篇</span>
-                <span className="text-gray-200">·</span>
-                <span>过滤 {rejectedPapers.length} 篇低相关</span>
-              </>
-            )}
-          </div>
-        )}
 
         {/* AI 筛选后 0 篇引导 */}
         {!isLoading && activeTab === 'filtered' && papers.length === 0 && rejectedPapers.length > 0 && (
@@ -1050,6 +1066,7 @@ const addKeyword = () => {
                           compact={density === 'compact'}
                           isSaved={savedMap.has(paper.paper_id)}
                           onSave={() => isLoggedIn ? handleSave(paper) : setShowAuthModal(true)}
+                          hasChat={!!getMessages && getMessages(paper.paper_id).filter(m => !m.isStreaming).length > 0}
                         />
                       </div>
                     ))}
@@ -1071,6 +1088,7 @@ const addKeyword = () => {
                   compact={density === 'compact'}
                   isSaved={savedMap.has(paper.paper_id)}
                   onSave={() => isLoggedIn ? handleSave(paper) : setShowAuthModal(true)}
+                  hasChat={!!getMessages && getMessages(paper.paper_id).filter(m => !m.isStreaming).length > 0}
                 />
               </div>
             ))}

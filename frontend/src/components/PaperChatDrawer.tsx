@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import type { Paper } from '../types'
@@ -9,6 +9,7 @@ const DEFAULT_PROMPTS = [
   '这篇论文的核心贡献是什么？',
   '这篇论文的方法有哪些局限性？',
   '这篇论文适合哪些应用场景？',
+  '和同领域其他工作相比有何优势？',
 ]
 
 function useQuickPrompts() {
@@ -30,13 +31,13 @@ function useQuickPrompts() {
   }
 }
 
-// 复制按钮（hover 显示）
+// 复制按钮
 function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false)
   return (
     <button
       onClick={() => { navigator.clipboard.writeText(text).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000) }) }}
-      className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded bg-gray-200/80 hover:bg-gray-300 text-gray-500"
+      className="p-1 rounded bg-gray-200/80 hover:bg-gray-300 text-gray-500 transition-colors"
       title="复制"
     >
       {copied
@@ -57,15 +58,19 @@ interface Props {
   onClose: () => void
   onUploadPdf: (file: File) => Promise<boolean>
   onNewChat: () => void
+  onRegenerate?: () => void
 }
 
-export function PaperChatDrawer({ paper, messages, isStreaming, pdfStatus, onSend, onStop, onClose, onUploadPdf, onNewChat }: Props) {
+export function PaperChatDrawer({ paper, messages, isStreaming, pdfStatus, onSend, onStop, onClose, onUploadPdf, onNewChat, onRegenerate }: Props) {
   const [input, setInput] = useState('')
   const [editingPrompts, setEditingPrompts] = useState(false)
   const [newPrompt, setNewPrompt] = useState('')
   const [uploading, setUploading] = useState(false)
   const [uploadError, setUploadError] = useState(false)
   const [resumeCount, setResumeCount] = useState(0)
+  const [showPrompts, setShowPrompts] = useState(false)
+  const [isDragging, setIsDragging] = useState(false)
+  const dragCounter = useRef(0)
   const bottomRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -88,6 +93,8 @@ export function PaperChatDrawer({ paper, messages, isStreaming, pdfStatus, onSen
       setTimeout(() => textareaRef.current?.focus(), 300)
       setInput('')
       setUploadError(false)
+      setIsDragging(false)
+      dragCounter.current = 0
       setResumeCount(messages.filter(m => !m.isStreaming).length)
     }
   }, [isOpen, paper?.paper_id]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -103,10 +110,8 @@ export function PaperChatDrawer({ paper, messages, isStreaming, pdfStatus, onSen
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend() }
   }
 
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-    e.target.value = ''
+  const processFile = useCallback(async (file: File) => {
+    if (!file || !file.name.toLowerCase().endsWith('.pdf')) return
     setUploading(true)
     setUploadError(false)
     try {
@@ -115,6 +120,13 @@ export function PaperChatDrawer({ paper, messages, isStreaming, pdfStatus, onSen
     } finally {
       setUploading(false)
     }
+  }, [onUploadPdf])
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    e.target.value = ''
+    await processFile(file)
   }
 
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -122,6 +134,31 @@ export function PaperChatDrawer({ paper, messages, isStreaming, pdfStatus, onSen
     e.target.style.height = 'auto'
     e.target.style.height = Math.min(e.target.scrollHeight, 160) + 'px'
   }
+
+  // Drag & Drop handlers
+  const handleDragEnter = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    dragCounter.current++
+    if (e.dataTransfer.types.includes('Files')) setIsDragging(true)
+  }, [])
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    dragCounter.current--
+    if (dragCounter.current === 0) setIsDragging(false)
+  }, [])
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+  }, [])
+  const handleDrop = useCallback(async (e: React.DragEvent) => {
+    e.preventDefault()
+    dragCounter.current = 0
+    setIsDragging(false)
+    const file = e.dataTransfer.files[0]
+    if (file) await processFile(file)
+  }, [processFile])
+
+  // 最后一条非 streaming AI 消息的 index（用于显示重新生成按钮）
+  const lastAiIdx = messages.reduce((acc, m, i) => m.role === 'assistant' && !m.isStreaming ? i : acc, -1)
 
   return (
     <>
@@ -131,9 +168,24 @@ export function PaperChatDrawer({ paper, messages, isStreaming, pdfStatus, onSen
         className={`fixed top-0 right-0 h-full w-[440px] bg-white shadow-2xl z-50 flex flex-col transition-transform duration-300 ease-in-out ${
           isOpen ? 'translate-x-0' : 'translate-x-full'
         }`}
+        onDragEnter={handleDragEnter}
+        onDragLeave={handleDragLeave}
+        onDragOver={handleDragOver}
+        onDrop={handleDrop}
       >
         {paper && (
           <>
+            {/* ── Drag overlay ── */}
+            {isDragging && (
+              <div className="absolute inset-0 z-[60] bg-violet-600/90 flex flex-col items-center justify-center gap-3 rounded-none pointer-events-none">
+                <svg className="w-14 h-14 text-white/80" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                <p className="text-white font-semibold text-lg">松开以上传 PDF</p>
+                <p className="text-white/70 text-sm">支持文字版 PDF（非扫描版）</p>
+              </div>
+            )}
+
             {/* ── Header ── */}
             <div className="flex-shrink-0 px-4 py-3 border-b border-gray-100 bg-white">
               <div className="flex items-start justify-between gap-2">
@@ -168,8 +220,8 @@ export function PaperChatDrawer({ paper, messages, isStreaming, pdfStatus, onSen
               )}
             </div>
 
-            {/* ── 分析依据 banner ── */}
-            <div className={`flex-shrink-0 mx-4 mt-3 mb-1 rounded-xl px-3 py-2 text-xs flex items-start gap-2 ${
+            {/* ── PDF 状态 banner ── */}
+            <div className={`flex-shrink-0 mx-4 mt-3 mb-1 rounded-xl px-3 py-2 text-xs flex items-center gap-2 ${
               pdfStatus === 'ok'
                 ? 'bg-green-50 border border-green-100 text-green-700'
                 : pdfStatus === 'error'
@@ -178,24 +230,32 @@ export function PaperChatDrawer({ paper, messages, isStreaming, pdfStatus, onSen
             }`}>
               {pdfStatus === 'ok' ? (
                 <>
-                  <svg className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
-                  <span>已上传论文全文，AI 正在基于完整内容进行分析</span>
+                  <span className="flex-1">已上传全文，AI 基于完整内容分析</span>
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    className="text-green-600 hover:text-green-800 underline underline-offset-2 whitespace-nowrap"
+                  >重新上传</button>
                 </>
               ) : pdfStatus === 'error' ? (
                 <>
-                  <svg className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
-                  <span>PDF 解析失败（可能是扫描版或加密 PDF）。当前基于标题和摘要分析。</span>
+                  <span className="flex-1">PDF 解析失败（扫描版或加密 PDF），基于摘要分析</span>
                 </>
               ) : (
                 <>
-                  <svg className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
-                  <span>当前基于<strong>标题和摘要</strong>分析。点击下方「上传 PDF」可获得更深入的分析。</span>
+                  <span className="flex-1">基于<strong>摘要</strong>分析</span>
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    className="text-blue-600 hover:text-blue-800 font-medium underline underline-offset-2 whitespace-nowrap"
+                  >上传 PDF 获取全文分析 →</button>
                 </>
               )}
             </div>
@@ -209,9 +269,9 @@ export function PaperChatDrawer({ paper, messages, isStreaming, pdfStatus, onSen
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
                   </svg>
                   <p className="text-sm font-medium text-gray-500">和 AI 讨论这篇论文</p>
-                  <p className="text-xs mt-1 text-gray-300">询问方法、贡献、实验、局限性等</p>
+                  <p className="text-xs mt-1 text-gray-300 mb-4">询问方法、贡献、实验、局限性等</p>
 
-                  <div className="mt-4 space-y-1.5 w-full text-left">
+                  <div className="w-full text-left space-y-1.5">
                     {prompts.map((q, i) => (
                       <div key={i} className="flex items-center gap-1">
                         <button
@@ -238,7 +298,7 @@ export function PaperChatDrawer({ paper, messages, isStreaming, pdfStatus, onSen
                         className="w-full text-xs border border-dashed border-gray-300 rounded-lg px-3 py-1.5 focus:outline-none focus:border-violet-400 placeholder-gray-300"
                       />
                     )}
-                    <div className="flex items-center gap-3 mt-2 text-xs">
+                    <div className="flex items-center gap-3 mt-1 text-xs">
                       <button onClick={() => { setEditingPrompts(p => !p); setNewPrompt('') }} className="text-gray-400 hover:text-gray-600">
                         {editingPrompts ? '完成' : '编辑快捷提问'}
                       </button>
@@ -258,27 +318,80 @@ export function PaperChatDrawer({ paper, messages, isStreaming, pdfStatus, onSen
                       </svg>
                     </div>
                   )}
-                  <div className={`relative group max-w-[82%] ${msg.role === 'user' ? '' : ''}`}>
+                  <div className={`relative max-w-[82%] ${msg.role === 'user' ? '' : 'flex flex-col gap-1'}`}>
                     {msg.role === 'user' ? (
                       <div className="rounded-2xl rounded-br-sm px-3.5 py-2.5 text-sm leading-relaxed bg-violet-600 text-white whitespace-pre-wrap">
                         {msg.content}
                       </div>
                     ) : (
-                      <div className="rounded-2xl rounded-bl-sm px-3.5 py-2.5 text-sm leading-relaxed bg-gray-100 text-gray-800 prose prose-sm max-w-none prose-p:my-1 prose-headings:my-1.5 prose-pre:my-1.5 prose-ul:my-1 prose-ol:my-1 prose-li:my-0">
-                        <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                          {msg.content}
-                        </ReactMarkdown>
-                        {msg.isStreaming && (
-                          <span className="inline-block w-1 h-3.5 bg-gray-400 ml-0.5 animate-pulse rounded-sm" />
+                      <>
+                        <div className="rounded-2xl rounded-bl-sm px-3.5 py-2.5 text-sm leading-relaxed bg-gray-100 text-gray-800 prose prose-sm max-w-none prose-p:my-1 prose-headings:my-1.5 prose-pre:my-1.5 prose-ul:my-1 prose-ol:my-1 prose-li:my-0">
+                          <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                            {msg.content}
+                          </ReactMarkdown>
+                          {msg.isStreaming && (
+                            <span className="inline-block w-1 h-3.5 bg-gray-400 ml-0.5 animate-pulse rounded-sm" />
+                          )}
+                        </div>
+                        {/* AI 消息操作栏（常驻，最后一条才显示重新生成） */}
+                        {!msg.isStreaming && msg.content && (
+                          <div className="flex items-center gap-1.5 px-1">
+                            <CopyButton text={msg.content} />
+                            {i === lastAiIdx && onRegenerate && !isStreaming && (
+                              <button
+                                onClick={onRegenerate}
+                                title="重新生成"
+                                className="flex items-center gap-1 text-[11px] text-gray-400 hover:text-violet-600 px-1.5 py-1 rounded bg-gray-100 hover:bg-violet-50 transition-colors"
+                              >
+                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                </svg>
+                                重新生成
+                              </button>
+                            )}
+                          </div>
                         )}
-                        {!msg.isStreaming && msg.content && <CopyButton text={msg.content} />}
-                      </div>
+                      </>
                     )}
                   </div>
                 </div>
               ))}
               <div ref={bottomRef} />
             </div>
+
+            {/* ── 快捷提问栏（有消息时显示，可收起）── */}
+            {messages.length > 0 && (
+              <div className="flex-shrink-0 border-t border-gray-100 bg-gray-50/50">
+                <button
+                  onClick={() => setShowPrompts(p => !p)}
+                  className="w-full flex items-center justify-between px-4 py-2 text-xs text-gray-400 hover:text-gray-600 hover:bg-gray-50 transition-colors"
+                >
+                  <span className="flex items-center gap-1.5">
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                    </svg>
+                    快捷提问
+                  </span>
+                  <svg className={`w-3.5 h-3.5 transition-transform ${showPrompts ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+                {showPrompts && (
+                  <div className="px-3 pb-2 flex flex-wrap gap-1.5">
+                    {prompts.map((q, i) => (
+                      <button
+                        key={i}
+                        onClick={() => { setInput(q); textareaRef.current?.focus(); setShowPrompts(false) }}
+                        disabled={isStreaming}
+                        className="text-xs px-2.5 py-1.5 rounded-lg bg-white border border-gray-200 text-gray-600 hover:bg-violet-50 hover:text-violet-700 hover:border-violet-200 disabled:opacity-40 transition-all"
+                      >
+                        {q}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* ── Input Area ── */}
             <div className="flex-shrink-0 px-4 pb-4 pt-2 border-t border-gray-100">
@@ -329,7 +442,7 @@ export function PaperChatDrawer({ paper, messages, isStreaming, pdfStatus, onSen
                   <button
                     onClick={() => fileInputRef.current?.click()}
                     disabled={uploading || isStreaming}
-                    title="上传论文 PDF 以获得更深入分析"
+                    title="上传论文 PDF，或直接拖拽 PDF 到对话框"
                     className={`flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg border transition-all disabled:opacity-40 ${
                       pdfStatus === 'ok'
                         ? 'bg-green-50 border-green-200 text-green-600 hover:bg-green-100'
@@ -372,7 +485,7 @@ export function PaperChatDrawer({ paper, messages, isStreaming, pdfStatus, onSen
                   )}
                 </div>
               </div>
-              <p className="text-[10px] text-gray-300 text-center mt-1.5">Enter 发送 · Shift+Enter 换行</p>
+              <p className="text-[10px] text-gray-300 text-center mt-1.5">Enter 发送 · Shift+Enter 换行 · 拖拽 PDF 到此处上传</p>
             </div>
 
             <input ref={fileInputRef} type="file" accept=".pdf" className="hidden" onChange={handleFileChange} />

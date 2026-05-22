@@ -93,9 +93,16 @@ export function useSearch(apiKey: string, settings: SearchSettings, model?: stri
           updateAssistant(assistantId, { content: `出错了：${event.message}`, isLoading: false })
         }
       }
-    } catch {
+    } catch (err) {
       setHasSearchError(true)
-      updateAssistant(assistantId, { content: '网络错误，请稍后重试', isLoading: false })
+      const msg = err instanceof Error ? err.message : ''
+      let errDisplay = '网络错误，请稍后重试'
+      if (msg.includes('402') || msg.includes('INSUFFICIENT_BALANCE')) {
+        errDisplay = '⚠️ DeepSeek API 余额不足，请前往 platform.deepseek.com 充值'
+      } else if (msg.includes('401') || msg.includes('INVALID_KEY')) {
+        errDisplay = '⚠️ API Key 无效或已过期，请点击顶栏「换 Key」重新输入'
+      }
+      updateAssistant(assistantId, { content: errDisplay, isLoading: false })
     } finally {
       setIsLoading(false)
     }

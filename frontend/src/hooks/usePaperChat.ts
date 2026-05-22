@@ -132,7 +132,13 @@ export function usePaperChat(apiKey: string, model: string = 'deepseek-v4-flash'
           }),
         })
 
-        if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+        if (!resp.ok) {
+          // 余额不足 / Key 无效专项错误
+          if (resp.status === 402) throw new Error('__INSUFFICIENT_BALANCE__')
+          if (resp.status === 401) throw new Error('__INVALID_KEY__')
+          if (resp.status === 429) throw new Error('__RATE_LIMIT__')
+          throw new Error(`HTTP ${resp.status}`)
+        }
 
         const reader = resp.body!.getReader()
         const decoder = new TextDecoder()
@@ -182,10 +188,18 @@ export function usePaperChat(apiKey: string, model: string = 'deepseek-v4-flash'
           })
         } else {
           const errMsg = err instanceof Error ? err.message : String(err)
+          let displayMsg = `请求失败：${errMsg}`
+          if (errMsg === '__INSUFFICIENT_BALANCE__') {
+            displayMsg = '⚠️ DeepSeek API 余额不足，请前往 [platform.deepseek.com](https://platform.deepseek.com) 充值后重试。'
+          } else if (errMsg === '__INVALID_KEY__') {
+            displayMsg = '⚠️ API Key 无效或已过期，请点击顶栏「换 Key」重新输入。'
+          } else if (errMsg === '__RATE_LIMIT__') {
+            displayMsg = '⚠️ 请求过于频繁（Rate Limit），请等待片刻后重试。'
+          }
           setHistories(prev => {
             const next = new Map(prev)
             const msgs = [...(prev.get(paperId) ?? [])]
-            msgs[msgs.length - 1] = { role: 'assistant', content: `请求失败：${errMsg}` }
+            msgs[msgs.length - 1] = { role: 'assistant', content: displayMsg }
             next.set(paperId, msgs)
             return next
           })
@@ -197,6 +211,22 @@ export function usePaperChat(apiKey: string, model: string = 'deepseek-v4-flash'
     },
     [apiKey, histories, token, _saveToBackend, model],
   )
+
+  const regenerate = useCallback(async (paper: Paper) => {
+    const paperId = paper.paper_id
+    const msgs = histories.get(paperId) ?? []
+    // 找最后一条 user 消息
+    let lastUserIdx = -1
+    for (let i = msgs.length - 1; i >= 0; i--) {
+      if (msgs[i].role === 'user') { lastUserIdx = i; break }
+    }
+    if (lastUserIdx === -1) return
+    const lastUserContent = msgs[lastUserIdx].content
+    // 裁掉最后一个 user+assistant 对
+    const truncated = msgs.slice(0, lastUserIdx)
+    setHistories(prev => new Map(prev).set(paperId, truncated))
+    await sendMessage(paper, lastUserContent)
+  }, [histories, sendMessage])
 
   const clearChat = useCallback((paper: Paper, keepPdf = false) => {
     const paperId = paper.paper_id
@@ -218,6 +248,7 @@ export function usePaperChat(apiKey: string, model: string = 'deepseek-v4-flash'
   return {
     getMessages,
     sendMessage,
+    regenerate,
     stopStreaming,
     isStreaming: streamingPaperId !== null,
     streamingPaperId,

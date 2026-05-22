@@ -26,6 +26,7 @@ export function MainLayout({ apiKey, onClearKey }: Props) {
   const { model } = useModel()
   const { token, isLoggedIn } = useAuth()
   const [activePage, setActivePage] = useState<'saved' | 'history' | 'subscriptions' | null>(null)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const {
     messages, papers, rejectedPapers, isLoading, statusMessage, sourceStatuses,
     search, confirmedKeywords, reSearch,
@@ -33,7 +34,7 @@ export function MainLayout({ apiKey, onClearKey }: Props) {
   } = useSearch(apiKey, settings, model)
 
   const [activePaper, setActivePaper] = useState<Paper | null>(null)
-  const { getMessages, sendMessage, stopStreaming, isStreaming, streamingPaperId, getPdfStatus, setPdfText, setPdfError, clearChat } = usePaperChat(apiKey, model)
+  const { getMessages, sendMessage, regenerate, stopStreaming, isStreaming, streamingPaperId, getPdfStatus, setPdfText, setPdfError, clearChat } = usePaperChat(apiKey, model)
   const chatInputRef = useRef<HTMLTextAreaElement>(null)
 
   const handleAnalyzePaper = (paper: Paper) => {
@@ -86,7 +87,7 @@ export function MainLayout({ apiKey, onClearKey }: Props) {
     return () => window.removeEventListener('auth:expired', handler)
   }, [])
 
-  // 键盘快捷键：/ 聚焦搜索框，Esc 关闭抽屉
+  // 键盘快捷键：/ 聚焦搜索框，Esc 关闭抽屉，[ 折叠/展开侧边栏
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
@@ -102,6 +103,8 @@ export function MainLayout({ apiKey, onClearKey }: Props) {
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
   }, [])
+
+  const isDrawerOpen = activePaper !== null
 
   return (
     <div className="h-screen flex flex-col overflow-hidden">
@@ -127,6 +130,19 @@ export function MainLayout({ apiKey, onClearKey }: Props) {
         />
 
         <div className="relative flex items-center gap-2.5">
+          {/* 侧边栏折叠按钮 */}
+          <button
+            onClick={() => setSidebarCollapsed(c => !c)}
+            className="p-1.5 rounded text-indigo-300/50 hover:text-indigo-200 hover:bg-white/5 transition-colors mr-0.5"
+            title={sidebarCollapsed ? '展开搜索面板 (/)' : '折叠搜索面板'}
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              {sidebarCollapsed
+                ? <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                : <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
+              }
+            </svg>
+          </button>
           <div
             className="w-6 h-6 rounded-md flex items-center justify-center flex-shrink-0"
             style={{
@@ -156,23 +172,45 @@ export function MainLayout({ apiKey, onClearKey }: Props) {
 
       {/* 主内容区 */}
       <div
-        className="flex-1 flex overflow-hidden"
+        className="flex-1 flex overflow-hidden transition-all duration-300"
         style={{
           background:
             'radial-gradient(ellipse 70% 40% at 50% 0%, rgba(99,102,241,0.05) 0%, transparent 55%), #f7f8fc',
+          // Drawer push: 当抽屉打开时，主内容区向左腾出空间
+          marginRight: isDrawerOpen ? '440px' : '0px',
         }}
       >
-        <div className="w-96 flex-shrink-0">
-          <ChatPanel
-            messages={messages}
-            isLoading={isLoading}
-            onSearch={search}
-            history={history}
-            onSearchFromHistory={searchFromHistory}
-            onRemoveHistory={removeHistory}
-            inputRef={chatInputRef}
-          />
+        {/* 可折叠的搜索侧边栏 */}
+        <div
+          className="flex-shrink-0 overflow-hidden transition-all duration-300 ease-in-out"
+          style={{ width: sidebarCollapsed ? '0px' : '384px' }}
+        >
+          <div style={{ width: '384px' }}>
+            <ChatPanel
+              messages={messages}
+              isLoading={isLoading}
+              onSearch={search}
+              history={history}
+              onSearchFromHistory={searchFromHistory}
+              onRemoveHistory={removeHistory}
+              inputRef={chatInputRef}
+            />
+          </div>
         </div>
+
+        {/* 当侧边栏折叠时，在左侧显示展开按钮 */}
+        {sidebarCollapsed && (
+          <button
+            onClick={() => setSidebarCollapsed(false)}
+            className="flex-shrink-0 w-8 flex items-center justify-center bg-white/60 border-r border-indigo-100/60 hover:bg-indigo-50 transition-colors group"
+            title="展开搜索面板"
+          >
+            <svg className="w-4 h-4 text-gray-300 group-hover:text-indigo-400 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
+          </button>
+        )}
+
         <div className="flex-1 min-w-0">
           <ResultsPanel
             papers={papers}
@@ -206,6 +244,7 @@ export function MainLayout({ apiKey, onClearKey }: Props) {
         onClose={() => setActivePaper(null)}
         onUploadPdf={handleUploadPdf}
         onNewChat={() => activePaper && clearChat(activePaper, true)}
+        onRegenerate={() => activePaper && regenerate(activePaper)}
       />
       {activePage === 'saved' && token && (
         <div className="fixed inset-0 z-40 bg-white">
