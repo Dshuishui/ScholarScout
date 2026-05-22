@@ -25,6 +25,7 @@ interface FeedbackItem {
   recalled: boolean
   location: string | null
   is_author: boolean
+  category: Category
   created_at: string
   can_recall: boolean
   reply_to: ReplySnippet | null
@@ -130,7 +131,7 @@ export function FeedbackWidget() {
       const r = await fetch('/api/feedback', {
         method: 'POST',
         headers,
-        body: JSON.stringify({ content, reply_to_id: replyTo?.id ?? null }),
+        body: JSON.stringify({ content, reply_to_id: replyTo?.id ?? null, category: activeTab }),
       })
       if (r.status === 429) { setError('服务器限流，请稍后再试'); return }
       if (!r.ok) { setError('发送失败，请重试'); return }
@@ -138,7 +139,7 @@ export function FeedbackWidget() {
       const result = await r.json() as { ok: boolean; id: number; created_at: string }
       const optimisticItem: FeedbackItem = {
         id: result.id, content, recalled: false, location: null, is_author: false,
-        created_at: result.created_at, can_recall: isLoggedIn,
+        category: activeTab, created_at: result.created_at, can_recall: isLoggedIn,
         reply_to: replyTo ? { id: replyTo.id, content: (replyTo.content ?? '').slice(0, 80), recalled: replyTo.recalled } : null,
       }
       setItems(prev => [...prev, optimisticItem])
@@ -173,13 +174,11 @@ export function FeedbackWidget() {
     finally { setRecalling(null) }
   }
 
-  // 按 tab 过滤（简单规则：bug tab 过滤"bug/问题/错误/失败"关键词，suggest 过滤"建议/功能/希望"，其余归 chat）
+  // 按 category 字段过滤；聊天 tab 兜底显示未分类（旧数据无 category）
   const filteredItems = items.filter(item => {
-    if (item.recalled) return activeTab === 'chat' // 撤回消息只在聊天 tab 显示（占位符）
-    const c = (item.content ?? '').toLowerCase()
-    if (activeTab === 'bug') return /bug|问题|错误|失败|修复|fix/.test(c)
-    if (activeTab === 'suggest') return /建议|功能|希望|支持|能否|可以加|希望/.test(c)
-    return true // chat tab 显示全部
+    if (item.recalled) return activeTab === 'chat'
+    if (activeTab === 'chat') return !item.category || item.category === 'chat'
+    return item.category === activeTab
   })
 
   const limitMsg = checkRateLimit(sendTimes)

@@ -38,6 +38,7 @@ class Feedback(Base):
     user_id = Column(Integer, nullable=True)
     reply_to_id = Column(Integer, nullable=True)
     recalled = Column(Integer, default=0)
+    category = Column(String(20), nullable=True, default='chat')
     created_at = Column(DateTime, default=datetime.utcnow)
 
 

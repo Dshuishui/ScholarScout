@@ -21,6 +21,7 @@ optional_bearer = HTTPBearer(auto_error=False)
 class FeedbackRequest(BaseModel):
     content: str = Field(min_length=1, max_length=200)
     reply_to_id: Optional[int] = None
+    category: Optional[str] = 'chat'  # 'suggest' | 'bug' | 'chat'
 
 
 async def _get_location(ip: str) -> Optional[str]:
@@ -75,6 +76,7 @@ async def get_feedback(
             "recalled": bool(row.recalled),
             "location": row.location,
             "is_author": bool(row.is_author),
+            "category": row.category or 'chat',
             "created_at": row.created_at.isoformat(),
             "can_recall": (
                 current_user_id is not None
@@ -123,12 +125,16 @@ async def submit_feedback(
     )
     location = await _get_location(ip)
 
+    valid_categories = {'suggest', 'bug', 'chat'}
+    category = req.category if req.category in valid_categories else 'chat'
+
     fb = Feedback(
         content=req.content.strip(),
         location=location,
         is_author=int(is_author),
         user_id=user_id,
         reply_to_id=req.reply_to_id,
+        category=category,
     )
     db.add(fb)
     await db.commit()
