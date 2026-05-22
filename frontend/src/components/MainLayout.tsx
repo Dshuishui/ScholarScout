@@ -1,8 +1,7 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, lazy, Suspense } from 'react'
 import type { Paper } from '../types'
 import { ChatPanel } from './ChatPanel'
 import { ResultsPanel } from './ResultsPanel'
-import { PaperChatDrawer } from './PaperChatDrawer'
 import { ToastContainer, toast } from './Toast'
 import { useSearch } from '../hooks/useSearch'
 import { useSettings } from '../hooks/useSettings'
@@ -16,6 +15,8 @@ import { HistoryPage } from '../pages/HistoryPage'
 import { SubscriptionsPage } from '../pages/SubscriptionsPage'
 import { FeedbackWidget } from './FeedbackWidget'
 import { RedPandaWidget } from './RedPandaWidget'
+
+const PaperChatDrawer = lazy(() => import('./PaperChatDrawer').then(m => ({ default: m.PaperChatDrawer })))
 
 interface Props {
   apiKey: string
@@ -307,20 +308,22 @@ export function MainLayout({ apiKey, onClearKey }: Props) {
       <RedPandaWidget isSearching={isLoading} />
       <FeedbackWidget isMobileTabBar={isMobile} />
       <ToastContainer />
-      <PaperChatDrawer
-        paper={activePaper}
-        messages={activePaper ? getMessages(activePaper.paper_id) : []}
-        isStreaming={!!activePaper && streamingPaperId === activePaper.paper_id && isStreaming}
-        pdfStatus={activePaper ? getPdfStatus(activePaper.paper_id) : 'idle'}
-        onSend={content => activePaper && sendMessage(activePaper, content)}
-        onStop={stopStreaming}
-        onClose={() => setActivePaper(null)}
-        onUploadPdf={handleUploadPdf}
-        onRemovePdf={activePaper ? () => removePdf(activePaper) : undefined}
-        onNewChat={() => activePaper && clearChat(activePaper, true)}
-        onRegenerate={() => activePaper && regenerate(activePaper)}
-        isMobile={isMobile}
-      />
+      <Suspense fallback={null}>
+        <PaperChatDrawer
+          paper={activePaper}
+          messages={activePaper ? getMessages(activePaper.paper_id) : []}
+          isStreaming={!!activePaper && streamingPaperId === activePaper.paper_id && isStreaming}
+          pdfStatus={activePaper ? getPdfStatus(activePaper.paper_id) : 'idle'}
+          onSend={content => activePaper && sendMessage(activePaper, content)}
+          onStop={stopStreaming}
+          onClose={() => setActivePaper(null)}
+          onUploadPdf={handleUploadPdf}
+          onRemovePdf={activePaper ? () => removePdf(activePaper) : undefined}
+          onNewChat={() => activePaper && clearChat(activePaper, true)}
+          onRegenerate={() => activePaper && regenerate(activePaper)}
+          isMobile={isMobile}
+        />
+      </Suspense>
       {activePage === 'saved' && token && (
         <div className="fixed inset-0 z-40 bg-white">
           <SavedPage token={token} onClose={() => setActivePage(null)} />

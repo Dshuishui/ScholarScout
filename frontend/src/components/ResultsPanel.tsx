@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, lazy, Suspense } from 'react'
 import { useAuth } from '../hooks/useAuth'
 import { AuthModal } from './AuthModal'
 import JSZip from 'jszip'
@@ -9,8 +9,9 @@ import type { ChatMessage } from '../hooks/usePaperChat'
 import { ALL_SOURCES } from '../hooks/useSettings'
 import { PaperCard } from './PaperCard'
 import { PaperCardSkeleton } from './PaperCardSkeleton'
-import { ComparePanel } from './ComparePanel'
 import { getDownloadUrl } from '../api/client'
+
+const ComparePanel = lazy(() => import('./ComparePanel').then(m => ({ default: m.ComparePanel })))
 
 const SOURCE_COLORS: Record<string, string> = {
   'arXiv':            'text-green-600',
@@ -211,7 +212,7 @@ export function ResultsPanel({ papers, rejectedPapers = [], isLoading, statusMes
   const [showCompare, setShowCompare] = useState(false)
   const [showAuthModal, setShowAuthModal] = useState(false)
   const [showExportModal, setShowExportModal] = useState(false)
-  const [exportOpts, setExportOpts] = useState({ aiAnalysis: true, translate: true, chats: true })
+  const [exportOpts, setExportOpts] = useState({ aiOnly: true, aiAnalysis: true, translate: true, chats: true })
   const [exporting, setExporting] = useState(false)
   const [exportStatus, setExportStatus] = useState('')
 
@@ -295,18 +296,19 @@ export function ResultsPanel({ papers, rejectedPapers = [], isLoading, statusMes
     setExportStatus('')
     try {
       const dateStr = new Date().toISOString().slice(0, 10)
+      const exportPapers = exportOpts.aiOnly ? papers : [...papers, ...rejectedPapers]
       const headers: string[] = ['标题', '作者', '年份', '来源', '引用数', '摘要', '论文链接', 'PDF链接']
       if (exportOpts.translate) headers.splice(1, 0, '中文标题')
       if (exportOpts.aiAnalysis) headers.push('AI相关性分析')
 
       let chineseTitles: string[] = []
       if (exportOpts.translate && apiKey) {
-        setExportStatus(`正在翻译 ${papers.length} 篇标题…`)
-        chineseTitles = await translateTitles(papers.map(p => p.title), apiKey)
+        setExportStatus(`正在翻译 ${exportPapers.length} 篇标题…`)
+        chineseTitles = await translateTitles(exportPapers.map(p => p.title), apiKey)
         setExportStatus('正在生成文件…')
       }
 
-      const rows = papers.map((p, i) => {
+      const rows = exportPapers.map((p, i) => {
         const row = [
           p.title,
           p.authors.join('; '),
@@ -328,7 +330,7 @@ export function ResultsPanel({ papers, rejectedPapers = [], isLoading, statusMes
 
       // 判断是否需要附带对话记录
       const chatsHTML = (exportOpts.chats && getMessages)
-        ? generateChatsHTML(papers, getMessages)
+        ? generateChatsHTML(exportPapers, getMessages)
         : ''
 
       if (chatsHTML) {
@@ -1100,11 +1102,13 @@ const addKeyword = () => {
       {showAuthModal && <AuthModal onClose={() => setShowAuthModal(false)} />}
 
       {showCompare && apiKey && (
-        <ComparePanel
-          papers={papers.filter(p => selectedIds.has(p.paper_id))}
-          apiKey={apiKey}
-          onClose={() => setShowCompare(false)}
-        />
+        <Suspense fallback={null}>
+          <ComparePanel
+            papers={papers.filter(p => selectedIds.has(p.paper_id))}
+            apiKey={apiKey}
+            onClose={() => setShowCompare(false)}
+          />
+        </Suspense>
       )}
 
       {/* 导出 CSV 选项弹窗 */}
@@ -1112,49 +1116,72 @@ const addKeyword = () => {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30" onClick={() => !exporting && setShowExportModal(false)}>
           <div className="bg-white rounded-2xl shadow-2xl w-80 p-5" onClick={e => e.stopPropagation()}>
             <h3 className="text-sm font-semibold text-gray-800 mb-1">导出 CSV 选项</h3>
-            <p className="text-xs text-gray-400 mb-4">共 {papers.length} 篇论文</p>
+            <p className="text-xs text-gray-400 mb-4">
+              将导出{' '}
+              <span className="font-medium text-gray-600">
+                {exportOpts.aiOnly ? papers.length : papers.length + rejectedPapers.length}
+              </span>{' '}
+              篇论文
+            </p>
 
             <div className="space-y-3">
               <label className="flex items-start gap-3 cursor-pointer group">
                 <input
                   type="checkbox"
-                  checked={exportOpts.aiAnalysis}
-                  onChange={e => setExportOpts(o => ({ ...o, aiAnalysis: e.target.checked }))}
+                  checked={exportOpts.aiOnly}
+                  onChange={e => setExportOpts(o => ({ ...o, aiOnly: e.target.checked }))}
                   className="mt-0.5 w-4 h-4 rounded accent-blue-600 cursor-pointer"
                 />
                 <div>
-                  <p className="text-sm text-gray-700 group-hover:text-gray-900">包含 AI 相关性分析</p>
-                  <p className="text-xs text-gray-400">每篇论文的 AI 解读说明</p>
+                  <p className="text-sm text-gray-700 group-hover:text-gray-900">仅导出 AI 筛选后的论文</p>
+                  <p className="text-xs text-gray-400">
+                    {papers.length} 篇相关 / 共 {papers.length + rejectedPapers.length} 篇；取消勾选则导出全部
+                  </p>
                 </div>
               </label>
 
-              <label className="flex items-start gap-3 cursor-pointer group">
-                <input
-                  type="checkbox"
-                  checked={exportOpts.translate}
-                  onChange={e => setExportOpts(o => ({ ...o, translate: e.target.checked }))}
-                  className="mt-0.5 w-4 h-4 rounded accent-blue-600 cursor-pointer"
-                />
-                <div>
-                  <p className="text-sm text-gray-700 group-hover:text-gray-900">翻译标题为中文</p>
-                  <p className="text-xs text-gray-400">AI 批量翻译，导出会稍慢</p>
-                </div>
-              </label>
-
-              {getMessages && (
+              <div className="border-t border-gray-100 pt-3 space-y-3">
                 <label className="flex items-start gap-3 cursor-pointer group">
                   <input
                     type="checkbox"
-                    checked={exportOpts.chats}
-                    onChange={e => setExportOpts(o => ({ ...o, chats: e.target.checked }))}
+                    checked={exportOpts.aiAnalysis}
+                    onChange={e => setExportOpts(o => ({ ...o, aiAnalysis: e.target.checked }))}
                     className="mt-0.5 w-4 h-4 rounded accent-blue-600 cursor-pointer"
                   />
                   <div>
-                    <p className="text-sm text-gray-700 group-hover:text-gray-900">包含 AI 对话记录</p>
-                    <p className="text-xs text-gray-400">有对话的论文附带 chats.html，打包为 ZIP</p>
+                    <p className="text-sm text-gray-700 group-hover:text-gray-900">包含 AI 相关性分析</p>
+                    <p className="text-xs text-gray-400">每篇论文的 AI 解读说明</p>
                   </div>
                 </label>
-              )}
+
+                <label className="flex items-start gap-3 cursor-pointer group">
+                  <input
+                    type="checkbox"
+                    checked={exportOpts.translate}
+                    onChange={e => setExportOpts(o => ({ ...o, translate: e.target.checked }))}
+                    className="mt-0.5 w-4 h-4 rounded accent-blue-600 cursor-pointer"
+                  />
+                  <div>
+                    <p className="text-sm text-gray-700 group-hover:text-gray-900">翻译标题为中文</p>
+                    <p className="text-xs text-gray-400">AI 批量翻译，导出会稍慢</p>
+                  </div>
+                </label>
+
+                {getMessages && (
+                  <label className="flex items-start gap-3 cursor-pointer group">
+                    <input
+                      type="checkbox"
+                      checked={exportOpts.chats}
+                      onChange={e => setExportOpts(o => ({ ...o, chats: e.target.checked }))}
+                      className="mt-0.5 w-4 h-4 rounded accent-blue-600 cursor-pointer"
+                    />
+                    <div>
+                      <p className="text-sm text-gray-700 group-hover:text-gray-900">包含 AI 对话记录</p>
+                      <p className="text-xs text-gray-400">有对话的论文附带 chats.html，打包为 ZIP</p>
+                    </div>
+                  </label>
+                )}
+              </div>
             </div>
 
             <div className="flex gap-2 mt-5">
