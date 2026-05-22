@@ -6,7 +6,7 @@ from typing import Optional
 
 router = APIRouter()
 
-MAX_CHARS = 60000  # ~15000 tokens，覆盖绝大多数完整论文
+MAX_CHARS = 480000  # DeepSeek V3 128K tokens × ~4 chars/token，减去 8K 预留
 
 
 def _extract_text(pdf_bytes: bytes) -> Optional[str]:
