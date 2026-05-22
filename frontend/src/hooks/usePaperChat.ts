@@ -10,12 +10,36 @@ export interface ChatMessage {
 
 export type PdfStatus = 'idle' | 'ok' | 'error'
 
+const SS_PDF_PREFIX = 'ss_pdf_'
+
+function loadPdfFromStorage(): Map<string, string> {
+  const m = new Map<string, string>()
+  try {
+    for (const key of Object.keys(localStorage)) {
+      if (key.startsWith(SS_PDF_PREFIX)) {
+        const text = localStorage.getItem(key)
+        if (text) m.set(key.slice(SS_PDF_PREFIX.length), text)
+      }
+    }
+  } catch {}
+  return m
+}
+
 export function usePaperChat(apiKey: string, model: string = 'deepseek-v4-flash') {
   const { token, isLoggedIn } = useAuth()
   const [histories, setHistories] = useState<Map<string, ChatMessage[]>>(new Map())
   const [streamingPaperId, setStreamingPaperId] = useState<string | null>(null)
-  const [pdfStatuses, setPdfStatuses] = useState<Map<string, PdfStatus>>(new Map())
-  const pdfTextsRef = useRef<Map<string, string>>(new Map())
+  const [pdfStatuses, setPdfStatuses] = useState<Map<string, PdfStatus>>(() => {
+    const restored = new Map<string, PdfStatus>()
+    try {
+      for (const key of Object.keys(localStorage)) {
+        if (key.startsWith(SS_PDF_PREFIX)) restored.set(key.slice(SS_PDF_PREFIX.length), 'ok')
+      }
+    } catch {}
+    return restored
+  })
+  // useRef 不支持 factory，直接调用初始化函数
+  const pdfTextsRef = useRef<Map<string, string>>(loadPdfFromStorage())
   const abortRef = useRef<AbortController | null>(null)
 
   useEffect(() => {
@@ -58,6 +82,7 @@ export function usePaperChat(apiKey: string, model: string = 'deepseek-v4-flash'
   const setPdfText = useCallback((paperId: string, text: string) => {
     pdfTextsRef.current.set(paperId, text)
     setPdfStatuses(prev => new Map(prev).set(paperId, 'ok'))
+    try { localStorage.setItem(`${SS_PDF_PREFIX}${paperId}`, text) } catch {}
   }, [])
 
   const setPdfError = useCallback((paperId: string) => {
@@ -169,6 +194,7 @@ export function usePaperChat(apiKey: string, model: string = 'deepseek-v4-flash'
     if (!keepPdf) {
       pdfTextsRef.current.delete(paperId)
       setPdfStatuses(prev => { const m = new Map(prev); m.delete(paperId); return m })
+      try { localStorage.removeItem(`${SS_PDF_PREFIX}${paperId}`) } catch {}
     }
     setHistories(prev => new Map(prev).set(paperId, []))
     if (token) {
