@@ -47,6 +47,18 @@ export function MainLayout({ apiKey, onClearKey }: Props) {
     if (isMobile && isLoading) setMobileTab('results')
   }, [isLoading]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // 支持子组件通过 custom event 打开页面（如订阅成功后跳转订阅管理）
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const page = (e as CustomEvent<string>).detail
+      if (page === 'subscriptions' || page === 'saved' || page === 'history') {
+        setActivePage(page as 'saved' | 'history' | 'subscriptions')
+      }
+    }
+    window.addEventListener('navigate:page', handler)
+    return () => window.removeEventListener('navigate:page', handler)
+  }, [])
+
   const handleAnalyzePaper = (paper: Paper) => {
     setActivePaper(prev => {
       if (prev?.paper_id === paper.paper_id) return null

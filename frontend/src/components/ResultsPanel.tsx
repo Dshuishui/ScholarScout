@@ -200,7 +200,7 @@ export function ResultsPanel({ papers, rejectedPapers = [], isLoading, statusMes
     localStorage.setItem('scholarscout_density', d)
   }
 
-  const { token, isLoggedIn } = useAuth()
+  const { token, isLoggedIn, user } = useAuth()
   const [savedMap, setSavedMap] = useState<Map<string, string>>(() => {
     try {
       const cached = localStorage.getItem('ss_saved_map')
@@ -209,6 +209,8 @@ export function ResultsPanel({ papers, rejectedPapers = [], isLoading, statusMes
   })
   const [subscriptions, setSubscriptions] = useState<{ id: number; keywords: string[] }[]>([])
   const [subLoading, setSubLoading] = useState(false)
+  const [showSubModal, setShowSubModal] = useState(false)
+  const [subModalKeywords, setSubModalKeywords] = useState<string[]>([])
   const [showCompare, setShowCompare] = useState(false)
   const [showAuthModal, setShowAuthModal] = useState(false)
   const [showExportModal, setShowExportModal] = useState(false)
@@ -255,6 +257,8 @@ export function ResultsPanel({ papers, rejectedPapers = [], isLoading, statusMes
       if (r.ok) {
         const sub: { id: number; keywords: string[] } = await r.json()
         setSubscriptions(prev => [...prev, sub])
+        setSubModalKeywords(confirmedKeywords)
+        setShowSubModal(true)
       }
     } finally {
       setSubLoading(false)
@@ -689,34 +693,41 @@ const addKeyword = () => {
             )}
           </div>
 
-          {/* 右侧：订阅按钮 */}
-          <button
-            onClick={isLoggedIn ? handleSubscribe : () => setShowAuthModal(true)}
-            disabled={subLoading || isSubscribed}
-            title={isSubscribed ? '已订阅，可在订阅管理中查看' : '订阅关键词，每周一收到新论文邮件'}
-            className={`flex-shrink-0 flex items-center gap-1.5 text-xs font-semibold rounded-full px-3.5 py-1.5 transition-all ${
-              isSubscribed
-                ? 'bg-green-50 text-green-700 border border-green-200 cursor-default'
-                : 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-md hover:shadow-indigo-200/60 active:scale-95'
-            } ${subLoading ? 'opacity-60' : ''}`}
-          >
-            {subLoading ? (
-              <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
-              </svg>
-            ) : isSubscribed ? (
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
-              </svg>
+          {/* 右侧：订阅按钮 + 说明 */}
+          <div className="flex-shrink-0 flex flex-col items-end gap-0.5">
+            <button
+              onClick={isLoggedIn ? handleSubscribe : () => setShowAuthModal(true)}
+              disabled={subLoading || isSubscribed}
+              title={isSubscribed ? '已订阅，可在订阅管理中查看' : '订阅后每天 08:00（北京时间）收到新论文邮件'}
+              className={`flex items-center gap-1.5 text-xs font-semibold rounded-full px-3.5 py-1.5 transition-all ${
+                isSubscribed
+                  ? 'bg-green-50 text-green-700 border border-green-200 cursor-default'
+                  : 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-md hover:shadow-indigo-200/60 active:scale-95'
+              } ${subLoading ? 'opacity-60' : ''}`}
+            >
+              {subLoading ? (
+                <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+                </svg>
+              ) : isSubscribed ? (
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                </svg>
+              ) : (
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                    d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                </svg>
+              )}
+              {isSubscribed ? '已订阅' : '订阅更新'}
+            </button>
+            {isSubscribed ? (
+              <span className="text-[10px] text-green-600">每日 08:00 推送 · 可随时取消</span>
             ) : (
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                  d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-              </svg>
+              <span className="text-[10px] text-gray-400">每日推送 · 可随时取消</span>
             )}
-            {isSubscribed ? '已订阅' : '订阅更新'}
-          </button>
+          </div>
         </div>
       )}
 
@@ -1206,6 +1217,86 @@ const addKeyword = () => {
                     <span className="truncate">{exportStatus || '处理中…'}</span>
                   </>
                 ) : '确认导出'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 订阅成功 Modal */}
+      {showSubModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm"
+          onClick={() => setShowSubModal(false)}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-2xl w-[340px] p-6 mx-4"
+            onClick={e => e.stopPropagation()}
+          >
+            {/* 顶部图标 + 标题 */}
+            <div className="flex flex-col items-center text-center mb-5">
+              <div className="w-12 h-12 rounded-full bg-green-100 flex items-center justify-center mb-3">
+                <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                </svg>
+              </div>
+              <h3 className="text-base font-semibold text-gray-900">订阅成功</h3>
+              <p className="text-xs text-gray-500 mt-1">你将收到包含以下关键词的最新论文推送</p>
+            </div>
+
+            {/* 关键词 chips */}
+            <div className="flex flex-wrap gap-1.5 justify-center mb-5">
+              {subModalKeywords.map(kw => (
+                <span
+                  key={kw}
+                  className="bg-indigo-50 text-indigo-700 text-xs font-medium px-2.5 py-1 rounded-full border border-indigo-100"
+                >
+                  {kw}
+                </span>
+              ))}
+            </div>
+
+            {/* 推送详情 */}
+            <div className="bg-gray-50 rounded-xl p-3.5 space-y-2.5 mb-5">
+              <div className="flex items-center gap-2.5 text-xs text-gray-600">
+                <svg className="w-4 h-4 text-indigo-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                    d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span>每天 <strong>08:00</strong>（北京时间）发送</span>
+              </div>
+              <div className="flex items-center gap-2.5 text-xs text-gray-600">
+                <svg className="w-4 h-4 text-indigo-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                    d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                </svg>
+                <span className="truncate">发送至 <strong>{user?.email ?? '你的邮箱'}</strong></span>
+              </div>
+              <div className="flex items-center gap-2.5 text-xs text-gray-600">
+                <svg className="w-4 h-4 text-indigo-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                    d="M6 18L18 6M6 6l12 12" />
+                </svg>
+                <span>随时可在「订阅管理」中取消</span>
+              </div>
+            </div>
+
+            {/* 按钮 */}
+            <div className="flex gap-2">
+              <button
+                onClick={() => setShowSubModal(false)}
+                className="flex-1 text-sm text-gray-500 hover:text-gray-700 border border-gray-200 rounded-xl py-2 transition-colors"
+              >
+                知道了
+              </button>
+              <button
+                onClick={() => {
+                  setShowSubModal(false)
+                  window.dispatchEvent(new CustomEvent('navigate:page', { detail: 'subscriptions' }))
+                }}
+                className="flex-1 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl py-2 transition-colors"
+              >
+                查看订阅管理
               </button>
             </div>
           </div>
