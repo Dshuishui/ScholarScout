@@ -19,12 +19,6 @@ interface QueueItem {
   sent_at: string | null
 }
 
-interface TestResult {
-  sent: boolean
-  count: number
-  reason?: string
-}
-
 interface Props {
   token: string
   onClose: () => void
@@ -57,8 +51,6 @@ export function SubscriptionsPage({ token, onClose }: Props) {
   const [loading, setLoading] = useState(true)
   const [togglingId, setTogglingId] = useState<number | null>(null)
   const [deletingId, setDeletingId] = useState<number | null>(null)
-  const [testingId, setTestingId] = useState<number | null>(null)
-  const [testResults, setTestResults] = useState<Record<number, TestResult>>({})
 
   // 队列展开状态
   const [expandedId, setExpandedId] = useState<number | null>(null)
@@ -132,27 +124,6 @@ export function SubscriptionsPage({ token, onClose }: Props) {
       }
     } finally {
       setDeletingId(null)
-    }
-  }
-
-  const handleTestSend = async (id: number) => {
-    setTestingId(id)
-    setTestResults(prev => { const n = { ...prev }; delete n[id]; return n })
-    try {
-      const r = await fetch(`/api/subscriptions/${id}/test-send`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
-      })
-      if (r.ok) {
-        const result: TestResult = await r.json()
-        setTestResults(prev => ({ ...prev, [id]: result }))
-      } else {
-        setTestResults(prev => ({ ...prev, [id]: { sent: false, count: 0, reason: '请求失败' } }))
-      }
-    } catch {
-      setTestResults(prev => ({ ...prev, [id]: { sent: false, count: 0, reason: '网络错误' } }))
-    } finally {
-      setTestingId(null)
     }
   }
 
@@ -246,7 +217,6 @@ export function SubscriptionsPage({ token, onClose }: Props) {
               共 {subs.length} 个订阅 · 下次推送：{tomorrow()} 08:00
             </p>
             {subs.map(sub => {
-              const result = testResults[sub.id]
               const isExpanded = expandedId === sub.id
               const queue = queues[sub.id] ?? []
               const currentLimit = editingLimit[sub.id] ?? sub.daily_limit
@@ -324,26 +294,6 @@ export function SubscriptionsPage({ token, onClose }: Props) {
                       </div>
 
                       <div className="flex items-center gap-2 flex-shrink-0">
-                        {/* Test send */}
-                        <button
-                          onClick={() => handleTestSend(sub.id)}
-                          disabled={testingId === sub.id}
-                          title="立即搜索过去7天论文并发送到邮箱（测试用）"
-                          className="flex items-center gap-1 text-xs text-indigo-600 hover:text-indigo-700 border border-indigo-200 hover:border-indigo-300 bg-indigo-50 hover:bg-indigo-100 rounded-lg px-2.5 py-1.5 transition-all disabled:opacity-50"
-                        >
-                          {testingId === sub.id ? (
-                            <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
-                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
-                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
-                            </svg>
-                          ) : (
-                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                            </svg>
-                          )}
-                          测试发送
-                        </button>
-
                         {/* Toggle */}
                         <button
                           onClick={() => handleToggle(sub.id)}
@@ -378,19 +328,6 @@ export function SubscriptionsPage({ token, onClose }: Props) {
                         </button>
                       </div>
                     </div>
-
-                    {/* Test result feedback */}
-                    {result && (
-                      <div className={`mt-3 text-xs rounded-lg px-3 py-2 ${
-                        result.sent
-                          ? 'bg-green-50 text-green-700 border border-green-100'
-                          : 'bg-amber-50 text-amber-700 border border-amber-100'
-                      }`}>
-                        {result.sent
-                          ? `✓ 已发送 ${result.count} 篇论文到您的邮箱`
-                          : `未发送：${result.reason === 'no new papers' ? '过去 7 天没有新论文' : result.reason}`}
-                      </div>
-                    )}
 
                     {/* 展开队列按钮 */}
                     <button

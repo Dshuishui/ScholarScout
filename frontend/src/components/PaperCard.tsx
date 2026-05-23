@@ -310,12 +310,12 @@ export function PaperCard({ paper, selected = false, onToggle, isRejected = fals
                   </svg>
                   {isSaved ? '已收藏' : '收藏'}
                 </span>
-                {/* 已登录时只在已收藏状态显示副文字，未登录时提示需要登录 */}
-                {(isSaved || !isLoggedIn) && (
-                  <span className={`text-[10px] leading-none ${isSaved ? 'text-blue-200' : 'text-blue-400'}`}>
-                    {isSaved ? '点击取消' : '登录后使用'}
-                  </span>
-                )}
+                {/* 副文字：已收藏→提示取消，未登录→提示登录，已登录未收藏→透明占位保持高度对齐 */}
+                <span className={`text-[10px] leading-none ${
+                  isSaved ? 'text-blue-200' : isLoggedIn ? 'invisible' : 'text-blue-400'
+                }`}>
+                  {isSaved ? '点击取消' : '登录后使用'}
+                </span>
               </button>
             )}
 
