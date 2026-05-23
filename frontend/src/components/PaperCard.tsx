@@ -2,6 +2,7 @@ import { useState } from 'react'
 import type { Paper } from '../types'
 import { getDownloadUrl } from '../api/client'
 import { toast } from './Toast'
+import { useAuth } from '../hooks/useAuth'
 
 const SOURCE_STYLES: Record<string, { bar: string; badge: string }> = {
   'arXiv':            { bar: 'bg-green-500',   badge: 'bg-green-50 text-green-700 border-green-200' },
@@ -45,6 +46,7 @@ interface Props {
 export function PaperCard({ paper, selected = false, onToggle, isRejected = false, onAnalyze, compact = false, isSaved = false, onSave, hasChat = false }: Props) {
   const [copied, setCopied] = useState(false)
   const [expanded, setExpanded] = useState(false)
+  const { isLoggedIn } = useAuth()
   const showAbstract = !compact || expanded
   const hasExpandable = compact && (!!paper.abstract || !!paper.relevance_reason)
   const year = paper.published_date?.slice(0, 4) ?? '—'
@@ -295,7 +297,7 @@ export function PaperCard({ paper, selected = false, onToggle, isRejected = fals
             {onSave && (
               <button
                 onClick={e => { e.stopPropagation(); onSave() }}
-                title={isSaved ? '已收藏 · 点击取消收藏' : '收藏到我的文献库（需登录）'}
+                title={isSaved ? '已收藏 · 点击取消收藏' : isLoggedIn ? '收藏到我的文献库' : '登录后可收藏'}
                 className={`flex-shrink-0 inline-flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-lg border transition-all active:scale-95 ${
                   isSaved
                     ? 'bg-blue-600 text-white border-blue-600 hover:bg-blue-700'
@@ -308,9 +310,12 @@ export function PaperCard({ paper, selected = false, onToggle, isRejected = fals
                   </svg>
                   {isSaved ? '已收藏' : '收藏'}
                 </span>
-                <span className={`text-[10px] leading-none ${isSaved ? 'text-blue-200' : 'text-blue-400'}`}>
-                  {isSaved ? '点击取消' : '登录后使用'}
-                </span>
+                {/* 已登录时只在已收藏状态显示副文字，未登录时提示需要登录 */}
+                {(isSaved || !isLoggedIn) && (
+                  <span className={`text-[10px] leading-none ${isSaved ? 'text-blue-200' : 'text-blue-400'}`}>
+                    {isSaved ? '点击取消' : '登录后使用'}
+                  </span>
+                )}
               </button>
             )}
 
