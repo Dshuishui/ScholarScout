@@ -300,7 +300,7 @@ export function KeySetupScreen({ onKeySubmit }: Props) {
             {hasExhaustedTrial && (
               <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 mb-5">
                 <p className="text-sm text-amber-700 leading-relaxed">
-                  ⚡ 免费搜索次数已用完，请输入自己的 DeepSeek API Key 继续使用。
+                  ⚡ 免费额度已用完，输入自己的 DeepSeek API Key 即可无限使用。
                 </p>
               </div>
             )}

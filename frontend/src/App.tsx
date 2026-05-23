@@ -23,7 +23,9 @@ function AppInner() {
       .then(data => {
         if (data.access_token) {
           return loginWithToken(data.access_token).then(() => {
-            toast.show(`✅ 邮箱验证成功！已获得 ${data.free_searches ?? 3} 次免费搜索`)
+            const n = data.free_searches as number
+            const msg = n > 0 ? `已获得 ${n} 次免费搜索，开始探索吧！` : '验证成功，请配置 API Key 开始使用'
+            toast.show(`✅ 邮箱验证成功！${msg}`)
           })
         }
         toast.show(`验证失败：${data.detail || '链接无效或已过期'}`)
