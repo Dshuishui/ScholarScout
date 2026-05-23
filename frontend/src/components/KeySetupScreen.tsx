@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react'
 import { DEEPSEEK_MODELS, DEFAULT_MODEL } from '../hooks/useModel'
 import { FeedbackWidget } from './FeedbackWidget'
 import { RedPandaWidget } from './RedPandaWidget'
+import { AuthModal } from './AuthModal'
+import { useAuth } from '../hooks/useAuth'
 
 const MODEL_STORAGE_KEY = 'scholarscout_model'
 
@@ -36,12 +38,6 @@ const FEATURES = [
 ]
 
 
-const STATS = [
-  { value: '10+', label: '数据源' },
-  { value: '近5年', label: '默认范围' },
-  { value: 'AI', label: '智能筛选' },
-]
-
 
 const SAVED_KEYS_STORAGE = 'scholarscout_saved_keys'
 
@@ -68,6 +64,10 @@ export function KeySetupScreen({ onKeySubmit }: Props) {
   const [selectedModel, setSelectedModel] = useState<string>(
     () => localStorage.getItem(MODEL_STORAGE_KEY) ?? DEFAULT_MODEL
   )
+  const [showAuthModal, setShowAuthModal] = useState(false)
+  const [authModalTab, setAuthModalTab] = useState<'login' | 'register'>('register')
+  const { isLoggedIn, user } = useAuth()
+  const hasExhaustedTrial = isLoggedIn && (user?.freeSearches ?? 0) === 0
 
   const handleModelChange = (id: string) => {
     localStorage.setItem(MODEL_STORAGE_KEY, id)
@@ -289,27 +289,63 @@ export function KeySetupScreen({ onKeySubmit }: Props) {
             </div>
 
             {/* 渐变标题 */}
-            <h2 className="text-5xl font-black mb-3 bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-600 bg-clip-text text-transparent leading-tight">
+            <h2 className="text-5xl font-black mb-2 bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-600 bg-clip-text text-transparent leading-tight">
               开始你的<br />学术探索
             </h2>
-            <p className="text-gray-400 text-base mb-4 leading-relaxed">
-              AI 驱动 · 自然语言描述 · 秒级返回结果<br />
-              Key 仅存于本地，不会上传服务器。
+            <p className="text-gray-400 text-sm mb-5 leading-relaxed">
+              AI 驱动 · 自然语言描述 · 10 个数据库并发搜索
             </p>
-            <div className="bg-blue-50 border border-blue-100 rounded-xl px-4 py-3 mb-6 text-sm text-blue-700 leading-relaxed">
-              目前使用 <span className="font-semibold">DeepSeek API Key</span>。如需接入 Claude / GPT / Gemini 等模型，欢迎联系我添加支持。
-            </div>
 
-            {/* 数据徽章 */}
-            <div className="flex items-center gap-2 mb-6">
-              {STATS.map(s => (
-                <div key={s.label}
-                  className="flex items-center gap-1.5 text-sm bg-white border border-slate-200 rounded-full px-3 py-1.5 shadow-sm">
-                  <span className="font-bold text-slate-700">{s.value}</span>
-                  <span className="text-slate-400">{s.label}</span>
+            {/* ── 免费试用额度已用完提示（已登录 + 0 次）────────────────────── */}
+            {hasExhaustedTrial && (
+              <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 mb-5">
+                <p className="text-sm text-amber-700 leading-relaxed">
+                  ⚡ 免费搜索次数已用完，请输入自己的 DeepSeek API Key 继续使用。
+                </p>
+              </div>
+            )}
+
+            {/* ── 免费体验卡片（未登录）────────────────────────────────────── */}
+            {!isLoggedIn && (
+              <>
+                <div className="relative rounded-2xl border border-indigo-200 overflow-hidden mb-4"
+                  style={{ background: 'linear-gradient(135deg, #eef2ff 0%, #f5f3ff 60%, #fdf4ff 100%)' }}>
+                  {/* 右上角装饰辉光 */}
+                  <div className="absolute -top-6 -right-6 w-24 h-24 rounded-full pointer-events-none"
+                    style={{ background: 'radial-gradient(circle, rgba(167,139,250,0.35) 0%, transparent 70%)', filter: 'blur(16px)' }} />
+                  <div className="relative z-10 p-5">
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="text-xl">⚡</span>
+                      <span className="font-bold text-indigo-700 text-base">免费体验 3 次搜索</span>
+                      <span className="ml-auto text-[10px] bg-indigo-100 text-indigo-500 px-2 py-0.5 rounded-full font-medium flex-shrink-0">无需信用卡</span>
+                    </div>
+                    <p className="text-xs text-indigo-600/80 mb-4 leading-relaxed">
+                      注册并验证邮箱，立即获得 3 次免费搜索额度，<br />无需配置任何 API Key 即可体验全部功能。
+                    </p>
+                    <button
+                      onClick={() => { setAuthModalTab('register'); setShowAuthModal(true) }}
+                      className="w-full py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold transition-all shadow-md shadow-indigo-200/60 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-indigo-300/40"
+                    >
+                      免费注册开始体验 →
+                    </button>
+                    <p className="text-center text-xs text-indigo-400 mt-2.5">
+                      已有账号？
+                      <button
+                        onClick={() => { setAuthModalTab('login'); setShowAuthModal(true) }}
+                        className="underline ml-1 hover:text-indigo-600 transition-colors"
+                      >登录</button>
+                    </p>
+                  </div>
                 </div>
-              ))}
-            </div>
+
+                {/* 分隔线 */}
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="flex-1 h-px bg-gray-200" />
+                  <span className="text-xs text-gray-400 flex-shrink-0">或使用自己的 Key</span>
+                  <div className="flex-1 h-px bg-gray-200" />
+                </div>
+              </>
+            )}
 
             {/* 历史 Key */}
             {savedKeys.length > 0 && (
@@ -341,7 +377,7 @@ export function KeySetupScreen({ onKeySubmit }: Props) {
 
             {/* 输入框 */}
             <div className="mb-3">
-              <label className="block text-base font-semibold text-gray-700 mb-2">
+              <label className="block text-sm font-semibold text-gray-600 mb-2">
                 {savedKeys.length > 0 ? '输入新的 Key' : 'DeepSeek API Key'}
               </label>
               <input
@@ -350,14 +386,14 @@ export function KeySetupScreen({ onKeySubmit }: Props) {
                 onChange={e => { setInput(e.target.value); setError('') }}
                 onKeyDown={e => { if (e.key === 'Enter' && !isValidating) handleSubmit() }}
                 placeholder="sk-xxxxxxxxxxxxxxxx"
-                className="w-full bg-white border border-gray-200 rounded-xl px-4 py-3.5 text-base placeholder-gray-300 shadow-sm transition-all focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/30"
+                className="w-full bg-white border border-gray-200 rounded-xl px-4 py-3 text-sm placeholder-gray-300 shadow-sm transition-all focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/30"
               />
               {error && <p className="text-red-500 text-xs mt-1.5">{error}</p>}
             </div>
 
             {/* 模型选择 — 卡片式 */}
             <div className="mb-4">
-              <label className="block text-base font-semibold text-gray-700 mb-2">
+              <label className="block text-sm font-semibold text-gray-600 mb-2">
                 论文 AI 对话模型
                 <span className="ml-1.5 text-xs font-normal text-gray-400">仅影响论文对话，搜索始终用 Flash</span>
               </label>
@@ -386,7 +422,7 @@ export function KeySetupScreen({ onKeySubmit }: Props) {
             <button
               onClick={handleSubmit}
               disabled={isValidating || !input.trim()}
-              className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 disabled:from-blue-400 disabled:to-indigo-400 text-white rounded-xl py-3.5 text-base font-semibold transition-all shadow-md shadow-blue-200/60 cursor-pointer hover:-translate-y-0.5 hover:shadow-lg hover:shadow-blue-300/40 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:shadow-none"
+              className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 disabled:from-blue-400 disabled:to-indigo-400 text-white rounded-xl py-3 text-sm font-semibold transition-all shadow-md shadow-blue-200/60 cursor-pointer hover:-translate-y-0.5 hover:shadow-lg hover:shadow-blue-300/40 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:shadow-none"
             >
               {isValidating ? (
                 <span className="flex items-center justify-center gap-2">
@@ -398,7 +434,7 @@ export function KeySetupScreen({ onKeySubmit }: Props) {
               ) : '开始探索论文 →'}
             </button>
 
-            <p className="text-center text-sm text-gray-400 mt-3">
+            <p className="text-center text-xs text-gray-400 mt-2.5">
               没有 Key？
               <a href="https://platform.deepseek.com" target="_blank" rel="noopener noreferrer"
                 className="text-blue-500 hover:underline ml-1">免费注册 DeepSeek →</a>
@@ -423,6 +459,13 @@ export function KeySetupScreen({ onKeySubmit }: Props) {
         </div>
 
       </div>
+
+      {showAuthModal && (
+        <AuthModal
+          defaultTab={authModalTab}
+          onClose={() => setShowAuthModal(false)}
+        />
+      )}
       <RedPandaWidget />
       <FeedbackWidget />
     </>

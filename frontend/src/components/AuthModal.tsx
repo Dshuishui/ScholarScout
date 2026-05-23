@@ -3,10 +3,11 @@ import { useAuth } from '../hooks/useAuth'
 
 interface Props {
   onClose: () => void
+  defaultTab?: 'login' | 'register'
 }
 
-export function AuthModal({ onClose }: Props) {
-  const [tab, setTab] = useState<'login' | 'register'>('login')
+export function AuthModal({ onClose, defaultTab = 'login' }: Props) {
+  const [tab, setTab] = useState<'login' | 'register'>(defaultTab)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
