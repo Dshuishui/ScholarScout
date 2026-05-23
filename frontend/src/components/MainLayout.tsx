@@ -197,7 +197,7 @@ export function MainLayout({ apiKey, onClearKey }: Props) {
             className="flex-shrink-0 overflow-hidden transition-all duration-300 ease-in-out"
             style={{ width: sidebarCollapsed ? '0px' : '384px' }}
           >
-            <div style={{ width: '384px' }}>
+            <div style={{ width: '384px', height: '100%' }}>
               <ChatPanel
                 messages={messages}
                 isLoading={isLoading}
