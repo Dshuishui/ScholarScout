@@ -14,6 +14,8 @@
 
 ScholarScout is an academic paper search tool built for non-CS researchers. Describe what you're looking for in natural language, and it automatically interprets your intent, searches across 10 databases simultaneously, filters results with AI, and returns a list of real, relevant papers — with one-click PDF preview and download.
 
+**Subscribe to a keyword set and the system pre-fetches papers, builds a push queue, and delivers one curated paper to your inbox every morning at 08:00 — no daily check-ins needed.**
+
 **Live demo**: [http://118.25.192.117](http://118.25.192.117)
 
 > ⚡ **Sign up and verify your email to get 3 free searches** — no API key needed. You can also use your own DeepSeek API key for unlimited access.
@@ -76,10 +78,17 @@ ScholarScout is an academic paper search tool built for non-CS researchers. Desc
 - **Chat history**: Every paper you open an AI conversation for is automatically logged; view the last 100 in History
 - **Security**: Registration rate-limiting (5/hr/IP), login failure throttling (10/15min/IP), 256-bit verification tokens, system key server-side only
 
-### Subscriptions & Email Push
-- **Keyword subscriptions**: Subscribe to a keyword set and receive daily emails (08:00 CST) with new papers since the last send
-- **Subscription management**: Toggle, delete, or test-send from the Subscriptions page
-- **Subscribe button**: Appears next to the keyword chips after a search
+### 📬 Keyword Subscriptions & Daily Push (Flagship Feature)
+
+No need to check back every day — subscribe once and let papers come to you.
+
+- **One-click subscribe**: After a search, click "Subscribe" next to the keyword chips. A confirmation modal shows the subscribed keywords, push schedule (daily 08:00 CST), and receiving email address
+- **Smart push queue**: On subscription, the system immediately searches for relevant papers in the background, builds a queue, and schedules them day by day. Each morning it picks the next paper in line and sends it — no duplicates, no gaps
+- **Configurable daily volume**: Defaults to 1 paper per day (great for deep reading). Adjustable to 1–10 papers/day in the Subscriptions page
+- **Push progress visible**: Expand any subscription card to see the full queue — ✅ sent (with date) / 📅 pending (with planned date) — so you always know what's coming next
+- **Auto-refill**: When fewer than 5 papers remain in the queue, the system automatically searches for new papers and appends them; you can also manually trigger a refresh
+- **AI-filtered queue**: Only papers that pass AI relevance validation enter the queue — no off-topic results
+- **Subscription management**: Toggle or delete anytime; up to 20 active keyword sets
 
 ---
 
@@ -250,7 +259,7 @@ After search, **Unpaywall** automatically finds legal open-access PDFs for paper
 - Account system: email sign-up / verification / login, JWT auth, auto-logout on expiry
 - Free trial: verified new users get 3 free searches (system-funded, atomic decrement to prevent abuse)
 - Bookmarks and reading history
-- Keyword subscriptions with daily email push (08:00 CST)
+- **Keyword subscriptions with daily push queue**: AI-filtered papers pre-scheduled into a per-day queue; sends at 08:00 CST; configurable volume (1–10/day); Subscriptions page shows full push progress (sent/pending with dates); auto-refills when queue runs low
 - Multi-paper AI analysis (compare / literature review / trends)
 - Full-text PDF chat with server-side persistence (no re-upload across sessions and devices)
 - CSV export with AI-filtered-only option
