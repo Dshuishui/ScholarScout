@@ -14,7 +14,9 @@
 
 ScholarScout is an academic paper search tool built for non-CS researchers. Describe what you're looking for in natural language, and it automatically interprets your intent, searches across 10 databases simultaneously, filters results with AI, and returns a list of real, relevant papers — with one-click PDF preview and download.
 
-**Live demo**: [http://118.25.192.117](http://118.25.192.117) (requires your own DeepSeek API Key)
+**Live demo**: [http://118.25.192.117](http://118.25.192.117)
+
+> ⚡ **Sign up and verify your email to get 3 free searches** — no API key needed. You can also use your own DeepSeek API key for unlimited access.
 
 ---
 
@@ -51,7 +53,7 @@ ScholarScout is an academic paper search tool built for non-CS researchers. Desc
 ### PDF & Downloads
 - **PDF deep search**: After search, automatically scans for open-access PDFs for papers without one; falls back to links for Sci-Hub, ResearchGate, CORE, and 5 other platforms
 - **Bulk download**: Select papers and download all PDFs as a ZIP; failed downloads are logged in the archive
-- **CSV export**: Export full results with title, authors, abstract, and links
+- **CSV export**: Two modes — export only AI-filtered papers (default) or export everything; live count shown in the dialog
 
 ### AI Conversations
 - **Per-paper AI chat**: Each paper card has an "AI Chat" button that opens a right-side drawer for deep discussion (methods, contributions, limitations, etc.); each paper has its own independent conversation context
@@ -66,10 +68,13 @@ ScholarScout is an academic paper search tool built for non-CS researchers. Desc
   - **Literature review** — synthesis paragraph with inline citations
   - **Research trends** — temporal trend analysis
 
-### Account & Collections
-- **Optional registration**: Email sign-up/login; all search features work without an account
+### Account & Access
+- **Email registration + verification**: Sign up, receive a verification email, click the link to activate
+- **Free trial**: Verified new users get **3 free searches** powered by the system — no API key needed to experience all features
+- **Unlimited with your own key**: Enter your DeepSeek API key to remove all usage limits
 - **Bookmarks**: Save papers with the bookmark icon; view and manage in the Bookmarks page
 - **Chat history**: Every paper you open an AI conversation for is automatically logged; view the last 100 in History
+- **Security**: Registration rate-limiting (5/hr/IP), login failure throttling (10/15min/IP), 256-bit verification tokens, system key server-side only
 
 ### Subscriptions & Email Push
 - **Keyword subscriptions**: Subscribe to a keyword set and receive daily emails (08:00 CST) with new papers since the last send
@@ -86,17 +91,19 @@ ScholarScout is an academic paper search tool built for non-CS researchers. Desc
 
 ## Usage
 
-ScholarScout requires your own **DeepSeek API Key** to power AI features (the key is stored only in your browser and never sent to our server).
+### Option 1 — Free trial (recommended for new users)
 
-**Step 1 — Get a DeepSeek API Key**
+1. Visit [118.25.192.117](http://118.25.192.117)
+2. Click **"Sign up for free"**, enter your email and password
+3. Check your inbox and click the verification link
+4. You're automatically logged in with **3 free searches** — start exploring
 
-1. Sign up at [platform.deepseek.com](https://platform.deepseek.com)
-2. Create an API Key (format: `sk-xxxxxxxx`)
-3. DeepSeek pricing is very low; typical usage costs are negligible
+### Option 2 — Your own API key (unlimited)
 
-**Step 2 — Start searching**
+1. Sign up at [platform.deepseek.com](https://platform.deepseek.com) and create an API key (`sk-xxxxxxxx`)
+2. Visit [118.25.192.117](http://118.25.192.117), paste your key in the input field, and start searching
 
-Visit [118.25.192.117](http://118.25.192.117), paste your API Key, and describe the papers you're looking for.
+> DeepSeek pricing is very low; typical usage costs are negligible.
 
 > **Note**: The demo is hosted on a personal cloud server, expected to stay up until **early 2027**. It's a side project with no uptime guarantees — for anything important, consider self-hosting.
 
@@ -157,13 +164,13 @@ When you see `Local: http://localhost:5173`, the frontend is ready.
 
 **5. Open in browser**
 
-Go to [http://localhost:5173](http://localhost:5173) and enter your DeepSeek API Key.
+Go to [http://localhost:5173](http://localhost:5173) and enter your DeepSeek API key.
 
 ---
 
 ## Optional Data Source API Keys
 
-ScholarScout works out of the box with 7 sources that require no registration. The following sources need a free API Key:
+ScholarScout works out of the box with 7 sources that require no registration. The following sources need a free API key:
 
 | Source | Coverage | Get Key |
 |--------|----------|---------|
@@ -179,15 +186,6 @@ All are completely free. **Sources without a key are silently skipped; everythin
 cd backend
 cp .env.example .env
 # Edit .env and fill in the keys you have
-```
-
-### Server config
-
-```bash
-sudo mkdir -p /etc/scholarscout
-sudo nano /etc/scholarscout/env
-# Add keys and save
-sudo systemctl restart scholarscout-backend
 ```
 
 ---
@@ -248,7 +246,16 @@ After search, **Unpaywall** automatically finds legal open-access PDFs for paper
 
 🚧 **Actively developed** — early stage.
 
-**Completed**: Account system, bookmarks, chat history, keyword subscriptions with daily email push, multi-paper AI analysis (compare / literature review / trends), full-text PDF chat with server-side persistence (no re-upload needed across sessions and devices).
+**Completed**:
+- Account system: email sign-up / verification / login, JWT auth, auto-logout on expiry
+- Free trial: verified new users get 3 free searches (system-funded, atomic decrement to prevent abuse)
+- Bookmarks and reading history
+- Keyword subscriptions with daily email push (08:00 CST)
+- Multi-paper AI analysis (compare / literature review / trends)
+- Full-text PDF chat with server-side persistence (no re-upload across sessions and devices)
+- CSV export with AI-filtered-only option
+- Mobile-responsive layout (bottom tab bar + bottom sheet drawer)
+- Bundle code splitting: initial gzip 126 KB (−29%)
 
 **Planned**: More model support (Claude, GPT), user stats dashboard, mobile-optimized landing page.
 
