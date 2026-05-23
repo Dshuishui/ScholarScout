@@ -66,4 +66,17 @@ class Subscription(Base):
     keywords_json = Column(Text, nullable=False)   # JSON 数组，如 ["LLM", "RAG"]
     active = Column(Boolean, default=True, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
-    last_sent = Column(DateTime, nullable=True)    # 上次成功发送时间，用于过滤新论文
+    last_sent = Column(DateTime, nullable=True)    # 上次成功发送时间
+    daily_limit = Column(Integer, default=1, nullable=False)  # 每天推送篇数（用户可配置）
+
+
+class SubscriptionQueueItem(Base):
+    """推送队列：每个订阅预先搜索好的论文，按 planned_date 每天发送。"""
+    __tablename__ = "subscription_queue"
+    id = Column(Integer, primary_key=True)
+    subscription_id = Column(Integer, nullable=False, index=True)
+    paper_json = Column(Text, nullable=False)
+    paper_id = Column(String(128), nullable=True)   # 用于去重
+    planned_date = Column(String(10), nullable=False)  # YYYY-MM-DD
+    sent_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)

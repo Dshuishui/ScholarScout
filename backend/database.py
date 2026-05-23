@@ -29,6 +29,8 @@ async def init_db():
             "ALTER TABLE users ADD COLUMN verify_token_expires DATETIME",
             "ALTER TABLE users ADD COLUMN free_searches INTEGER DEFAULT 0",
             # subscriptions 表由 create_all 自动创建，无需手动迁移
+            # subscription_queue 表由 create_all 自动创建
+            "ALTER TABLE subscriptions ADD COLUMN daily_limit INTEGER DEFAULT 1",
         ]:
             try:
                 await conn.execute(text(sql))

@@ -12,8 +12,11 @@ from models import Paper
 logger = logging.getLogger(__name__)
 
 
-def _paper_card_html(paper: Paper) -> str:
-    title_link = f'<a href="{paper.url}" style="color:#1d4ed8;text-decoration:none;font-weight:600;">{paper.title}</a>' if paper.url else f'<strong>{paper.title}</strong>'
+def _paper_card_html(paper: Paper, expand_abstract: bool = False) -> str:
+    title_link = (
+        f'<a href="{paper.url}" style="color:#1d4ed8;text-decoration:none;font-weight:600;">{paper.title}</a>'
+        if paper.url else f'<strong>{paper.title}</strong>'
+    )
     meta_parts = []
     if paper.authors:
         authors_str = ", ".join(paper.authors[:3]) + (" 等" if len(paper.authors) > 3 else "")
@@ -23,9 +26,9 @@ def _paper_card_html(paper: Paper) -> str:
     if paper.venue:
         meta_parts.append(paper.venue)
     meta = " · ".join(meta_parts)
-    abstract_text = (paper.abstract or "")[:200].strip()
-    if abstract_text and len(paper.abstract or "") > 200:
-        abstract_text += "…"
+    abstract_text = (paper.abstract or "").strip()
+    if not expand_abstract and len(abstract_text) > 300:
+        abstract_text = abstract_text[:300] + "…"
     return f"""
 <div style="margin-bottom:16px;padding:16px;border:1px solid #e5e7eb;border-radius:10px;background:#fff;">
   <div style="font-size:15px;margin-bottom:6px;">{title_link}</div>
@@ -34,11 +37,19 @@ def _paper_card_html(paper: Paper) -> str:
 </div>"""
 
 
-def build_email_html(keywords: list[str], papers: list[Paper]) -> str:
+def build_daily_email_html(keywords: list[str], papers: list[Paper]) -> str:
+    """每日推送邮件：1～N 篇（由 daily_limit 决定），摘要展开。"""
     today = date.today().strftime("%Y年%m月%d日")
     kw_str = " · ".join(keywords)
     count = len(papers)
-    cards = "".join(_paper_card_html(p) for p in papers)
+    single = count == 1
+
+    if single:
+        banner_text = f'您订阅的关键词 <strong>{kw_str}</strong> 今日推荐论文 1 篇'
+    else:
+        banner_text = f'您订阅的关键词 <strong>{kw_str}</strong> 今日推送 <strong style="font-size:16px;">{count}</strong> 篇论文'
+
+    cards = "".join(_paper_card_html(p, expand_abstract=single) for p in papers)
 
     return f"""<!DOCTYPE html>
 <html lang="zh-CN">
@@ -49,15 +60,12 @@ def build_email_html(keywords: list[str], papers: list[Paper]) -> str:
   <!-- Header -->
   <div style="margin-bottom:24px;padding-bottom:16px;border-bottom:1px solid #e5e7eb;">
     <div style="font-size:20px;font-weight:700;color:#4f46e5;margin-bottom:2px;">ScholarScout</div>
-    <div style="color:#6b7280;font-size:13px;">每周学术摘要 · {today}</div>
+    <div style="color:#6b7280;font-size:13px;">每日论文推送 · {today}</div>
   </div>
 
   <!-- Summary banner -->
   <div style="background:#eef2ff;border-radius:10px;padding:14px 16px;margin-bottom:24px;">
-    <div style="font-size:14px;color:#3730a3;">
-      您订阅的关键词 <strong>{kw_str}</strong> 本周有
-      <strong style="font-size:16px;">{count}</strong> 篇新论文
-    </div>
+    <div style="font-size:14px;color:#3730a3;">{banner_text}</div>
   </div>
 
   <!-- Paper cards -->
@@ -65,12 +73,17 @@ def build_email_html(keywords: list[str], papers: list[Paper]) -> str:
 
   <!-- Footer -->
   <div style="margin-top:24px;padding-top:16px;border-top:1px solid #e5e7eb;font-size:12px;color:#9ca3af;line-height:1.8;">
-    <div>下次推送：下周一早 8 点 · 由 ScholarScout 自动发送，请勿直接回复</div>
+    <div>下次推送：明天早 8 点（北京时间 08:00）· 由 ScholarScout 自动发送，请勿直接回复</div>
     <div>如需停止接收，请登录 ScholarScout → 右上角头像 → 订阅管理 → 删除此订阅</div>
   </div>
 </div>
 </body>
 </html>"""
+
+
+def build_email_html(keywords: list[str], papers: list[Paper]) -> str:
+    """兼容旧接口，内部调用日报模板。"""
+    return build_daily_email_html(keywords, papers)
 
 
 async def send_verification_email(to_email: str, verify_url: str) -> bool:
@@ -151,14 +164,15 @@ async def send_subscription_email(
         return False
 
     kw_str = " · ".join(keywords)
-    subject = f"ScholarScout 周报：{kw_str} 有 {len(papers)} 篇新论文"
+    title = papers[0].title[:50] if len(papers) == 1 else f"{kw_str} 等 {len(papers)} 篇"
+    subject = f"ScholarScout 日报：{title}"
 
     msg = MIMEMultipart("alternative")
     msg["Subject"] = subject
     msg["From"] = f"{SMTP_FROM_NAME} <{SMTP_USER}>"
     msg["To"] = to_email
 
-    html_body = build_email_html(keywords, papers)
+    html_body = build_daily_email_html(keywords, papers)
     msg.attach(MIMEText(html_body, "html", "utf-8"))
 
     try:
