@@ -66,7 +66,7 @@ export function KeySetupScreen({ onKeySubmit }: Props) {
   )
   const [showAuthModal, setShowAuthModal] = useState(false)
   const [authModalTab, setAuthModalTab] = useState<'login' | 'register'>('register')
-  const { isLoggedIn, user } = useAuth()
+  const { isLoggedIn, user, logout } = useAuth()
   const hasExhaustedTrial = isLoggedIn && (user?.freeSearches ?? 0) === 0
 
   const handleModelChange = (id: string) => {
@@ -299,9 +299,15 @@ export function KeySetupScreen({ onKeySubmit }: Props) {
             {/* ── 免费试用额度已用完提示（已登录 + 0 次）────────────────────── */}
             {hasExhaustedTrial && (
               <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 mb-5">
-                <p className="text-sm text-amber-700 leading-relaxed">
-                  ⚡ 免费额度已用完，输入自己的 DeepSeek API Key 即可无限使用。
-                </p>
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-sm font-medium text-amber-700">⚡ 免费额度已用完</span>
+                  <button
+                    onClick={logout}
+                    className="text-xs text-amber-500 hover:text-amber-700 underline transition-colors"
+                  >切换账号</button>
+                </div>
+                <p className="text-xs text-amber-600/80 mb-0.5">当前账号：{user?.email}</p>
+                <p className="text-xs text-amber-600/70">输入自己的 DeepSeek API Key 即可无限使用。</p>
               </div>
             )}
 
