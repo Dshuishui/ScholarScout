@@ -27,6 +27,11 @@ JWT_SECRET = _os.environ.get("JWT_SECRET", "dev-secret-change-in-production")
 
 # 服务器端 DeepSeek Key（订阅推送的 AI 筛选用，非用户 Key）
 DEEPSEEK_API_KEY = _os.environ.get("DEEPSEEK_API_KEY", "")
+# 新用户邮箱验证后赠送的免费搜索额度（系统 Key 代付）
+DEEPSEEK_SYSTEM_KEY = _os.environ.get("DEEPSEEK_SYSTEM_KEY", "")
+FREE_SEARCHES_QUOTA = int(_os.environ.get("FREE_SEARCHES_QUOTA", "3"))
+# 前端地址（邮件验证链接用）
+APP_BASE_URL = _os.environ.get("APP_BASE_URL", "http://118.25.192.117")
 
 # SMTP 配置（QQ 邮箱）：smtp.qq.com:465，密码为授权码
 SMTP_HOST = _os.environ.get("SMTP_HOST", "smtp.qq.com")

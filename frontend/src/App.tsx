@@ -1,17 +1,49 @@
+import { useEffect } from 'react'
 import { KeySetupScreen } from './components/KeySetupScreen'
 import { MainLayout } from './components/MainLayout'
 import { useApiKey } from './hooks/useApiKey'
-import { AuthProvider } from './hooks/useAuth'
+import { AuthProvider, useAuth } from './hooks/useAuth'
+import { toast } from './components/Toast'
+
+function AppInner() {
+  const { apiKey, setApiKey, clearApiKey, hasKey } = useApiKey()
+  const { isLoggedIn, user, loginWithToken } = useAuth()
+
+  // 邮箱验证回调：URL 含 ?verify=<token> 时自动完成验证并登录
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const verifyToken = params.get('verify')
+    if (!verifyToken) return
+
+    // 立刻清掉 URL 中的 token（不可重放）
+    window.history.replaceState({}, '', '/')
+
+    fetch(`/api/auth/verify-email?token=${encodeURIComponent(verifyToken)}`)
+      .then(r => r.json())
+      .then(data => {
+        if (data.access_token) {
+          return loginWithToken(data.access_token).then(() => {
+            toast.show(`✅ 邮箱验证成功！已获得 ${data.free_searches ?? 3} 次免费搜索`)
+          })
+        }
+        toast.show(`验证失败：${data.detail || '链接无效或已过期'}`)
+      })
+      .catch(() => toast.show('验证请求失败，请重试'))
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // 试用模式：已登录 + 有免费额度 → 无需 API Key 也能进入
+  const hasTrial = isLoggedIn && (user?.freeSearches ?? 0) > 0
+  const canEnter = hasKey || hasTrial
+
+  return canEnter
+    ? <MainLayout apiKey={apiKey} onClearKey={clearApiKey} />
+    : <KeySetupScreen onKeySubmit={setApiKey} />
+}
 
 export default function App() {
-  const { apiKey, setApiKey, clearApiKey, hasKey } = useApiKey()
-
   return (
     <AuthProvider>
-      {!hasKey
-        ? <KeySetupScreen onKeySubmit={setApiKey} />
-        : <MainLayout apiKey={apiKey} onClearKey={clearApiKey} />
-      }
+      <AppInner />
     </AuthProvider>
   )
 }

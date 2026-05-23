@@ -7,9 +7,10 @@ const USER_KEY = 'scholarscout_user'
 export interface AuthUser {
   id: number
   email: string
+  freeSearches: number
 }
 
-async function apiFetch(path: string, body: object): Promise<{ access_token?: string; detail?: string }> {
+async function apiFetch(path: string, body: object): Promise<Record<string, unknown>> {
   const r = await fetch(`/api/auth${path}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -24,10 +25,18 @@ interface AuthContextValue {
   user: AuthUser | null
   token: string | null
   isLoggedIn: boolean
-  register: (email: string, password: string) => Promise<void>
+  /** 注册：发验证邮件，不自动登录，返回成功提示文本 */
+  register: (email: string, password: string) => Promise<string>
   login: (email: string, password: string) => Promise<void>
+  /** 用已知 JWT 直接登录（邮箱验证回调用） */
+  loginWithToken: (token: string) => Promise<void>
   logout: () => void
-  sessionExpired: () => void  // 401 时调用：清除 token + 触发 toast
+  sessionExpired: () => void
+  resendVerification: (email: string) => Promise<string>
+  /** 搜索成功后刷新 freeSearches 计数 */
+  refreshCredits: () => Promise<void>
+  /** 本地乐观扣减，无需网络 */
+  decrementFreeSearches: () => void
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null)
@@ -37,9 +46,7 @@ function useAuthState(): AuthContextValue {
     try {
       const raw = localStorage.getItem(USER_KEY)
       return raw ? JSON.parse(raw) : null
-    } catch {
-      return null
-    }
+    } catch { return null }
   })
   const [token, setToken] = useState<string | null>(() => localStorage.getItem(STORAGE_KEY))
 
@@ -50,21 +57,32 @@ function useAuthState(): AuthContextValue {
     setUser(u)
   }, [])
 
-  const register = useCallback(async (email: string, password: string) => {
-    const data = await apiFetch('/register', { email, password })
+  const _fetchMe = useCallback(async (t: string): Promise<AuthUser> => {
     const me = await fetch('/api/auth/me', {
-      headers: { Authorization: `Bearer ${data.access_token}` },
+      headers: { Authorization: `Bearer ${t}` },
     }).then(r => r.json())
-    _persist(data.access_token!, me)
-  }, [_persist])
+    return {
+      id: me.id,
+      email: me.email,
+      freeSearches: me.free_searches ?? 0,
+    }
+  }, [])
+
+  const register = useCallback(async (email: string, password: string): Promise<string> => {
+    const data = await apiFetch('/register', { email, password })
+    return (data.message as string) || '验证邮件已发送，请查收'
+  }, [])
 
   const login = useCallback(async (email: string, password: string) => {
     const data = await apiFetch('/login', { email, password })
-    const me = await fetch('/api/auth/me', {
-      headers: { Authorization: `Bearer ${data.access_token}` },
-    }).then(r => r.json())
-    _persist(data.access_token!, me)
-  }, [_persist])
+    const me = await _fetchMe(data.access_token as string)
+    _persist(data.access_token as string, me)
+  }, [_persist, _fetchMe])
+
+  const loginWithToken = useCallback(async (t: string) => {
+    const me = await _fetchMe(t)
+    _persist(t, me)
+  }, [_persist, _fetchMe])
 
   const logout = useCallback(() => {
     localStorage.removeItem(STORAGE_KEY)
@@ -76,11 +94,37 @@ function useAuthState(): AuthContextValue {
 
   const sessionExpired = useCallback(() => {
     logout()
-    // 用 CustomEvent 通知 Toast 层，避免循环依赖
     window.dispatchEvent(new CustomEvent('auth:expired'))
   }, [logout])
 
-  return { user, token, register, login, logout, sessionExpired, isLoggedIn: !!user }
+  const resendVerification = useCallback(async (email: string): Promise<string> => {
+    const data = await apiFetch('/resend-verification', { email })
+    return (data.message as string) || '验证邮件已重新发送'
+  }, [])
+
+  const refreshCredits = useCallback(async () => {
+    if (!token) return
+    try {
+      const me = await _fetchMe(token)
+      setUser(me)
+      localStorage.setItem(USER_KEY, JSON.stringify(me))
+    } catch { /* ignore */ }
+  }, [token, _fetchMe])
+
+  const decrementFreeSearches = useCallback(() => {
+    setUser(prev => {
+      if (!prev) return prev
+      const updated = { ...prev, freeSearches: Math.max(0, prev.freeSearches - 1) }
+      localStorage.setItem(USER_KEY, JSON.stringify(updated))
+      return updated
+    })
+  }, [])
+
+  return {
+    user, token, register, login, loginWithToken, logout, sessionExpired,
+    resendVerification, refreshCredits, decrementFreeSearches,
+    isLoggedIn: !!user,
+  }
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {

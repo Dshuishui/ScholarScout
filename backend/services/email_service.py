@@ -6,7 +6,7 @@ from datetime import date
 
 import aiosmtplib
 
-from config import SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM_NAME
+from config import SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM_NAME, FREE_SEARCHES_QUOTA
 from models import Paper
 
 logger = logging.getLogger(__name__)
@@ -71,6 +71,74 @@ def build_email_html(keywords: list[str], papers: list[Paper]) -> str:
 </div>
 </body>
 </html>"""
+
+
+async def send_verification_email(to_email: str, verify_url: str) -> bool:
+    """发送邮箱验证邮件，包含验证链接和免费额度说明。"""
+    if not SMTP_USER or not SMTP_PASS:
+        logger.warning("SMTP not configured, skipping verification email to %s", to_email)
+        return False
+
+    html_body = f"""<!DOCTYPE html>
+<html lang="zh-CN">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="font-family:-apple-system,Arial,sans-serif;max-width:600px;margin:0 auto;padding:24px;color:#111827;background:#f9fafb;">
+<div style="background:#fff;border-radius:16px;padding:28px;box-shadow:0 1px 3px rgba(0,0,0,0.08);">
+
+  <div style="margin-bottom:24px;padding-bottom:16px;border-bottom:1px solid #e5e7eb;">
+    <div style="font-size:20px;font-weight:700;color:#4f46e5;">ScholarScout</div>
+    <div style="color:#6b7280;font-size:13px;">AI 学术论文搜索</div>
+  </div>
+
+  <div style="font-size:16px;font-weight:600;color:#111827;margin-bottom:8px;">验证您的邮箱</div>
+  <p style="font-size:14px;color:#374151;line-height:1.7;margin-bottom:20px;">
+    感谢注册 ScholarScout！点击下方按钮完成验证，验证成功后将获得
+    <strong style="color:#4f46e5;">{FREE_SEARCHES_QUOTA} 次免费搜索</strong>，
+    无需配置自己的 API Key 即可立即体验。
+  </p>
+
+  <div style="text-align:center;margin-bottom:24px;">
+    <a href="{verify_url}"
+       style="display:inline-block;background:#4f46e5;color:#fff;font-size:14px;font-weight:600;
+              padding:12px 32px;border-radius:10px;text-decoration:none;">
+      验证邮箱并开始使用
+    </a>
+  </div>
+
+  <div style="background:#f3f4f6;border-radius:8px;padding:12px 16px;margin-bottom:20px;">
+    <p style="font-size:12px;color:#6b7280;margin:0;">
+      链接有效期 <strong>24 小时</strong>。如果按钮无法点击，请复制以下链接到浏览器：<br>
+      <span style="color:#4f46e5;word-break:break-all;">{verify_url}</span>
+    </p>
+  </div>
+
+  <div style="font-size:12px;color:#9ca3af;border-top:1px solid #e5e7eb;padding-top:16px;">
+    如果您没有注册 ScholarScout，请忽略此邮件。
+  </div>
+</div>
+</body>
+</html>"""
+
+    msg = MIMEMultipart("alternative")
+    msg["Subject"] = "验证您的 ScholarScout 邮箱"
+    msg["From"] = f"{SMTP_FROM_NAME} <{SMTP_USER}>"
+    msg["To"] = to_email
+    msg.attach(MIMEText(html_body, "html", "utf-8"))
+
+    try:
+        await aiosmtplib.send(
+            msg,
+            hostname=SMTP_HOST,
+            port=SMTP_PORT,
+            use_tls=True,
+            username=SMTP_USER,
+            password=SMTP_PASS,
+        )
+        logger.info("Verification email sent to %s", to_email)
+        return True
+    except Exception as e:
+        logger.error("Failed to send verification email to %s: %s", to_email, e)
+        return False
 
 
 async def send_subscription_email(

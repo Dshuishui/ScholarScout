@@ -6,12 +6,17 @@ export async function parseQuery(
   query: string,
   apiKey: string,
   history: { role: string; content: string }[] = [],
-  model?: string
+  model?: string,
+  authToken?: string,
 ): Promise<ParseResult> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  // 试用模式（无自己的 Key）：传 Bearer token 让后端用系统 Key
+  if (!apiKey && authToken) headers['Authorization'] = `Bearer ${authToken}`
+
   const response = await fetch(`${API_BASE}/parse`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ query, api_key: apiKey, messages: history, model }),
+    headers,
+    body: JSON.stringify({ query, api_key: apiKey || null, messages: history, model }),
   })
   if (!response.ok) throw new Error(`请求失败: ${response.status}`)
   return response.json()
@@ -23,14 +28,18 @@ export async function* searchPapers(
   history: { role: string; content: string }[] = [],
   settings: { limitPerSource?: number; validatedLimit?: number; selectedSources?: string[] } = {},
   confirmed?: { keywords: string[]; date_from?: string | null; date_to?: string | null },
-  model?: string
+  model?: string,
+  authToken?: string,
 ): AsyncGenerator<SearchEvent> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  if (!apiKey && authToken) headers['Authorization'] = `Bearer ${authToken}`
+
   const response = await fetch(`${API_BASE}/search`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers,
     body: JSON.stringify({
       query,
-      api_key: apiKey,
+      api_key: apiKey || null,
       messages: history,
       limit_per_source: settings.limitPerSource,
       validated_limit: settings.validatedLimit,

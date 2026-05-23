@@ -8,6 +8,7 @@ interface Props {
 
 export function UserMenu({ onNavigate }: Props) {
   const { user, logout, isLoggedIn } = useAuth()
+  const freeSearches = user?.freeSearches ?? 0
   const [showModal, setShowModal] = useState(false)
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
@@ -36,14 +37,25 @@ export function UserMenu({ onNavigate }: Props) {
     <div ref={ref} className="relative">
       <button
         onClick={() => setOpen(v => !v)}
-        className="w-8 h-8 rounded-full bg-blue-600 text-white text-sm font-bold flex items-center justify-center hover:bg-blue-700 transition-colors"
+        className="relative w-8 h-8 rounded-full bg-blue-600 text-white text-sm font-bold flex items-center justify-center hover:bg-blue-700 transition-colors"
         title={user!.email}
       >
         {user!.email[0].toUpperCase()}
+        {/* 免费额度徽章 */}
+        {freeSearches > 0 && (
+          <span className="absolute -top-1 -right-1.5 text-[9px] bg-amber-400 text-white rounded-full min-w-[16px] h-4 flex items-center justify-center font-bold px-0.5 leading-none shadow-sm">
+            {freeSearches}
+          </span>
+        )}
       </button>
       {open && (
         <div className="absolute right-0 top-10 bg-white border border-gray-100 rounded-xl shadow-lg w-48 py-1 z-50">
           <div className="px-4 py-2 text-xs text-gray-400 truncate">{user!.email}</div>
+          {freeSearches > 0 && (
+            <div className="px-4 py-1.5 flex items-center gap-1.5">
+              <span className="text-xs text-amber-500 font-medium">⚡ 剩余 {freeSearches} 次免费搜索</span>
+            </div>
+          )}
           <hr className="my-1 border-gray-100" />
           <button
             onClick={() => { onNavigate('saved'); setOpen(false) }}

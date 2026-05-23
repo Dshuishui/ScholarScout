@@ -23,6 +23,11 @@ async def init_db():
             "ALTER TABLE feedback ADD COLUMN recalled INTEGER DEFAULT 0",
             "ALTER TABLE paper_chats ADD COLUMN pdf_text TEXT",
             "ALTER TABLE feedback ADD COLUMN category VARCHAR(20) DEFAULT 'chat'",
+            # 邮箱验证 & 免费搜索额度（老用户默认已验证 is_verified=1，free_searches=0）
+            "ALTER TABLE users ADD COLUMN is_verified INTEGER DEFAULT 1",
+            "ALTER TABLE users ADD COLUMN verify_token VARCHAR(64)",
+            "ALTER TABLE users ADD COLUMN verify_token_expires DATETIME",
+            "ALTER TABLE users ADD COLUMN free_searches INTEGER DEFAULT 0",
             # subscriptions 表由 create_all 自动创建，无需手动迁移
         ]:
             try:

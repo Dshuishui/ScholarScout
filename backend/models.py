@@ -9,13 +9,13 @@ class HistoryMessage(BaseModel):
 
 class ParseRequest(BaseModel):
     query: str = Field(max_length=2000)
-    api_key: str
+    api_key: Optional[str] = Field(default=None, max_length=200)
     messages: list[HistoryMessage] = Field(default=[], max_length=30)
     model: Optional[str] = Field(default=None, max_length=100)
 
 class SearchRequest(BaseModel):
     query: str = Field(default="", max_length=2000)
-    api_key: str
+    api_key: Optional[str] = Field(default=None, max_length=200)
     messages: list[HistoryMessage] = Field(default=[], max_length=30)
     limit_per_source: int = Field(default=SEARCH_LIMIT_PER_SOURCE, ge=5, le=200)
     validated_limit: int = Field(default=VALIDATED_LIMIT, ge=5, le=500)

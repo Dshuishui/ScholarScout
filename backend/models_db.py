@@ -9,6 +9,11 @@ class User(Base):
     email = Column(String(255), unique=True, nullable=False)
     password_hash = Column(String(255), nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
+    # 邮箱验证 & 免费搜索额度
+    is_verified = Column(Boolean, default=False, nullable=False)
+    verify_token = Column(String(64), nullable=True)
+    verify_token_expires = Column(DateTime, nullable=True)
+    free_searches = Column(Integer, default=0, nullable=False)
 
 
 class SavedPaper(Base):

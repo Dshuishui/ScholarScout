@@ -3,6 +3,7 @@ import { parseQuery, searchPapers } from '../api/client'
 import type { Message, Paper } from '../types'
 import type { SearchSettings } from './useSettings'
 import { useSearchHistory } from './useSearchHistory'
+import { useAuth } from './useAuth'
 
 const WELCOME: Message = {
   id: '0',
@@ -31,6 +32,10 @@ export function useSearch(apiKey: string, settings: SearchSettings, model?: stri
   const [sourceStatuses, setSourceStatuses] = useState<Record<string, SourceStatus>>({})
   const [hasSearchError, setHasSearchError] = useState(false)
   const { history, addHistory, removeHistory } = useSearchHistory()
+  const { token, decrementFreeSearches } = useAuth()
+  // 试用模式：apiKey 为空 + 有登录 token
+  const isTrial = !apiKey && !!token
+  const authToken = isTrial ? (token ?? undefined) : undefined
 
   const updateAssistant = (assistantId: string, patch: Partial<Message>) =>
     setMessages(prev => prev.map(m => m.id === assistantId ? { ...m, ...patch } : m))
@@ -49,7 +54,8 @@ export function useSearch(apiKey: string, settings: SearchSettings, model?: stri
       for await (const event of searchPapers(
         pending.query, apiKey, pending.history, settings,
         { keywords, date_from: pending.date_from, date_to: pending.date_to },
-        model
+        model,
+        authToken,
       )) {
         if (event.type === 'search_start') {
           // 真正开始搜索时才清空上一次结果
@@ -72,6 +78,8 @@ export function useSearch(apiKey: string, settings: SearchSettings, model?: stri
           setRejectedPapers(event.rejected_papers ?? [])
           setStatusMessage(event.message)
           setIsLoading(false)  // 主搜索完成，立即释放输入框
+          // 试用模式：本地乐观扣减免费次数（后端已原子扣减）
+          if (isTrial) decrementFreeSearches()
           updateAssistant(assistantId, { content: event.message, isLoading: false, papers: event.papers })
         } else if (event.type === 'pdf_finding') {
           setStatusMessage(event.message)
@@ -126,7 +134,7 @@ export function useSearch(apiKey: string, settings: SearchSettings, model?: stri
         .slice(-8)
         .map(m => ({ role: m.role, content: m.content }))
 
-      const result = await parseQuery(query, apiKey, history, model)
+      const result = await parseQuery(query, apiKey, history, model, authToken)
 
       if (result.intent === 'chat') {
         updateAssistant(assistantId, { content: result.reply, isLoading: false })
