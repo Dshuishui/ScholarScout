@@ -1,4 +1,5 @@
 import pytest
+from tests.conftest import make_verified_user
 
 PAPER = {
     "paper_id": "abc123",
@@ -19,15 +20,15 @@ PAPER2 = {
 }
 
 
-async def register_and_token(client) -> str:
-    r = await client.post("/api/auth/register", json={"email": "u@test.com", "password": "password123"})
-    return r.json()["access_token"]
+async def get_auth_headers(db_session) -> dict:
+    """直接在 DB 中创建已验证用户，绕过邮件验证流程。"""
+    _, token = await make_verified_user(db_session, email="u@test.com")
+    return {"Authorization": f"Bearer {token}"}
 
 
 @pytest.mark.asyncio
-async def test_save_and_list_paper(client):
-    token = await register_and_token(client)
-    headers = {"Authorization": f"Bearer {token}"}
+async def test_save_and_list_paper(client, db_session):
+    headers = await get_auth_headers(db_session)
     r = await client.post("/api/user/saved", json={"paper": PAPER}, headers=headers)
     assert r.status_code == 201
     r2 = await client.get("/api/user/saved", headers=headers)
@@ -38,18 +39,16 @@ async def test_save_and_list_paper(client):
 
 
 @pytest.mark.asyncio
-async def test_save_duplicate_returns_409(client):
-    token = await register_and_token(client)
-    headers = {"Authorization": f"Bearer {token}"}
+async def test_save_duplicate_returns_409(client, db_session):
+    headers = await get_auth_headers(db_session)
     await client.post("/api/user/saved", json={"paper": PAPER}, headers=headers)
     r = await client.post("/api/user/saved", json={"paper": PAPER}, headers=headers)
     assert r.status_code == 409
 
 
 @pytest.mark.asyncio
-async def test_unsave_paper(client):
-    token = await register_and_token(client)
-    headers = {"Authorization": f"Bearer {token}"}
+async def test_unsave_paper(client, db_session):
+    headers = await get_auth_headers(db_session)
     await client.post("/api/user/saved", json={"paper": PAPER}, headers=headers)
     saved = await client.get("/api/user/saved", headers=headers)
     paper_hash = saved.json()[0]["paper_id_hash"]
@@ -60,17 +59,15 @@ async def test_unsave_paper(client):
 
 
 @pytest.mark.asyncio
-async def test_unsave_nonexistent_returns_404(client):
-    token = await register_and_token(client)
-    headers = {"Authorization": f"Bearer {token}"}
+async def test_unsave_nonexistent_returns_404(client, db_session):
+    headers = await get_auth_headers(db_session)
     r = await client.delete("/api/user/saved/nonexistent", headers=headers)
     assert r.status_code == 404
 
 
 @pytest.mark.asyncio
-async def test_add_and_get_history(client):
-    token = await register_and_token(client)
-    headers = {"Authorization": f"Bearer {token}"}
+async def test_add_and_get_history(client, db_session):
+    headers = await get_auth_headers(db_session)
     r = await client.post("/api/user/history", json={"paper": PAPER}, headers=headers)
     assert r.status_code == 201
     r2 = await client.get("/api/user/history", headers=headers)
