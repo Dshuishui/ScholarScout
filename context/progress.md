@@ -1,6 +1,6 @@
 # ScholarScout 开发进度
 
-> 压缩上下文后读这个文件快速入状态。最后更新：2026-05-23（Session 6）
+> 压缩上下文后读这个文件快速入状态。最后更新：2026-05-27（Session 7）
 
 ---
 
@@ -10,7 +10,7 @@
 - **服务器**：ubuntu@118.25.192.117，仓库在 `/home/ubuntu/Github/ScholarScout`
 - **部署**：`bash deploy/deploy.sh`（git pull → uv sync --frozen → npm build → rsync → systemctl restart）
 - **GitHub**：https://github.com/Dshuishui/ScholarScout
-- **最新 commit**：`8a5af44` fix(card): hide 'login to use' subtitle on bookmark btn when logged in
+- **最新 commit**：`af2c1c5` fix: 3 subscription bugs + README multi-paper AI analysis
 
 ---
 
@@ -34,7 +34,7 @@ LLM    DeepSeek API（用户自带 Key 或系统 Key 试用）
 - AI 筛选后 0 篇时显示引导卡片；搜索失败时显示重试卡片
 - 关键词 chips 可编辑 + 重新搜索
 
-### 账号系统 & 邮箱验证（Session 5）
+### 账号系统 & 邮箱验证
 - JWT 注册/登录（30 天过期），401 自动退出 + toast"登录已过期"
 - **邮箱验证流程**：注册后发验证邮件 → 点击链接激活 → 自动登录
   - token：`secrets.token_urlsafe(32)`（256-bit），24h 过期，单次有效
@@ -55,35 +55,90 @@ LLM    DeepSeek API（用户自带 Key 或系统 Key 试用）
 - **Drag&Drop PDF 上传**；**清除 PDF**（× 按钮保留对话）；**新建会话**（保留 PDF）
 - **重新生成**；**快捷提问**；Markdown 渲染；Stop 按钮
 
+### 多论文 AI 分析（ComparePanel，主推功能）
+- 勾选 2+ 篇论文 → 全屏分析面板，三种模式：
+  - **对比分析**：汇总表格 + 方法/创新点/实验/优缺点逐项对比
+  - **文献综述**：学术段落，可直接用作 Related Work 草稿
+  - **研究趋势**：时间线演进 + 未来方向预测
+- 各模式独立 `useRef` 缓存（切换不丢失）；支持 Stop + 重新生成
+- ComparePanel lazy loaded（减小首屏 bundle）
+
 ### 搜索结果面板（ResultsPanel）
 - 顶部摘要行；💬 已对话 badge；排序/筛选/分组/分页/密度切换
-- **导出 CSV 选项**：新增"仅导出 AI 筛选后论文"checkbox（默认勾选）；弹窗实时显示"将导出 N 篇论文"
+- **导出 CSV**：仅导出 AI 筛选后论文（默认）或全部；弹窗实时显示导出篇数
 
-### KeySetupScreen 落地页（Session 6 新增）
+### KeySetupScreen 落地页
 - **双入口设计**：
-  - 主入口（上方）：⚡ 免费体验卡片，点击弹 AuthModal（注册 tab）
-  - 次入口（下方）：API Key 输入（原流程，降级为次要入口）
-  - 分隔线："── 或使用自己的 Key ──"
-- **已登录 + 0 次额度**：显示 amber 提示卡，含当前账号邮箱 + "切换账号"（logout）按钮
-- **AuthModal**：新增 `defaultTab` prop，注册卡片点击直接打开注册 tab
+  - 主入口：⚡ 免费体验卡片，点击弹 AuthModal（注册 tab）
+  - 次入口：API Key 输入，分隔线隔开
+- **已登录 + 0 次额度**：amber 提示卡含账号邮箱 + "切换账号"按钮
+- **AuthModal**：`defaultTab` prop，注册卡片直接打开注册 tab
 
-### 论文卡片收藏按钮（Session 6 新增）
+### 论文卡片收藏按钮
 - **未登录**：显示"收藏" + "登录后使用"副文字
-- **已登录未收藏**：只显示"收藏"，无副文字
+- **已登录未收藏**：只显示"收藏"，副文字 `invisible` 占位（保持按钮高度对齐）
 - **已登录已收藏**：显示"已收藏" + "点击取消"
 
-### Phase 2：订阅 + 邮件推送
-- 订阅关键词组合，每天 08:00 CST 推送新论文邮件
-- 订阅管理页（开关/删除/测试发送）
-- 当前 UX 问题：见【待做事项 → 订阅 UX 优化】
+### 📬 关键词订阅 + 每日推送队列（Session 7，主推功能）
 
-### Phase 3：AI 多论文分析（ComparePanel）
-- 勾选 2+ 篇论文 → AI 多论文分析（对比/综述/趋势）
-- 各模式独立 useRef 缓存；强制刷新用"重新生成"
+#### 核心机制
+- 订阅关键词 → 后台异步搜索论文（BackgroundTasks）→ 建推送队列
+- 调度器每天 00:00 UTC（08:00 CST）从队列取 `daily_limit` 篇 → 发邮件 → 标记 sent_at
+- 队列剩余 < 5 篇时自动补充（search_days=90 宽窗口）；队列空时同上
+
+#### DB 模型
+```python
+class Subscription:
+    id, user_id, keywords_json, active, created_at, last_sent
+    daily_limit: int = 1  # 每天推送篇数（用户可调 1-10）
+
+class SubscriptionQueueItem:
+    id, subscription_id, paper_json, paper_id  # paper_id 用于去重
+    planned_date: str  # YYYY-MM-DD
+    sent_at: datetime | None
+    created_at: datetime
+```
+
+#### 迁移
+- `ALTER TABLE subscriptions ADD COLUMN daily_limit INTEGER DEFAULT 1`
+- `subscription_queue` 表由 `create_all` 自动创建
+
+#### API 端点
+```
+GET  /api/subscriptions                    — 列表
+POST /api/subscriptions                    — 创建（后台触发填充队列）
+DELETE /api/subscriptions/{id}             — 删除（同时删队列项）
+PATCH /api/subscriptions/{id}/toggle       — 开关
+PATCH /api/subscriptions/{id}/daily-limit  — 修改每日篇数
+GET  /api/subscriptions/{id}/queue         — 查看队列（sent + pending）
+POST /api/subscriptions/{id}/refresh-queue — 后台重新搜索并追加
+POST /api/subscriptions/{id}/test-send     — 测试发送（不走队列，已从前端移除按钮）
+```
+
+#### 前端
+- **ResultsPanel**：订阅成功后弹确认 Modal（关键词 chips + 推送时间 + 接收邮箱 + 跳转管理）
+- **ResultsPanel**：订阅按钮下方常驻提示文字"每日推送 · 可随时取消"
+- **MainLayout**：监听 `navigate:page` custom event → setActivePage（跨组件导航不需要 prop drilling）
+- **SubscriptionsPage**：可展开队列面板（✅ 已发 + 📅 待发 + 🕐 今天），显示已发/待发篇数
+- **SubscriptionsPage**：每日篇数内联编辑（点击数字 → input → 保存/取消）
+- **SubscriptionsPage**：队列空 + 创建 < 3 分钟 → 显示"正在后台搜索..."spinner；> 3 分钟 → 显示"已清空，点击刷新"
+- **邮件模板**：周报→日报，"下周一"→"明天早 8 点（北京时间 08:00）"；单篇推送展开完整摘要
+
+#### populate_queue 逻辑
+```python
+async def populate_queue(sub, db, now, search_days=30, max_add=30):
+    # 1. 搜索近 search_days 天论文（初始: 30天，自动刷新: 90天）
+    # 2. 可选 AI 过滤
+    # 3. 过滤已在队列中的 paper_id（已发和待发都去重）
+    # 4. 找最后一个 pending 的 planned_date，从其后一天开始排队
+    #    每天排 daily_limit 篇（i // daily_limit 天偏移）
+    # 5. 最多追加 max_add 篇
+```
 
 ### 导航与布局（MainLayout）
 - 可折叠侧边栏（384px → 0px 动画）；Drawer Push（margin-right: 440px）
-- **移动端响应式**（Session 4）：底部 Tab Bar（搜索/结果）；PaperChatDrawer → 88vh 底部 Sheet
+- **移动端响应式**：底部 Tab Bar（搜索/结果）；PaperChatDrawer → 88vh 底部 Sheet
+- `navigate:page` custom event 监听（Session 7 新增）
 
 ### 搜索对话面板（ChatPanel）
 - 分领域示例引导；示例点击直接触发搜索；可折叠历史对话
@@ -91,19 +146,13 @@ LLM    DeepSeek API（用户自带 Key 或系统 Key 试用）
 ### 留言板（FeedbackWidget）
 - 3 Tab（建议/反馈/聊天）；category 字段过滤；各 tab 独立计数；Emoji 反应；昵称
 
-### 性能优化（Session 5）
-- **Bundle 代码分割**：ComparePanel + PaperChatDrawer 改为 `React.lazy`
-  - 首屏主 bundle gzip：177KB → **126KB**（-29%）
+### 性能
+- **Bundle 代码分割**：ComparePanel + PaperChatDrawer → `React.lazy`
+- 首屏主 bundle gzip：**129.73 KB**（Session 7 订阅页新代码略有增加，Session 5 时是 126KB）
 
-### CI / 工程（Session 6）
-- **修复 CI 失败**：测试用例未随 Session 5 邮箱验证改动更新
-  - `conftest.py` 加 `make_verified_user()` helper + `reset_rate_limits` autouse fixture
-  - `test_auth.py` / `test_user.py` 全部更新为直接写 DB 绕过邮件流程
-- **uv.lock 修复**：`aiosmtplib`/`apscheduler` 缺 top-level 条目 → 重新 `uv lock` 补全
-  - `deploy.sh` 改为 `uv sync --no-dev --frozen`，移除 `git checkout` workaround
-
-### README（Session 6）
-- 中英文均更新：免费试用说明（注册验证邮箱获 3 次）、双路径使用方法、完整功能列表
+### CI / 工程
+- pytest-asyncio `asyncio_mode = "auto"`；`make_verified_user()` helper；`reset_rate_limits` autouse fixture
+- `uv sync --no-dev --frozen` in deploy.sh（lock 不匹配 fail-fast）
 
 ---
 
@@ -127,6 +176,12 @@ LLM    DeepSeek API（用户自带 Key 或系统 Key 试用）
 | 测试用 make_verified_user() 直接写 DB | 绕过 SMTP，测试不依赖邮件服务 |
 | uv sync --frozen in deploy | lock 文件不匹配时 fail-fast 而非静默修改 |
 | PaperCard 内用 useAuth() 而非传 prop | 不需要改所有调用方 |
+| 收藏按钮副文字用 `invisible` 而非条件渲染 | 保持按钮高度与相邻按钮对齐 |
+| 订阅队列用 BackgroundTasks 异步填充 | 不阻塞 POST /subscriptions 响应 |
+| 自动刷新队列 search_days=90 | 初始填充仅覆盖 30 天，刷新用更宽窗口避免漏搜 |
+| navigate:page custom event | 跨层组件导航（ResultsPanel → MainLayout），不需要 prop drilling |
+| 移除测试发送按钮 | 日常推送已稳定，按钮为调试遗留，去掉减少 UI 噪音 |
+| 队列创建 3 分钟内显示 populating 状态 | 区分"真空"和"后台还在跑"，避免用户误以为出错 |
 
 ---
 
@@ -137,10 +192,10 @@ frontend/src/
   App.tsx                   — 邮箱验证回调（?verify=token）+ 试用模式入口判断
   api/client.ts             — parseQuery/searchPapers 支持 authToken（试用模式）
   components/
-    MainLayout.tsx          — 主布局；height:100% wrapper 修复
+    MainLayout.tsx          — 主布局；navigate:page event listener（Session 7）
     ChatPanel.tsx           — 示例直接搜索；可折叠历史
-    ResultsPanel.tsx        — 导出 aiOnly 选项；ComparePanel lazy；订阅按钮
-    PaperCard.tsx           — 收藏按钮按登录状态显示；useAuth() 直接调用
+    ResultsPanel.tsx        — 订阅成功 Modal；navigate:page dispatch；订阅按钮提示文字
+    PaperCard.tsx           — 收藏按钮 invisible 占位（Session 7）；useAuth() 直接调用
     PaperChatDrawer.tsx     — 论文 AI 对话；移动端底部 Sheet；lazy
     KeySetupScreen.tsx      — 双入口（免费试用卡 + API Key）；已登录态 amber 提示
     AuthModal.tsx           — defaultTab prop；注册后"邮件已发送"态 + 重发按钮
@@ -153,19 +208,23 @@ frontend/src/
     usePaperChat.ts         — regenerate()；removePdf()；错误提示
     useSearch.ts            — isTrial 判断；authToken 传递；done 时 decrementFreeSearches
     useIsMobile.ts          — resize-aware breakpoint hook
+  pages/
+    SubscriptionsPage.tsx   — 队列展开面板；daily_limit 编辑；populating 状态（Session 7）
+    SavedPage.tsx           — 收藏夹
+    HistoryPage.tsx         — 阅读历史
 
 backend/
-  models_db.py              — User: is_verified/verify_token/verify_token_expires/free_searches
-  database.py               — ALTER TABLE 迁移（含 4 个新 User 字段）
+  models_db.py              — User / Subscription(+daily_limit) / SubscriptionQueueItem（Session 7）
+  database.py               — ALTER TABLE 迁移（含 daily_limit）
   config.py                 — DEEPSEEK_SYSTEM_KEY / FREE_SEARCHES_QUOTA / APP_BASE_URL
   dependencies.py           — get_optional_user()（无 token 返回 None，不抛异常）
   routers/auth.py           — 完整验证流程：register/verify-email/login/resend-verification/me
   routers/search.py         — _resolve_api_key()；/parse 检查额度不扣减；/search 原子扣减
-  routers/subscriptions.py  — 订阅 CRUD（当前实现，待优化 UX）
+  routers/subscriptions.py  — 完整队列 CRUD（Session 7，含 AsyncSessionLocal 正确导入）
   models.py                 — SearchRequest/ParseRequest.api_key 改为 Optional
-  services/email_service.py — send_verification_email() + send_subscription_email()
+  services/email_service.py — 日报模板（Session 7）；send_verification_email()
   routers/user.py           — /me 返回 free_searches
-  scheduler.py              — 每日定时任务（08:00 CST 推送订阅邮件）
+  scheduler.py              — populate_queue() + _send_from_queue()（Session 7 完全重写）
   tests/
     conftest.py             — make_verified_user() helper + reset_rate_limits autouse
     test_auth.py            — 已更新匹配邮箱验证流程
@@ -176,54 +235,19 @@ backend/
 
 ## 待做事项
 
-### 🔥 下一步：订阅 UX 优化
+### 中优先级
 
-**问题描述**：当前订阅体验不够清晰。用户点击"订阅更新"按钮后，按钮变为"已订阅"，仅此而已——没有解释订阅了什么、何时收到邮件、邮件长什么样。用户不知道"订阅完成"意味着什么。
+- [ ] **Bundle 优化**：主包 gzip 129.73KB，可考虑 lazy load SubscriptionsPage
+- [ ] **队列 item 显示更多信息**：加来源 badge、发表年份、引用数（当前只有标题+日期）
+- [ ] **订阅管理跳转后自动展开新订阅**：用户从订阅成功 Modal 点"查看订阅管理"时，自动展开刚创建的订阅的队列（需在 navigate:page event 中传 subId）
+- [ ] **邮件加"在 ScholarScout 中打开"按钮**：增加回访入口
 
-**现有实现**（`ResultsPanel.tsx`）：
-- 按钮位置：关键词 chips 行右侧
-- 点击后：POST `/api/subscriptions`，按钮变绿显示"已订阅"
-- 无任何 toast / 弹窗 / 说明文字
-- 订阅管理入口：UserMenu → 订阅管理页
-
-**参考方向**（下一个 session 实现前先调研）：
-- **Google Scholar 快讯**：订阅成功后弹窗确认，说明推送频率（实时/每天/每周）、预计首次推送时间、可在何处管理
-- **ResearchGate**：邮件通知有明确的"你订阅了 X，下次推送时间是 Y"说明
-- **Connected Papers / Semantic Scholar**：订阅确认卡片/toast，含跳转"管理订阅"链接
-
-**改进方案（草案，待细化）**：
-
-1. **订阅成功反馈弹窗（SubscribeSuccessModal 或 toast+）**
-   - 标题：✅ 订阅成功！
-   - 内容：
-     - 已订阅关键词：`RAG · retrieval augmented generation`
-     - 推送频率：每天 08:00（北京时间）
-     - 你将收到：过去 24 小时内的新论文摘要邮件
-     - 发送到：`user@email.com`
-   - 按钮：[查看订阅管理] [知道了]
-
-2. **按钮附近加说明文字**
-   - 未订阅时 hover tooltip 改为："每天 08:00 推送新论文到你的邮箱"
-   - 或在按钮下方常驻显示小字："每日推送 · 可随时取消"
-
-3. **首次订阅引导**
-   - 如果用户从未订阅过（`subscriptions.length === 0`），第一次点击后弹完整说明弹窗
-   - 之后订阅只显示 toast
-
-**后端现状**：
-- `POST /api/subscriptions`：创建订阅，返回 `{ id, keywords }`
-- `scheduler.py`：APScheduler 每天 00:00 UTC 触发，调 `send_subscription_email()`
-- 邮件模板在 `email_service.py`（`build_email_html`）
-
-**实现优先级**：方案 1（成功弹窗）为主，方案 2（说明文字）同步添加，方案 3 可选。
-
----
-
-### 优先级低（可选功能）
+### 低优先级
 
 - [ ] 更多模型支持（Claude、GPT 等）
 - [ ] 用户主页：统计已收藏/已对话/已订阅数量
 - [ ] 落地页（KeySetupScreen）移动端适配
+- [ ] 移动端 PDF 上传 UX（当前 Sheet 内操作不便）
 - [ ] FeedbackWidget Emoji 反应后端持久化
 - [ ] FeedbackWidget WebSocket 实时推送（目前 20s 轮询）
 - [ ] 年份分布 sparkline
@@ -255,31 +279,37 @@ print(conn.execute('SELECT email, free_searches FROM users').fetchall())
 conn.close()
 "
 
-# Umami 状态
+# Umami 统计面板
 sudo docker compose -f deploy/umami-compose.yml --env-file deploy/.umami.env ps
 ```
 
 ---
 
-## Session 6 完成工作（2026-05-23）
+## Session 7 完成工作（2026-05-23 ~ 2026-05-27）
 
-### 1. CI 修复（f7090e0）
-- 测试未随 Session 5 邮箱验证改动更新，register 不再返回 token 导致全部失败
-- conftest 加 `make_verified_user()` + `reset_rate_limits`；test_auth/test_user 全更新
+### 1. 订阅成功 Modal（f93bb12）
+- 点击"订阅更新"成功后弹确认弹窗：关键词 chips + 推送时间 + 邮箱 + 跳转管理
+- 订阅按钮下方加小字"每日推送 · 可随时取消"
+- MainLayout 监听 `navigate:page` custom event，支持跨组件跳转
 
-### 2. uv.lock 修复 + deploy.sh 改进（c870d09）
-- `aiosmtplib`/`apscheduler` 缺 top-level lock 条目 → 服务器每次 uv sync 都修改文件
-- 重新 `uv lock`，deploy.sh 改为 `--frozen`，移除 git checkout workaround
+### 2. 每日推送队列系统（8be31ed）
+- 新增 `SubscriptionQueueItem` DB 表；`Subscription` 加 `daily_limit` 字段
+- scheduler.py 完全重写：populate_queue + _send_from_queue
+- 新增 API：GET queue / POST refresh-queue / PATCH daily-limit
+- 创建订阅后 BackgroundTasks 异步填充队列
+- 邮件模板重构：周报→日报，文案修正
+- SubscriptionsPage：队列进度展示 + daily_limit 内联编辑 + 刷新按钮
 
-### 3. KeySetupScreen 双入口改造（e7692d0）
-- 免费试用卡片（主 CTA）+ 分隔线 + API Key 输入（次要）
-- AuthModal 加 `defaultTab` prop
-- 已登录+0次：amber 提示含邮箱显示 + "切换账号"按钮
+### 3. UI 修复（be9ad7e）
+- 收藏按钮高度对齐：用 `invisible` 替代条件渲染，三按钮等高
+- 移除测试发送按钮（推送已稳定，按钮为调试遗留）
 
-### 4. Bug 修复系列
-- toast 文案修正：`data.free_searches ?? 3` → 正确处理 0 值（278210b）
-- amber 提示加账号信息（f7603b8）
-- 收藏按钮：已登录时不再显示"登录后使用"（8a5af44）
+### 4. Bug 修复（af2c1c5）
+- `__import__("database")` hack → `from database import AsyncSessionLocal`
+- 自动刷新队列 search_days: 30 → 90（避免漏搜订阅后新论文）
+- 队列空 + 创建 < 3 分钟 → 显示 spinner + 说明，而非误导性"队列为空"
 
-### 5. README 更新（45874f2）
-- 中英双语：免费试用入口、双路径使用方法、完整功能/状态列表
+### 5. README 更新（2db2f8b、af2c1c5）
+- 订阅推送作为主推功能：扩写为 7 点详细列表
+- 多论文 AI 分析升级为独立亮点章节（中英文同步）
+- intro 同时提及两个主推功能
