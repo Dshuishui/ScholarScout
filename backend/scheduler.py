@@ -151,11 +151,11 @@ async def _send_from_queue(
 
         if not items:
             logger.info("Queue empty for sub %d, attempting refresh", sub.id)
-            # 队列空了，尝试补充（先 reload sub 以获得最新状态）
+            # 队列空了，用更宽时间窗（90天）刷新，避免漏搜订阅创建后未覆盖的论文
             sub_result = await db.execute(select(Subscription).where(Subscription.id == sub.id))
             sub_fresh = sub_result.scalar_one_or_none()
             if sub_fresh:
-                await populate_queue(sub_fresh, db, now)
+                await populate_queue(sub_fresh, db, now, search_days=90)
             return
 
         # 构造 Paper 对象
@@ -197,7 +197,7 @@ async def _send_from_queue(
             sub_result2 = await db.execute(select(Subscription).where(Subscription.id == sub.id))
             sub_fresh2 = sub_result2.scalar_one_or_none()
             if sub_fresh2:
-                await populate_queue(sub_fresh2, db, now)
+                await populate_queue(sub_fresh2, db, now, search_days=90)
 
 
 # ─────────────────────────────────────────────────────────────

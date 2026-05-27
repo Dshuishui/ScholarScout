@@ -14,7 +14,7 @@
 
 ScholarScout is an academic paper search tool built for non-CS researchers. Describe what you're looking for in natural language, and it automatically interprets your intent, searches across 10 databases simultaneously, filters results with AI, and returns a list of real, relevant papers — with one-click PDF preview and download.
 
-**Subscribe to a keyword set and the system pre-fetches papers, builds a push queue, and delivers one curated paper to your inbox every morning at 08:00 — no daily check-ins needed.**
+**Subscribe to a keyword set and the system pre-fetches papers, builds a push queue, and delivers one curated paper to your inbox every morning at 08:00 — no daily check-ins needed. Select multiple papers to instantly generate an AI comparative analysis, literature review, or research trend report.**
 
 **Live demo**: [http://118.25.192.117](http://118.25.192.117)
 
@@ -57,6 +57,16 @@ ScholarScout is an academic paper search tool built for non-CS researchers. Desc
 - **Bulk download**: Select papers and download all PDFs as a ZIP; failed downloads are logged in the archive
 - **CSV export**: Two modes — export only AI-filtered papers (default) or export everything; live count shown in the dialog
 
+### 🤖 Multi-Paper AI Analysis (Flagship Feature)
+
+After a search, select 2 or more papers and trigger a full-screen AI analysis panel with three modes:
+
+- **Comparative analysis**: AI generates a summary table (title, year, core method, contribution) and systematically compares methodology, innovations, experimental results, and limitations across all selected papers
+- **Literature review**: Produces a publication-ready academic paragraph covering research background, each paper's key contribution, and how they relate — ready to drop into a Related Work section
+- **Research trends**: Traces the technical evolution along a timeline, identifies shifting research hotspots, and predicts future directions
+
+Each mode's output is independently cached (switch modes without losing results), supports mid-stream Stop and regeneration, and renders full Markdown including tables.
+
 ### AI Conversations
 - **Per-paper AI chat**: Each paper card has an "AI Chat" button that opens a right-side drawer for deep discussion (methods, contributions, limitations, etc.); each paper has its own independent conversation context
 - **Full-text analysis via PDF**: Upload the paper's PDF in the chat drawer and AI switches to full-text mode — supports DeepSeek V4's 1M token context window, covering papers of any length
@@ -65,10 +75,6 @@ ScholarScout is an academic paper search tool built for non-CS researchers. Desc
 - **Stop button**: Interrupt streaming at any time, keeping the content generated so far
 - **Copy button**: Hover any AI message to copy it
 - **Configurable quick prompts**: Pre-set questions in the chat drawer are fully editable and saved locally
-- **Multi-paper AI analysis**: Select 2+ papers to trigger a full-screen analysis panel with three modes:
-  - **Comparative analysis** — side-by-side comparison with summary table
-  - **Literature review** — synthesis paragraph with inline citations
-  - **Research trends** — temporal trend analysis
 
 ### Account & Access
 - **Email registration + verification**: Sign up, receive a verification email, click the link to activate
@@ -260,7 +266,7 @@ After search, **Unpaywall** automatically finds legal open-access PDFs for paper
 - Free trial: verified new users get 3 free searches (system-funded, atomic decrement to prevent abuse)
 - Bookmarks and reading history
 - **Keyword subscriptions with daily push queue**: AI-filtered papers pre-scheduled into a per-day queue; sends at 08:00 CST; configurable volume (1–10/day); Subscriptions page shows full push progress (sent/pending with dates); auto-refills when queue runs low
-- Multi-paper AI analysis (compare / literature review / trends)
+- **Multi-paper AI analysis**: Select 2+ papers for full-screen comparative analysis (with summary table) / literature review (draft-ready) / research trends (timeline + prediction); each mode cached independently
 - Full-text PDF chat with server-side persistence (no re-upload across sessions and devices)
 - CSV export with AI-filtered-only option
 - Mobile-responsive layout (bottom tab bar + bottom sheet drawer)

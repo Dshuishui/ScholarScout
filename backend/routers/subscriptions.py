@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
-from database import get_db
+from database import get_db, AsyncSessionLocal
 from models_db import Subscription, SubscriptionQueueItem, User
 from dependencies import get_current_user
 
@@ -119,7 +119,7 @@ async def _bg_populate_queue(sub_id: int) -> None:
     """后台任务：为新创建的订阅填充推送队列。"""
     from scheduler import populate_queue
     now = datetime.now(timezone.utc)
-    async with __import__("database").AsyncSessionLocal() as db:
+    async with AsyncSessionLocal() as db:
         result = await db.execute(
             select(Subscription).where(Subscription.id == sub_id)
         )

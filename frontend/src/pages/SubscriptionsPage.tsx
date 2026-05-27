@@ -387,10 +387,23 @@ export function SubscriptionsPage({ token, onClose }: Props) {
                           <div className="w-5 h-5 rounded-full border-2 border-indigo-300 border-t-transparent animate-spin" />
                         </div>
                       ) : queue.length === 0 ? (
-                        <div className="text-center py-6 text-xs text-gray-400">
-                          <p>队列为空</p>
-                          <p className="mt-1">订阅刚创建时正在后台搜索论文，稍等片刻后点击「刷新队列」</p>
-                        </div>
+                        (() => {
+                          // 区分"刚创建正在填充"和"真的空了"
+                          const createdMs = new Date(sub.created_at).getTime()
+                          const isPopulating = Date.now() - createdMs < 3 * 60 * 1000 // 3分钟内
+                          return isPopulating ? (
+                            <div className="flex flex-col items-center gap-2 py-6 text-xs text-indigo-500">
+                              <div className="w-5 h-5 rounded-full border-2 border-indigo-300 border-t-transparent animate-spin" />
+                              <p className="font-medium">正在后台搜索相关论文…</p>
+                              <p className="text-gray-400">通常需要 1-2 分钟，完成后点击「刷新队列」查看</p>
+                            </div>
+                          ) : (
+                            <div className="text-center py-6 text-xs text-gray-400">
+                              <p>队列已清空</p>
+                              <p className="mt-1">点击「刷新队列」重新搜索并补充论文</p>
+                            </div>
+                          )
+                        })()
                       ) : (
                         <div className="space-y-1.5 max-h-64 overflow-y-auto pr-1">
                           {queue.map(item => {
