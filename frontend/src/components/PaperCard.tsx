@@ -59,9 +59,10 @@ export function PaperCard({ paper, selected = false, onToggle, isRejected = fals
     })
   }
 
-  const authorStr = paper.authors.length === 0
+  const validAuthors = paper.authors.filter(a => a && a.trim())
+  const authorStr = validAuthors.length === 0
     ? '作者未知'
-    : paper.authors.slice(0, 3).join(', ') + (paper.authors.length > 3 ? ` 等 ${paper.authors.length} 人` : '')
+    : validAuthors.slice(0, 3).join(', ') + (validAuthors.length > 3 ? ` 等 ${validAuthors.length} 人` : '')
   const style = SOURCE_STYLES[paper.source] ?? DEFAULT_STYLE
 
   const links = paper.source_links && paper.source_links.length > 0

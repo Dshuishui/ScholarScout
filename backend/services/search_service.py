@@ -707,6 +707,29 @@ async def enhance_with_unpaywall(papers: list[Paper]) -> list[Paper]:
     ]
 
 
+def _clean_title(title: str) -> str:
+    """去除 HTML/XML 标签（如 CrossRef 返回的 JATS 标签），压缩空白。"""
+    t = re.sub(r"<[^>]+>", " ", title)
+    return re.sub(r"\s+", " ", t).strip()
+
+
+def _clean_authors(authors: list[str]) -> list[str]:
+    """过滤空字符串和纯空白作者名。"""
+    return [a.strip() for a in authors if a and a.strip()]
+
+
+def _sanitize_paper(p: Paper) -> Paper:
+    """清洗 title HTML 标签、过滤空作者名，避免脏数据进入结果集。"""
+    clean_title = _clean_title(p.title)
+    clean_authors = _clean_authors(p.authors)
+    updates: dict = {}
+    if clean_title != p.title:
+        updates["title"] = clean_title or p.title  # 清洗后为空则保留原始
+    if clean_authors != p.authors:
+        updates["authors"] = clean_authors
+    return p.model_copy(update=updates) if updates else p
+
+
 def _normalize_title(title: str) -> str:
     """标题规范化：Unicode 归一化 → ASCII → 小写 → 去首尾标点 → 压缩空白。"""
     t = unicodedata.normalize("NFKD", title).encode("ascii", "ignore").decode("ascii")
@@ -820,5 +843,5 @@ async def search_all_sources(
         return papers
 
     results = await asyncio.gather(*(run_source(name, fn) for name, fn in funcs.items()))
-    all_papers = [p for source_results in results for p in source_results]
+    all_papers = [_sanitize_paper(p) for source_results in results for p in source_results]
     return deduplicate(all_papers)
