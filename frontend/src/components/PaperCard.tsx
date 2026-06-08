@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import type { Paper } from '../types'
-import { getDownloadUrl } from '../api/client'
 import { toast } from './Toast'
 import { useAuth } from '../hooks/useAuth'
 
@@ -246,8 +245,9 @@ export function PaperCard({ paper, selected = false, onToggle, isRejected = fals
               ))}
               {paper.pdf_url ? (
                 <a
-                  href={getDownloadUrl(paper.pdf_url)}
-                  download="paper.pdf"
+                  href={paper.pdf_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
                   className="inline-flex items-center gap-1 text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 active:bg-blue-800 rounded-lg px-2.5 py-1 transition-all active:scale-95"
                 >
                   <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
