@@ -1,3 +1,4 @@
+import asyncio
 import httpx
 from datetime import datetime
 from fastapi import APIRouter, Depends, Request, HTTPException
@@ -9,6 +10,7 @@ from typing import Optional
 from database import get_db
 from models_db import Feedback, User
 from services.auth_service import decode_token
+from services.email_service import send_feedback_notification
 from jose import JWTError
 
 router = APIRouter()
@@ -139,6 +141,10 @@ async def submit_feedback(
     db.add(fb)
     await db.commit()
     await db.refresh(fb)
+
+    if not is_author:
+        asyncio.create_task(send_feedback_notification(fb.content, location, category))
+
     return {"ok": True, "id": fb.id, "created_at": fb.created_at.isoformat()}
 
 

@@ -156,6 +156,55 @@ async def send_verification_email(to_email: str, verify_url: str) -> bool:
         return False
 
 
+async def send_feedback_notification(content: str, location: str | None, category: str) -> bool:
+    """有新用户留言时通知作者。"""
+    NOTIFY_TO = "dyucong@email.ncu.edu.cn"
+    if not SMTP_USER or not SMTP_PASS:
+        return False
+
+    category_label = {"suggest": "建议", "bug": "Bug 反馈", "chat": "聊天"}.get(category, category)
+    location_str = f" · {location}" if location else ""
+    subject = f"[ScholarScout] 新留言：{content[:30]}{'…' if len(content) > 30 else ''}"
+
+    html_body = f"""<!DOCTYPE html>
+<html lang="zh-CN">
+<head><meta charset="UTF-8"></head>
+<body style="font-family:-apple-system,Arial,sans-serif;max-width:520px;margin:0 auto;padding:24px;color:#111827;">
+<div style="background:#fff;border-radius:12px;padding:24px;border:1px solid #e5e7eb;">
+  <div style="font-size:18px;font-weight:700;color:#4f46e5;margin-bottom:16px;">ScholarScout 新留言</div>
+  <div style="background:#f9fafb;border-radius:8px;padding:14px 16px;margin-bottom:16px;font-size:15px;line-height:1.7;color:#111827;">
+    {content}
+  </div>
+  <div style="font-size:12px;color:#9ca3af;">
+    类型：{category_label}{location_str}
+  </div>
+</div>
+</body>
+</html>"""
+
+    msg = MIMEMultipart("alternative")
+    msg["Subject"] = subject
+    msg["From"] = f"{SMTP_FROM_NAME} <{SMTP_USER}>"
+    msg["To"] = NOTIFY_TO
+    msg["Date"] = formatdate(localtime=True)
+    msg.attach(MIMEText(html_body, "html", "utf-8"))
+
+    try:
+        await aiosmtplib.send(
+            msg,
+            hostname=SMTP_HOST,
+            port=SMTP_PORT,
+            use_tls=True,
+            username=SMTP_USER,
+            password=SMTP_PASS,
+        )
+        logger.info("Feedback notification sent for: %s", content[:40])
+        return True
+    except Exception as e:
+        logger.error("Failed to send feedback notification: %s", e)
+        return False
+
+
 async def send_subscription_email(
     to_email: str,
     keywords: list[str],
