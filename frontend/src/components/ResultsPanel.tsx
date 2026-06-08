@@ -479,7 +479,7 @@ const addKeyword = () => {
         }))
 
         try {
-          const resp = await fetch(getDownloadUrl(paper.pdf_url!))
+          const resp = await fetch(getDownloadUrl(paper.pdf_url!, paper.doi, paper.paper_id))
           if (resp.ok) {
             zip.file(filename, await resp.arrayBuffer())
           } else {

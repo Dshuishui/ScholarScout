@@ -16,7 +16,7 @@ from models import SearchRequest, ParseRequest, ParsedQuery, ValidateKeyRequest
 from models_db import User
 from services.llm_service import classify_intent, parse_query, validate_papers
 from services.search_service import search_all_sources, enhance_with_unpaywall, get_source_names
-from services.download_service import fetch_pdf_bytes
+from services.download_service import fetch_pdf_with_fallback
 from services.pdf_finder_service import find_pdfs_with_kimi, generate_fallback_links
 from config import (
     CORE_API_KEY, NASA_ADS_API_KEY, SERPAPI_KEY, KIMI_API_KEY,
@@ -269,9 +269,13 @@ async def health():
 
 
 @router.get("/download")
-async def download(url: str):
+async def download(
+    url: str,
+    doi: str | None = None,
+    paper_id: str | None = None,
+):
     try:
-        content, content_type = await fetch_pdf_bytes(url)
+        content = await fetch_pdf_with_fallback(url, doi=doi, paper_id=paper_id)
         return Response(
             content=content,
             media_type="application/pdf",

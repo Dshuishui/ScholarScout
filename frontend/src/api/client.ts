@@ -80,6 +80,9 @@ export async function* searchPapers(
   }
 }
 
-export function getDownloadUrl(pdfUrl: string): string {
-  return `${API_BASE}/download?url=${encodeURIComponent(pdfUrl)}`
+export function getDownloadUrl(pdfUrl: string, doi?: string | null, paperId?: string | null): string {
+  const params = new URLSearchParams({ url: pdfUrl })
+  if (doi) params.set('doi', doi)
+  if (paperId) params.set('paper_id', paperId)
+  return `${API_BASE}/download?${params}`
 }
