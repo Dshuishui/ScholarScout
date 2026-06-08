@@ -209,7 +209,7 @@ export function FeedbackWidget({ isMobileTabBar = false }: FeedbackWidgetProps) 
         </svg>
         {unreadCount > 0 && !open && (
           <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-red-500 text-[10px] font-bold flex items-center justify-center">
-            {unreadCount > 9 ? '9+' : unreadCount}
+            {unreadCount > 99 ? '99+' : unreadCount}
           </span>
         )}
       </button>

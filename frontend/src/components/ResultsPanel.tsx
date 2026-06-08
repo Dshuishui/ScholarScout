@@ -496,40 +496,42 @@ const addKeyword = () => {
       }))
     }
 
-    // 失败明细写入 CSV 一起放进 ZIP
+    // 失败的论文生成可点击的 HTML 下载页，比 CSV 更易用
     if (failed.length > 0) {
-      const headers = ['标题', '作者', '年份', 'PDF链接', '失败原因']
-      const csvRows = [headers, ...failed.map(f => [f.title, f.authors, f.year, f.url, f.reason])]
-        .map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
-        .join('\n')
-      zip.file('failed_downloads.csv', '﻿' + csvRows)
-    }
+      const cards = failed.map(f => `
+      <div style="border:1px solid #e5e7eb;border-radius:8px;padding:14px 16px;margin-bottom:12px;background:#fff;">
+        <div style="font-size:14px;font-weight:600;color:#111827;margin-bottom:4px;">${f.title.replace(/</g,'&lt;')}</div>
+        <div style="font-size:12px;color:#6b7280;margin-bottom:10px;">${f.authors} · ${f.year}</div>
+        <div style="font-size:11px;color:#ef4444;margin-bottom:10px;">失败原因：${f.reason}</div>
+        <a href="${f.url}" target="_blank" rel="noopener"
+           style="display:inline-block;background:#4f46e5;color:#fff;font-size:12px;font-weight:600;
+                  padding:6px 16px;border-radius:6px;text-decoration:none;">
+          点击下载 PDF →
+        </a>
+      </div>`).join('')
 
-    // 如果有失败，加入 README 说明
-    if (failed.length > 0) {
-      const readme = [
-        'ScholarScout 批量下载失败说明',
-        '================================',
-        '',
-        `共 ${failed.length} 篇论文 PDF 下载失败。常见原因：`,
-        '1. 来源网站（如 arXiv）对服务器 IP 有访问限制',
-        '2. 需要登录或付费才能获取全文',
-        '',
-        '建议解决方案：',
-        '1. 打开 failed_downloads.csv，手动访问每篇论文的原始链接下载',
-        '2. 如需批量下载协助，请联系作者：',
-        '   📧 dongyucong@sjtu.edu.cn',
-        '3. 也可以在网站右下角留言板留言描述需求',
-        '   作者会看到并尽量协助。',
-        '',
-        '感谢您使用 ScholarScout！',
-      ].join('\n')
-      zip.file('README.txt', readme)
+      const html = `<!DOCTYPE html>
+<html lang="zh-CN">
+<head><meta charset="UTF-8"><title>下载失败 - 手动下载链接</title></head>
+<body style="font-family:-apple-system,Arial,sans-serif;max-width:700px;margin:32px auto;padding:0 16px;background:#f9fafb;color:#111827;">
+  <div style="background:#fff;border-radius:12px;padding:24px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+    <h2 style="color:#4f46e5;margin-top:0;">ScholarScout 手动下载链接</h2>
+    <p style="color:#6b7280;font-size:13px;">共 <strong>${failed.length}</strong> 篇论文因来源网站访问限制无法自动下载。<br>
+       点击下方各论文的「点击下载 PDF」按钮，即可从原始来源直接获取。</p>
+    <hr style="border:none;border-top:1px solid #e5e7eb;margin:16px 0;">
+    ${cards}
+    <p style="font-size:12px;color:#9ca3af;margin-top:16px;border-top:1px solid #e5e7eb;padding-top:12px;">
+      如仍无法下载，可尝试谷歌学术 · Sci-Hub · ResearchGate 等平台获取全文。
+    </p>
+  </div>
+</body>
+</html>`
+      zip.file('手动下载链接.html', html)
     }
 
     const successCount = selectedWithPdf.length - failed.length
     const doneStatus = failed.length > 0
-      ? `${successCount} 篇成功，${failed.length} 篇失败（详见 README.txt）`
+      ? `${successCount} 篇成功，${failed.length} 篇失败（打开压缩包内的「手动下载链接.html」）`
       : '全部下载完成！'
 
     setDownloadProgress(prev => prev && ({ ...prev, status: '正在压缩打包...', current: selectedWithPdf.length }))
