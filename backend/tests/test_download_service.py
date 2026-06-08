@@ -30,11 +30,11 @@ async def test_fetch_pdf_bytes_success():
 
 @pytest.mark.asyncio
 async def test_fetch_pdf_bytes_invalid_url():
-    with pytest.raises(ValueError, match="不支持的下载地址"):
+    with pytest.raises(ValueError, match="不安全地址"):
         await fetch_pdf_bytes("ftp://evil.com/file.pdf")
 
 
 @pytest.mark.asyncio
-async def test_fetch_pdf_bytes_blocked_domain():
-    with pytest.raises(ValueError, match="不支持的下载地址"):
-        await fetch_pdf_bytes("https://malicious-site.com/paper.pdf")
+async def test_fetch_pdf_bytes_blocked_private_ip():
+    with pytest.raises(ValueError, match="不安全地址"):
+        await fetch_pdf_bytes("https://192.168.1.1/paper.pdf")
