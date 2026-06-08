@@ -437,7 +437,7 @@ const addKeyword = () => {
   const start = (currentPage - 1) * ITEMS_PER_PAGE + 1
   const end = Math.min(currentPage * ITEMS_PER_PAGE, sortedPapers.length)
 
-  const selectedWithPdf = papers.filter(p => selectedIds.has(p.paper_id) && p.pdf_url)
+  const selectedWithPdf = papers.filter(p => selectedIds.has(p.paper_id) && (p.pdf_url || p.url))
   const allPageSelected = pagePapers.length > 0 && pagePapers.every(p => selectedIds.has(p.paper_id))
 
   const togglePaper = (id: string) => {
@@ -479,16 +479,18 @@ const addKeyword = () => {
         }))
 
         try {
-          const resp = await fetch(getDownloadUrl(paper.pdf_url!, paper.doi, paper.paper_id))
+          const downloadUrl = paper.pdf_url || paper.url || ''
+          const resp = await fetch(getDownloadUrl(downloadUrl, paper.doi, paper.paper_id))
           if (resp.ok) {
             zip.file(filename, await resp.arrayBuffer())
           } else {
             let reason = `HTTP ${resp.status}`
             try { const j = await resp.json(); reason = j.detail ?? reason } catch { /* ignore */ }
-            failed.push({ title: paper.title, authors: paper.authors.join('; '), year, url: paper.pdf_url!, reason })
+            failed.push({ title: paper.title, authors: paper.authors.join('; '), year, url: downloadUrl, reason })
           }
         } catch {
-          failed.push({ title: paper.title, authors: paper.authors.join('; '), year, url: paper.pdf_url!, reason: '网络错误' })
+          const downloadUrl = paper.pdf_url || paper.url || ''
+          failed.push({ title: paper.title, authors: paper.authors.join('; '), year, url: downloadUrl, reason: '网络错误' })
         } finally {
           completed++
           setDownloadProgress(prev => prev && ({ ...prev, current: completed }))
