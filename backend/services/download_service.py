@@ -32,13 +32,19 @@ _UA = (
 
 
 def _is_safe_url(url: str) -> bool:
-    """防 SSRF：拒绝私有 IP，允许所有公网域名。"""
+    """防 SSRF：拒绝私有 IP / 非标准端口，允许所有公网域名。"""
     try:
         p = urlparse(url)
         if p.scheme not in ("http", "https"):
             return False
         host = (p.hostname or "").lower()
-        return not _PRIVATE_IP.match(host)
+        if _PRIVATE_IP.match(host):
+            return False
+        # 拒绝非标准端口（80/443 以外）
+        port = p.port
+        if port is not None and port not in (80, 443):
+            return False
+        return True
     except Exception:
         return False
 
@@ -176,6 +182,30 @@ async def _via_pmc(paper_id: str) -> bytes | None:
     return None
 
 
+async def _via_biorxiv(doi: str) -> bytes | None:
+    """通过 bioRxiv / medRxiv API 查找预印本 PDF（生命科学论文常见来源）。"""
+    if not doi:
+        return None
+    for server in ("biorxiv", "medrxiv"):
+        try:
+            async with httpx.AsyncClient(timeout=8) as client:
+                r = await client.get(f"https://api.biorxiv.org/details/{server}/{doi}/na/json")
+                if r.status_code != 200:
+                    continue
+                collection = r.json().get("collection", [])
+                if not collection:
+                    continue
+                # 取最新版本
+                latest = sorted(collection, key=lambda x: x.get("version", 0), reverse=True)[0]
+                biorxiv_doi = latest.get("doi", "")
+                if biorxiv_doi:
+                    pdf_url = f"https://www.{server}.org/content/{biorxiv_doi}.full.pdf"
+                    return await _fetch_bytes(pdf_url)
+        except Exception as e:
+            logger.debug("bioRxiv/medRxiv failed for %s: %s", doi, e)
+    return None
+
+
 async def _via_scihub(doi: str) -> bytes | None:
     """尝试多个 Sci-Hub 镜像，解析嵌入的 PDF URL 后下载。"""
     if not doi:
@@ -244,6 +274,7 @@ async def fetch_pdf_with_fallback(
         ("Semantic Scholar",  lambda: _via_semantic_scholar(doi) if doi else None),
         ("arXiv",             lambda: _via_arxiv(paper_id or "", doi) if paper_id else None),
         ("PMC",               lambda: _via_pmc(paper_id or "") if paper_id else None),
+        ("bioRxiv/medRxiv",   lambda: _via_biorxiv(doi) if doi else None),
         ("Sci-Hub",           lambda: _via_scihub(doi) if doi else None),
     ]
 
