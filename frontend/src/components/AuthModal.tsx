@@ -25,6 +25,26 @@ export function AuthModal({ onClose, defaultTab = 'login' }: Props) {
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
+
+    if (tab === 'register') {
+      // 简单检测常见域名拼写错误（如 @qq.cm → @qq.com）
+      const domainPart = email.split('@')[1] || ''
+      const COMMON_TYPOS: Record<string, string> = {
+        'qq.cm': 'qq.com', 'qq.con': 'qq.com', 'q.com': 'qq.com',
+        '163.co': '163.com', '126.co': '126.com',
+        'gmail.co': 'gmail.com', 'gmai.com': 'gmail.com', 'gmial.com': 'gmail.com',
+        'hotmail.co': 'hotmail.com', 'outloo.com': 'outlook.com',
+      }
+      if (COMMON_TYPOS[domainPart]) {
+        setError(`邮箱域名可能有误：@${domainPart} → 是否应为 @${COMMON_TYPOS[domainPart]}？`)
+        return
+      }
+      if (!domainPart.includes('.') || domainPart.endsWith('.')) {
+        setError('邮箱格式不正确，请检查后重新输入')
+        return
+      }
+    }
+
     setLoading(true)
     try {
       if (tab === 'login') {

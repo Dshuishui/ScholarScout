@@ -2,6 +2,7 @@
 import logging
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from email.utils import formatdate
 from datetime import date
 
 import aiosmtplib
@@ -136,6 +137,7 @@ async def send_verification_email(to_email: str, verify_url: str) -> bool:
     msg["Subject"] = "验证您的 ScholarScout 邮箱"
     msg["From"] = f"{SMTP_FROM_NAME} <{SMTP_USER}>"
     msg["To"] = to_email
+    msg["Date"] = formatdate(localtime=True)
     msg.attach(MIMEText(html_body, "html", "utf-8"))
 
     try:
@@ -171,6 +173,7 @@ async def send_subscription_email(
     msg["Subject"] = subject
     msg["From"] = f"{SMTP_FROM_NAME} <{SMTP_USER}>"
     msg["To"] = to_email
+    msg["Date"] = formatdate(localtime=True)
 
     html_body = build_daily_email_html(keywords, papers)
     msg.attach(MIMEText(html_body, "html", "utf-8"))
