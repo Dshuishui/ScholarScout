@@ -1,6 +1,6 @@
 # ScholarScout 开发进度
 
-> 压缩上下文后读这个文件快速入状态。最后更新：2026-05-27（Session 7）
+> 压缩上下文后读这个文件快速入状态。最后更新：2026-06-08（Session 8）
 
 ---
 
@@ -10,7 +10,7 @@
 - **服务器**：ubuntu@118.25.192.117，仓库在 `/home/ubuntu/Github/ScholarScout`
 - **部署**：`bash deploy/deploy.sh`（git pull → uv sync --frozen → npm build → rsync → systemctl restart）
 - **GitHub**：https://github.com/Dshuishui/ScholarScout
-- **最新 commit**：`af2c1c5` fix: 3 subscription bugs + README multi-paper AI analysis
+- **最新 commit**：`3aa5be8` fix(download): add bioRxiv/medRxiv fallback; enforce port validation
 
 ---
 
@@ -28,288 +28,164 @@ LLM    DeepSeek API（用户自带 Key 或系统 Key 试用）
 
 ## 已完成功能（全部）
 
-### 核心搜索
-- 自然语言 → AI 提取关键词 → 立即搜索 → 展示结果
-- 10 源并发搜索，SSE 实时进度可视化（per-source spinner/✓ + 篇数）
-- AI 筛选后 0 篇时显示引导卡片；搜索失败时显示重试卡片
-- 关键词 chips 可编辑 + 重新搜索
-
-### 账号系统 & 邮箱验证
-- JWT 注册/登录（30 天过期），401 自动退出 + toast"登录已过期"
-- **邮箱验证流程**：注册后发验证邮件 → 点击链接激活 → 自动登录
-  - token：`secrets.token_urlsafe(32)`（256-bit），24h 过期，单次有效
-  - 老用户：ALTER TABLE DEFAULT 1，保持 `is_verified=True`，无需重新验证
-- **免费试用额度**：验证后赠送 3 次免费搜索（系统 Key 代付）
-  - 后端原子扣减：`UPDATE ... WHERE free_searches > 0`（防并发超额）
-  - 系统 Key 仅服务器端使用，从不暴露给前端
-  - 服务器 `.env` 必须有 `DEEPSEEK_SYSTEM_KEY` 和 `APP_BASE_URL=http://118.25.192.117`
-- **限流（内存）**：注册 5次/小时/IP；登录失败 10次/15min/IP；重发验证 3次/小时/邮箱
-- 收藏论文（乐观更新，localStorage 缓存 `ss_saved_map`）
-- AI 对话记录持久化（每篇论文独立，重新打开自动恢复）
-
-### 论文 AI 对话（PaperChatDrawer）
-- 基于标题/摘要；上传 PDF 后基于全文
-- **PDF 全文字符上限**：`MAX_CHARS = 3_936_000`
-- **PDF 云端持久化**：PDF 文本存入后端 DB，与账号绑定，刷新/换设备自动恢复
-- **PDF 注入方式**：模拟 Claude.ai document block
-- **Drag&Drop PDF 上传**；**清除 PDF**（× 按钮保留对话）；**新建会话**（保留 PDF）
-- **重新生成**；**快捷提问**；Markdown 渲染；Stop 按钮
-
-### 多论文 AI 分析（ComparePanel，主推功能）
-- 勾选 2+ 篇论文 → 全屏分析面板，三种模式：
-  - **对比分析**：汇总表格 + 方法/创新点/实验/优缺点逐项对比
-  - **文献综述**：学术段落，可直接用作 Related Work 草稿
-  - **研究趋势**：时间线演进 + 未来方向预测
-- 各模式独立 `useRef` 缓存（切换不丢失）；支持 Stop + 重新生成
-- ComparePanel lazy loaded（减小首屏 bundle）
-
-### 搜索结果面板（ResultsPanel）
-- 顶部摘要行；💬 已对话 badge；排序/筛选/分组/分页/密度切换
-- **导出 CSV**：仅导出 AI 筛选后论文（默认）或全部；弹窗实时显示导出篇数
-
-### KeySetupScreen 落地页
-- **双入口设计**：
-  - 主入口：⚡ 免费体验卡片，点击弹 AuthModal（注册 tab）
-  - 次入口：API Key 输入，分隔线隔开
-- **已登录 + 0 次额度**：amber 提示卡含账号邮箱 + "切换账号"按钮
-- **AuthModal**：`defaultTab` prop，注册卡片直接打开注册 tab
-
-### 论文卡片收藏按钮
-- **未登录**：显示"收藏" + "登录后使用"副文字
-- **已登录未收藏**：只显示"收藏"，副文字 `invisible` 占位（保持按钮高度对齐）
-- **已登录已收藏**：显示"已收藏" + "点击取消"
-
-### 📬 关键词订阅 + 每日推送队列（Session 7，主推功能）
-
-#### 核心机制
-- 订阅关键词 → 后台异步搜索论文（BackgroundTasks）→ 建推送队列
-- 调度器每天 00:00 UTC（08:00 CST）从队列取 `daily_limit` 篇 → 发邮件 → 标记 sent_at
-- 队列剩余 < 5 篇时自动补充（search_days=90 宽窗口）；队列空时同上
-
-#### DB 模型
-```python
-class Subscription:
-    id, user_id, keywords_json, active, created_at, last_sent
-    daily_limit: int = 1  # 每天推送篇数（用户可调 1-10）
-
-class SubscriptionQueueItem:
-    id, subscription_id, paper_json, paper_id  # paper_id 用于去重
-    planned_date: str  # YYYY-MM-DD
-    sent_at: datetime | None
-    created_at: datetime
-```
-
-#### 迁移
-- `ALTER TABLE subscriptions ADD COLUMN daily_limit INTEGER DEFAULT 1`
-- `subscription_queue` 表由 `create_all` 自动创建
-
-#### API 端点
-```
-GET  /api/subscriptions                    — 列表
-POST /api/subscriptions                    — 创建（后台触发填充队列）
-DELETE /api/subscriptions/{id}             — 删除（同时删队列项）
-PATCH /api/subscriptions/{id}/toggle       — 开关
-PATCH /api/subscriptions/{id}/daily-limit  — 修改每日篇数
-GET  /api/subscriptions/{id}/queue         — 查看队列（sent + pending）
-POST /api/subscriptions/{id}/refresh-queue — 后台重新搜索并追加
-POST /api/subscriptions/{id}/test-send     — 测试发送（不走队列，已从前端移除按钮）
-```
-
-#### 前端
-- **ResultsPanel**：订阅成功后弹确认 Modal（关键词 chips + 推送时间 + 接收邮箱 + 跳转管理）
-- **ResultsPanel**：订阅按钮下方常驻提示文字"每日推送 · 可随时取消"
-- **MainLayout**：监听 `navigate:page` custom event → setActivePage（跨组件导航不需要 prop drilling）
-- **SubscriptionsPage**：可展开队列面板（✅ 已发 + 📅 待发 + 🕐 今天），显示已发/待发篇数
-- **SubscriptionsPage**：每日篇数内联编辑（点击数字 → input → 保存/取消）
-- **SubscriptionsPage**：队列空 + 创建 < 3 分钟 → 显示"正在后台搜索..."spinner；> 3 分钟 → 显示"已清空，点击刷新"
-- **邮件模板**：周报→日报，"下周一"→"明天早 8 点（北京时间 08:00）"；单篇推送展开完整摘要
-
-#### populate_queue 逻辑
-```python
-async def populate_queue(sub, db, now, search_days=30, max_add=30):
-    # 1. 搜索近 search_days 天论文（初始: 30天，自动刷新: 90天）
-    # 2. 可选 AI 过滤
-    # 3. 过滤已在队列中的 paper_id（已发和待发都去重）
-    # 4. 找最后一个 pending 的 planned_date，从其后一天开始排队
-    #    每天排 daily_limit 篇（i // daily_limit 天偏移）
-    # 5. 最多追加 max_add 篇
-```
-
-### 导航与布局（MainLayout）
-- 可折叠侧边栏（384px → 0px 动画）；Drawer Push（margin-right: 440px）
-- **移动端响应式**：底部 Tab Bar（搜索/结果）；PaperChatDrawer → 88vh 底部 Sheet
-- `navigate:page` custom event 监听（Session 7 新增）
-
-### 搜索对话面板（ChatPanel）
-- 分领域示例引导；示例点击直接触发搜索；可折叠历史对话
-
-### 留言板（FeedbackWidget）
-- 3 Tab（建议/反馈/聊天）；category 字段过滤；各 tab 独立计数；Emoji 反应；昵称
-
-### 性能
-- **Bundle 代码分割**：ComparePanel + PaperChatDrawer → `React.lazy`
-- 首屏主 bundle gzip：**129.73 KB**（Session 7 订阅页新代码略有增加，Session 5 时是 126KB）
-
-### CI / 工程
-- pytest-asyncio `asyncio_mode = "auto"`；`make_verified_user()` helper；`reset_rate_limits` autouse fixture
-- `uv sync --no-dev --frozen` in deploy.sh（lock 不匹配 fail-fast）
+- 账号系统：邮件注册验证 / JWT / 自动登出
+- 免费试用：3 次搜索（新用户验证后获得）
+- 10 源并发搜索 + 智能去重 + AI 相关性过滤
+- 搜索结果 AI 过滤 / 分组视图 / 排序 / 配置限制
+- 关键词订阅 + 每日推送队列（08:00 CST）+ 进度可视化
+- 多文献 AI 对比分析（对比 / 综述 / 趋势）
+- 单篇论文 AI 对话（含 PDF 上传全文分析，云端持久化）
+- 收藏 / 历史记录
+- CSV 导出（AI 过滤版 / 全量）
+- 批量 PDF 下载（ZIP 打包，失败时生成 手动下载链接.html + failed_downloads.csv）
+- 单篇 PDF 按钮（直链，不走服务器代理）
+- 移动端适配（底部 Tab + 底部抽屉）
+- 代码分割（首屏 gzip ~126 KB）
+- 留言板
 
 ---
 
-## 重要设计决策
+## Session 8 完成的工作（2026-06-08）
 
-| 决策 | 原因 |
-|------|------|
-| `pdfTextsRef` 用 `useRef` 不用 `useState` | 避免 `sendMessage` useCallback 闭包捕获过期值 |
-| PDF 文本存后端 DB | 跟账号绑定，换设备/刷新均可恢复 |
-| PDF 作为对话时间线节点（非 system prompt）| 模拟 Claude.ai document block |
-| Drawer push 用 `margin-right: 440px` | 不遮盖 ResultsPanel |
-| ComparePanel 用 `useRef` 缓存各模式结果 | 避免重复付费 API 调用 |
-| FeedbackWidget category 存后端 | 客户端正则无法可靠分类 |
-| Emoji 反应存 localStorage | 避免后端复杂度，后续可升级 |
-| `update_pdf: bool` 标志位 | 区分"不传 pdf_text"和"明确清空" |
-| 邮箱验证 token 用 `secrets.token_urlsafe(32)` | 256-bit 熵，暴力破解不可行 |
-| parse 阶段不扣减试用额度，只在 search 扣 | 一次完整搜索（parse+search）算一次 |
-| 限流用内存 dict | 小规模部署够用，生产级换 Redis |
-| 试用 Key 仅服务器端 env var | 绝不暴露给前端 |
-| 老用户 ALTER TABLE DEFAULT 1 | 保持已注册用户正常登录，无需重新验证 |
-| 测试用 make_verified_user() 直接写 DB | 绕过 SMTP，测试不依赖邮件服务 |
-| uv sync --frozen in deploy | lock 文件不匹配时 fail-fast 而非静默修改 |
-| PaperCard 内用 useAuth() 而非传 prop | 不需要改所有调用方 |
-| 收藏按钮副文字用 `invisible` 而非条件渲染 | 保持按钮高度与相邻按钮对齐 |
-| 订阅队列用 BackgroundTasks 异步填充 | 不阻塞 POST /subscriptions 响应 |
-| 自动刷新队列 search_days=90 | 初始填充仅覆盖 30 天，刷新用更宽窗口避免漏搜 |
-| navigate:page custom event | 跨层组件导航（ResultsPanel → MainLayout），不需要 prop drilling |
-| 移除测试发送按钮 | 日常推送已稳定，按钮为调试遗留，去掉减少 UI 噪音 |
-| 队列创建 3 分钟内显示 populating 状态 | 区分"真空"和"后台还在跑"，避免用户误以为出错 |
+### 1. 搜索数据质量修复
+**文件**：`backend/services/search_service.py`、`frontend/src/components/PaperCard.tsx`
+- 新增 `_clean_title()`：清洗 CrossRef 等来源返回的 JATS XML 标签（如 `<i>E. coli</i>`），导致论文名搜索不到
+- 新增 `_clean_authors()`：过滤空字符串作者名，解决"作者不详"乱显示
+- 新增 `_sanitize_paper()`：在 `search_all_sources()` 入口统一清洗，覆盖所有 10 个数据源
+- 前端 `PaperCard.tsx`：加 `validAuthors.filter()` 防御性过滤
+- **Commit**：`a0738d5`
+
+### 2. 邮件 Date 头修复 + 注册域名拼写检测
+**文件**：`backend/services/email_service.py`、`frontend/src/components/AuthModal.tsx`
+- 两个 MIMEMultipart 都加了 `msg["Date"] = formatdate(localtime=True)`，修复邮件时间显示 1970-01-01
+- 注册表单加常见域名拼写检测（如 `@qq.cm` → 提示应为 `@qq.com`）
+- **Commit**：`5a44677`
+
+### 3. PDF 下载架构重构（重要）
+**文件**：`backend/services/download_service.py`（完全重写）、`backend/routers/search.py`、`frontend/src/api/client.ts`、`frontend/src/components/ResultsPanel.tsx`
+
+**根本问题**：服务器（中国 IP）被 arXiv / europepmc 等封锁，原来单 URL 代理全部失败。
+
+**解决方案**：7 级 fallback 链，对标 paper-fetch 工具：
+1. Primary `pdf_url`（原始链接）
+2. Unpaywall API（按 DOI，合法 OA）
+3. Semantic Scholar `openAccessPdf`（按 DOI）
+4. arXiv 直链（从 paper_id 或 DOI 中提取 arXiv ID）
+5. PMC 全文（pubmed_ paper_id → eutils 查 PMCID）
+6. bioRxiv / medRxiv（按 DOI 查预印本，生命科学论文关键）
+7. Sci-Hub 镜像（se/st/ru，HTML 解析嵌入 PDF URL，最后兜底）
+
+**其他改进**：
+- 用 SSRF 防护替换原来过窄的 ALLOWED_DOMAINS 白名单（阻止私有 IP + 非标准端口）
+- 加 `%PDF` 魔数校验，确保拿到的是真正的 PDF
+- 路由 `GET /api/download` 新增 `doi` 和 `paper_id` 参数（向后兼容）
+- `getDownloadUrl()` 前端函数同步支持传 doi / paperId
+- **Commits**：`0bc9aba`、`3aa5be8`
+
+### 4. 单篇 PDF 按钮改为直链
+**文件**：`frontend/src/components/PaperCard.tsx`
+- 原来走服务器代理（被封） → 改为 `href={paper.pdf_url}` + `target="_blank"`
+- 用户浏览器直接请求来源，绕过服务器 IP 限制
+- **Commit**：`793336f`
+
+### 5. 批量下载失败体验优化
+**文件**：`frontend/src/components/ResultsPanel.tsx`
+- 失败时 ZIP 包含两个文件：`手动下载链接.html`（带按钮可点击）+ `failed_downloads.csv`（含 PDF 直链列）
+- 进度状态文案更新
+- **Commits**：`e4e753c`、`506897a`
+
+### 6. 留言板 Badge 修复
+**文件**：`frontend/src/components/FeedbackWidget.tsx`
+- 硬编码 `> 9 ? '9+' :` → 改为 `> 99 ? '99+' :`，显示真实数量
+- **Commit**：`e4e753c`
 
 ---
 
 ## 关键文件位置
 
-```
-frontend/src/
-  App.tsx                   — 邮箱验证回调（?verify=token）+ 试用模式入口判断
-  api/client.ts             — parseQuery/searchPapers 支持 authToken（试用模式）
-  components/
-    MainLayout.tsx          — 主布局；navigate:page event listener（Session 7）
-    ChatPanel.tsx           — 示例直接搜索；可折叠历史
-    ResultsPanel.tsx        — 订阅成功 Modal；navigate:page dispatch；订阅按钮提示文字
-    PaperCard.tsx           — 收藏按钮 invisible 占位（Session 7）；useAuth() 直接调用
-    PaperChatDrawer.tsx     — 论文 AI 对话；移动端底部 Sheet；lazy
-    KeySetupScreen.tsx      — 双入口（免费试用卡 + API Key）；已登录态 amber 提示
-    AuthModal.tsx           — defaultTab prop；注册后"邮件已发送"态 + 重发按钮
-    UserMenu.tsx            — 头像徽章显示剩余免费次数；下拉菜单"⚡ 剩余 N 次"
-    FeedbackWidget.tsx      — 3 Tab + category 字段过滤
-    ComparePanel.tsx        — 多论文分析（lazy loaded）
-  hooks/
-    useAuth.ts              — freeSearches；register 返回 message 不自动登录；
-                              loginWithToken；resendVerification；decrementFreeSearches
-    usePaperChat.ts         — regenerate()；removePdf()；错误提示
-    useSearch.ts            — isTrial 判断；authToken 传递；done 时 decrementFreeSearches
-    useIsMobile.ts          — resize-aware breakpoint hook
-  pages/
-    SubscriptionsPage.tsx   — 队列展开面板；daily_limit 编辑；populating 状态（Session 7）
-    SavedPage.tsx           — 收藏夹
-    HistoryPage.tsx         — 阅读历史
+| 文件 | 用途 |
+|------|------|
+| `backend/services/search_service.py` | 10 源搜索 + 去重 + sanitize |
+| `backend/services/download_service.py` | 7 级 PDF fallback 链 |
+| `backend/services/email_service.py` | SMTP 邮件（验证 + 订阅日报） |
+| `backend/services/llm_service.py` | AI 意图解析 / 相关性过滤 / 对比分析 |
+| `backend/services/pdf_finder_service.py` | 备用链接生成 / Kimi 联网搜索 PDF |
+| `backend/scheduler.py` | APScheduler 每日推送任务 |
+| `backend/routers/subscriptions.py` | 订阅 CRUD + 队列 API |
+| `backend/routers/search.py` | 搜索 + PDF 下载端点 |
+| `backend/models_db.py` | DB 模型（含 Subscription / SubscriptionQueueItem） |
+| `frontend/src/components/ResultsPanel.tsx` | 搜索结果 / 批量操作 |
+| `frontend/src/components/PaperCard.tsx` | 单篇论文卡片 |
+| `frontend/src/components/FeedbackWidget.tsx` | 留言板 |
+| `frontend/src/components/AuthModal.tsx` | 注册 / 登录弹窗 |
+| `frontend/src/pages/SubscriptionsPage.tsx` | 订阅管理页 |
+| `frontend/src/api/client.ts` | API 封装（含 getDownloadUrl） |
 
-backend/
-  models_db.py              — User / Subscription(+daily_limit) / SubscriptionQueueItem（Session 7）
-  database.py               — ALTER TABLE 迁移（含 daily_limit）
-  config.py                 — DEEPSEEK_SYSTEM_KEY / FREE_SEARCHES_QUOTA / APP_BASE_URL
-  dependencies.py           — get_optional_user()（无 token 返回 None，不抛异常）
-  routers/auth.py           — 完整验证流程：register/verify-email/login/resend-verification/me
-  routers/search.py         — _resolve_api_key()；/parse 检查额度不扣减；/search 原子扣减
-  routers/subscriptions.py  — 完整队列 CRUD（Session 7，含 AsyncSessionLocal 正确导入）
-  models.py                 — SearchRequest/ParseRequest.api_key 改为 Optional
-  services/email_service.py — 日报模板（Session 7）；send_verification_email()
-  routers/user.py           — /me 返回 free_searches
-  scheduler.py              — populate_queue() + _send_from_queue()（Session 7 完全重写）
-  tests/
-    conftest.py             — make_verified_user() helper + reset_rate_limits autouse
-    test_auth.py            — 已更新匹配邮箱验证流程
-    test_user.py            — register_and_token → get_auth_headers（直接写 DB）
+---
+
+## DB 模型概览
+
+```python
+User               id / email / password_hash / is_verified / free_searches_left
+Subscription       id / user_id / keywords_json / active / daily_limit / last_sent
+SubscriptionQueueItem  id / subscription_id / paper_json / paper_id / planned_date / sent_at
+Bookmark           id / user_id / paper_json
+ChatHistory        id / user_id / paper_id / paper_title / last_message / last_at
+Feedback           id / content / location / is_author / user_id / reply_to_id / category / recalled
 ```
 
 ---
 
-## 待做事项
+## API 端点概览
+
+| 端点 | 说明 |
+|------|------|
+| `GET /api/search` | SSE 流式搜索 |
+| `GET /api/download?url=&doi=&paper_id=` | PDF 下载（7 级 fallback） |
+| `POST /api/auth/register` | 注册 |
+| `POST /api/auth/login` | 登录 |
+| `GET /api/auth/verify` | 邮件验证 |
+| `GET /api/subscriptions` | 获取订阅列表 |
+| `POST /api/subscriptions` | 新建订阅 |
+| `GET /api/subscriptions/{id}/queue` | 查看推送队列 |
+| `POST /api/subscriptions/{id}/refresh-queue` | 手动刷新队列 |
+| `PATCH /api/subscriptions/{id}/daily-limit` | 修改每日推送数 |
+| `DELETE /api/subscriptions/{id}` | 删除订阅 |
+| `GET /api/feedback` | 获取留言 |
+| `POST /api/feedback` | 提交留言 |
+
+---
+
+## 已知问题 / 待办
 
 ### 中优先级
-
-- [ ] **Bundle 优化**：主包 gzip 129.73KB，可考虑 lazy load SubscriptionsPage
-- [ ] **队列 item 显示更多信息**：加来源 badge、发表年份、引用数（当前只有标题+日期）
-- [ ] **订阅管理跳转后自动展开新订阅**：用户从订阅成功 Modal 点"查看订阅管理"时，自动展开刚创建的订阅的队列（需在 navigate:page event 中传 subId）
-- [ ] **邮件加"在 ScholarScout 中打开"按钮**：增加回访入口
+- 批量 ZIP 下载：服务器 IP 被部分学术源封锁（已有 7 级 fallback 兜底，效果待上线验证）
+- bundle 优化：main chunk gzip 约 130 KB，可考虑懒加载 SubscriptionsPage
+- 队列 item 展示：缺来源徽章、发布年份、引用数
+- 新建订阅后，从成功弹窗跳转到订阅页时，自动展开刚创建的订阅卡片
 
 ### 低优先级
-
-- [ ] 更多模型支持（Claude、GPT 等）
-- [ ] 用户主页：统计已收藏/已对话/已订阅数量
-- [ ] 落地页（KeySetupScreen）移动端适配
-- [ ] 移动端 PDF 上传 UX（当前 Sheet 内操作不便）
-- [ ] FeedbackWidget Emoji 反应后端持久化
-- [ ] FeedbackWidget WebSocket 实时推送（目前 20s 轮询）
-- [ ] 年份分布 sparkline
-- [ ] Drawer 宽度可拖拽调整
-- [ ] AI "引用原文"功能
+- 更多模型支持（Claude / GPT）
+- 用户统计面板
+- 移动端 landing page 优化
+- FeedbackWidget 轮询改 WebSocket
+- 论文卡片年份分布 sparkline
+- 抽屉宽度拖拽
 
 ---
 
-## 维护命令
+## 设计决策记录
 
-```bash
-# 查看后端日志
-sudo journalctl -u scholarscout-backend -n 50 --no-pager
-
-# 重新部署
-bash deploy/deploy.sh
-
-# 重启后端
-sudo systemctl restart scholarscout-backend
-
-# 修改某个用户的 free_searches（无 sqlite3 命令时用 Python）
-cd /home/ubuntu/Github/ScholarScout/backend
-.venv/bin/python -c "
-import sqlite3
-conn = sqlite3.connect('scholarscout.db')
-conn.execute(\"UPDATE users SET free_searches=3 WHERE email='xxx@xxx.com'\")
-conn.commit()
-print(conn.execute('SELECT email, free_searches FROM users').fetchall())
-conn.close()
-"
-
-# Umami 统计面板
-sudo docker compose -f deploy/umami-compose.yml --env-file deploy/.umami.env ps
-```
-
----
-
-## Session 7 完成工作（2026-05-23 ~ 2026-05-27）
-
-### 1. 订阅成功 Modal（f93bb12）
-- 点击"订阅更新"成功后弹确认弹窗：关键词 chips + 推送时间 + 邮箱 + 跳转管理
-- 订阅按钮下方加小字"每日推送 · 可随时取消"
-- MainLayout 监听 `navigate:page` custom event，支持跨组件跳转
-
-### 2. 每日推送队列系统（8be31ed）
-- 新增 `SubscriptionQueueItem` DB 表；`Subscription` 加 `daily_limit` 字段
-- scheduler.py 完全重写：populate_queue + _send_from_queue
-- 新增 API：GET queue / POST refresh-queue / PATCH daily-limit
-- 创建订阅后 BackgroundTasks 异步填充队列
-- 邮件模板重构：周报→日报，文案修正
-- SubscriptionsPage：队列进度展示 + daily_limit 内联编辑 + 刷新按钮
-
-### 3. UI 修复（be9ad7e）
-- 收藏按钮高度对齐：用 `invisible` 替代条件渲染，三按钮等高
-- 移除测试发送按钮（推送已稳定，按钮为调试遗留）
-
-### 4. Bug 修复（af2c1c5）
-- `__import__("database")` hack → `from database import AsyncSessionLocal`
-- 自动刷新队列 search_days: 30 → 90（避免漏搜订阅后新论文）
-- 队列空 + 创建 < 3 分钟 → 显示 spinner + 说明，而非误导性"队列为空"
-
-### 5. README 更新（2db2f8b、af2c1c5）
-- 订阅推送作为主推功能：扩写为 7 点详细列表
-- 多论文 AI 分析升级为独立亮点章节（中英文同步）
-- intro 同时提及两个主推功能
+| 决策 | 原因 |
+|------|------|
+| 单篇 PDF 按钮改直链 | 服务器 IP 被封，浏览器直接请求来源更可靠 |
+| 批量下载走服务器 fallback 链 | 需要收集字节打包 ZIP，必须走服务器 |
+| 用 SSRF 防护替换 ALLOWED_DOMAINS | 原白名单太窄（很多合法 OA URL 被拦），SSRF 防护更安全也更灵活 |
+| Sci-Hub 作为最后一级 fallback | 公开 Web 服务法律风险，但用户明确要求覆盖率最大化 |
+| bioRxiv/medRxiv 加入 fallback | paper-fetch 对比发现缺失，生命科学论文关键来源 |
+| 自己实现 fallback 链而非调用 paper-fetch | paper-fetch 是外部工具，集成麻烦；逻辑不复杂，原生实现更可控 |
+| 订阅队列 planned_date 用 YYYY-MM-DD 字符串 | SQLite 无原生 Date 类型，字符串便于比较且可读 |
+| populate_queue 用 search_days=90 做 auto-refill | 避免漏搜订阅创建后 30 天内发布但在 30 天窗口外的论文 |
+| 每日发送走独立 AsyncSessionLocal | 定时任务不在请求上下文里，不能用依赖注入的 get_db |
+| 跨组件导航用 window 自定义事件 | ResultsPanel 需触发 MainLayout 切换页面，避免 prop 层层传递 |
+| 收藏按钮用 invisible 保持高度 | 登录后无副标题导致按钮比相邻按钮矮，visibility:hidden 保留占位 |
