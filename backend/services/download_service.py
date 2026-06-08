@@ -49,8 +49,34 @@ def _is_safe_url(url: str) -> bool:
         return False
 
 
-async def _fetch_bytes(url: str, timeout: int = 25) -> bytes:
-    """下载单个 URL，返回 PDF 字节；失败抛 ValueError。"""
+def _extract_pdf_url_from_html(html: str, base_url: str) -> str | None:
+    """从 HTML 落地页提取 PDF 直链。
+    优先级：citation_pdf_url meta → link[type=pdf] → .pdf href。
+    """
+    from urllib.parse import urljoin
+    patterns = [
+        # 学术出版商标准 meta 标签（arXiv、bioRxiv、Springer、Wiley 等均支持）
+        r'<meta[^>]+name=["\']citation_pdf_url["\'][^>]+content=["\']([^"\']+)["\']',
+        r'<meta[^>]+content=["\']([^"\']+)["\'][^>]+name=["\']citation_pdf_url["\']',
+        # <link rel="alternate" type="application/pdf">（arXiv 使用）
+        r'<link[^>]+type=["\']application/pdf["\'][^>]+href=["\']([^"\']+)["\']',
+        r'<link[^>]+href=["\']([^"\']+)["\'][^>]+type=["\']application/pdf["\']',
+        # 页面内 .pdf 直链（兜底）
+        r'href=["\']([^"\']+\.pdf(?:\?[^"\']*)?)["\']',
+    ]
+    for pat in patterns:
+        m = re.search(pat, html, re.I)
+        if m:
+            return urljoin(base_url, m.group(1))
+    return None
+
+
+async def _fetch_bytes(url: str, timeout: int = 25, _depth: int = 0) -> bytes:
+    """下载单个 URL，返回 PDF 字节；失败抛 ValueError。
+    遇到 HTML 落地页时自动提取 PDF 链接并重试（最多 2 层）。
+    """
+    if _depth > 2:
+        raise ValueError("落地页跳转层数超限")
     if not _is_safe_url(url):
         raise ValueError(f"不安全地址: {url}")
 
@@ -65,19 +91,27 @@ async def _fetch_bytes(url: str, timeout: int = 25) -> bytes:
                 raise ValueError("重定向到私有地址")
 
             ct = resp.headers.get("content-type", "").split(";")[0].strip()
-            if ct.startswith("text/html"):
-                raise ValueError("收到 HTML 登录页，非 PDF")
-            if not any(ct.startswith(t) for t in ALLOWED_CONTENT_TYPES):
-                raise ValueError(f"不支持的文件类型: {ct}")
-
             total, chunks = 0, []
             async for chunk in resp.aiter_bytes(65536):
                 total += len(chunk)
                 if total > MAX_FILE_SIZE:
                     raise ValueError("文件超过 50 MB")
                 chunks.append(chunk)
+            final_url = str(resp.url)
 
     data = b"".join(chunks)
+
+    if ct.startswith("text/html"):
+        html = data.decode("utf-8", errors="ignore")
+        pdf_url = _extract_pdf_url_from_html(html, final_url)
+        if pdf_url and _is_safe_url(pdf_url):
+            logger.debug("HTML landing page → PDF: %s", pdf_url)
+            return await _fetch_bytes(pdf_url, timeout=timeout, _depth=_depth + 1)
+        raise ValueError("收到 HTML 落地页，未能提取 PDF 链接")
+
+    if not any(ct.startswith(t) for t in ALLOWED_CONTENT_TYPES):
+        raise ValueError(f"不支持的文件类型: {ct}")
+
     if not data.startswith(b"%PDF"):
         raise ValueError("非有效 PDF（无 %PDF 魔数）")
     return data

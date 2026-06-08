@@ -718,15 +718,32 @@ def _clean_authors(authors: list[str]) -> list[str]:
     return [a.strip() for a in authors if a and a.strip()]
 
 
+def _normalize_pdf_url(url: str | None) -> str | None:
+    """将已知来源的落地页 URL 转换为 PDF 直链。"""
+    if not url:
+        return url
+    # arXiv 摘要页 → PDF（保留版本号）
+    m = re.match(r"https?://(?:export\.)?arxiv\.org/abs/(.+?)/?$", url)
+    if m:
+        return f"https://arxiv.org/pdf/{m.group(1)}"
+    # bioRxiv / medRxiv 内容页 → full PDF
+    if re.match(r"https?://(?:www\.)?(?:bio|med)rxiv\.org/content/", url) and not url.endswith(".pdf"):
+        return url + ".full.pdf"
+    return url
+
+
 def _sanitize_paper(p: Paper) -> Paper:
-    """清洗 title HTML 标签、过滤空作者名，避免脏数据进入结果集。"""
+    """清洗 title HTML 标签、过滤空作者名、规范化 PDF URL。"""
     clean_title = _clean_title(p.title)
     clean_authors = _clean_authors(p.authors)
+    clean_pdf_url = _normalize_pdf_url(p.pdf_url)
     updates: dict = {}
     if clean_title != p.title:
-        updates["title"] = clean_title or p.title  # 清洗后为空则保留原始
+        updates["title"] = clean_title or p.title
     if clean_authors != p.authors:
         updates["authors"] = clean_authors
+    if clean_pdf_url != p.pdf_url:
+        updates["pdf_url"] = clean_pdf_url
     return p.model_copy(update=updates) if updates else p
 
 
