@@ -527,11 +527,18 @@ const addKeyword = () => {
 </body>
 </html>`
       zip.file('手动下载链接.html', html)
+
+      // 同时保留 CSV 供程序处理或批量复制链接
+      const csvRows = [
+        ['标题', '作者', '年份', 'PDF直链（复制到浏览器可直接下载）', '失败原因'],
+        ...failed.map(f => [f.title, f.authors, f.year, f.url, f.reason]),
+      ].map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(',')).join('\n')
+      zip.file('failed_downloads.csv', '﻿' + csvRows)
     }
 
     const successCount = selectedWithPdf.length - failed.length
     const doneStatus = failed.length > 0
-      ? `${successCount} 篇成功，${failed.length} 篇失败（打开压缩包内的「手动下载链接.html」）`
+      ? `${successCount} 篇成功，${failed.length} 篇失败（查看压缩包内「手动下载链接.html」）`
       : '全部下载完成！'
 
     setDownloadProgress(prev => prev && ({ ...prev, status: '正在压缩打包...', current: selectedWithPdf.length }))
