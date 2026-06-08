@@ -726,9 +726,10 @@ def _normalize_pdf_url(url: str | None) -> str | None:
     m = re.match(r"https?://(?:export\.)?arxiv\.org/abs/(.+?)/?$", url)
     if m:
         return f"https://arxiv.org/pdf/{m.group(1)}"
-    # bioRxiv / medRxiv 内容页 → full PDF
+    # bioRxiv / medRxiv 内容页 → full PDF（去掉查询参数再拼）
     if re.match(r"https?://(?:www\.)?(?:bio|med)rxiv\.org/content/", url) and not url.endswith(".pdf"):
-        return url + ".full.pdf"
+        base = url.split("?")[0].split("#")[0]
+        return base + ".full.pdf"
     return url
 
 
