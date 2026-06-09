@@ -51,6 +51,7 @@ interface Props {
   hasSearchError?: boolean
   searchDateRange?: { from: string | null; to: string | null } | null
   sessionId?: number | null
+  onOpenRag?: (papers: Paper[]) => void
 }
 
 interface DownloadProgress {
@@ -185,7 +186,7 @@ function Pagination({ current, total, onChange }: {
   )
 }
 
-export function ResultsPanel({ papers, rejectedPapers = [], isLoading, statusMessage, sourceStatuses = {}, settings, onSettingsChange, onReSearch, confirmedKeywords, onAnalyzePaper, onExampleSearch, apiKey, getMessages, hasSearchError = false, searchDateRange, sessionId }: Props) {
+export function ResultsPanel({ papers, rejectedPapers = [], isLoading, statusMessage, sourceStatuses = {}, settings, onSettingsChange, onReSearch, confirmedKeywords, onAnalyzePaper, onExampleSearch, apiKey, getMessages, hasSearchError = false, searchDateRange, sessionId, onOpenRag }: Props) {
   const [currentPage, setCurrentPage] = useState(1)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [downloadProgress, setDownloadProgress] = useState<DownloadProgress | null>(null)
@@ -664,16 +665,29 @@ const addKeyword = () => {
             </button>
 
             {selectedIds.size >= 2 && (
-              <button
-                onClick={() => setShowCompare(true)}
-                className="flex items-center gap-1 text-xs font-medium text-white bg-violet-600 hover:bg-violet-700 rounded-lg px-2.5 py-1 transition-all shadow-sm"
-              >
-                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-                </svg>
-                AI 多论文分析
-                <span className="bg-white/20 rounded px-1 text-[10px]">{selectedIds.size}</span>
-              </button>
+              <>
+                <button
+                  onClick={() => setShowCompare(true)}
+                  className="flex items-center gap-1 text-xs font-medium text-white bg-violet-600 hover:bg-violet-700 rounded-lg px-2.5 py-1 transition-all shadow-sm"
+                >
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                  </svg>
+                  AI 多论文分析
+                  <span className="bg-white/20 rounded px-1 text-[10px]">{selectedIds.size}</span>
+                </button>
+                {onOpenRag && (
+                  <button
+                    onClick={() => onOpenRag(papers.filter(p => selectedIds.has(p.paper_id)))}
+                    className="flex items-center gap-1 text-xs font-medium text-white bg-teal-600 hover:bg-teal-700 rounded-lg px-2.5 py-1 transition-all shadow-sm"
+                  >
+                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                    </svg>
+                    多文献问答
+                  </button>
+                )}
+              </>
             )}
             {selectedIds.size > 0 && (
               <button

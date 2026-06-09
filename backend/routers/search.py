@@ -2,6 +2,9 @@ import asyncio
 import json
 import logging
 from typing import Optional
+from concurrent.futures import ThreadPoolExecutor
+
+_index_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="vector-index")
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse, Response
@@ -24,6 +27,18 @@ from config import (
 )
 
 router = APIRouter()
+
+
+async def _index_papers_async(papers_dict: list[dict]) -> None:
+    """Fire-and-forget: index search results into the vector store."""
+    try:
+        from services.vector_service import index_papers
+        loop = asyncio.get_event_loop()
+        n = await loop.run_in_executor(_index_executor, lambda: index_papers(papers_dict))
+        if n:
+            logger.info("Indexed %d papers into vector store", n)
+    except Exception as e:
+        logger.warning("Vector indexing failed (non-fatal): %s", e)
 
 
 async def _resolve_api_key(
@@ -186,6 +201,9 @@ async def search(
                 "rejected_papers": rejected_dict,
                 "message": f"为您找到 {len(final)} 篇相关论文。"
             })
+
+            # 异步向量索引（不阻塞，失败不影响搜索）
+            asyncio.create_task(_index_papers_async(papers_dict))
 
             # ── PDF 深度查找（异步补充，不阻塞结果展示）──────────────────
             no_pdf = [p for p in final if not p.pdf_url]

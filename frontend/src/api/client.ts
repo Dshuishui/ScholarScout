@@ -143,3 +143,57 @@ export async function deleteSession(token: string, sessionId: number): Promise<b
     return false
   }
 }
+
+// ── Semantic / RAG ────────────────────────────────────────────────────────────
+
+export interface SemanticHit {
+  paper_id: string
+  title: string
+  source: string
+  year: string
+  citations: number
+  authors: string
+  similarity: number
+}
+
+export async function semanticSearch(query: string, nResults = 10): Promise<SemanticHit[]> {
+  try {
+    const r = await fetch(`${API_BASE}/semantic/search`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query, n_results: nResults }),
+    })
+    if (!r.ok) return []
+    const data = await r.json()
+    return data.results ?? []
+  } catch {
+    return []
+  }
+}
+
+export async function findSimilarPapers(paperId: string, nResults = 5): Promise<SemanticHit[]> {
+  try {
+    const r = await fetch(`${API_BASE}/semantic/similar`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ paper_id: paperId, n_results: nResults }),
+    })
+    if (r.status === 404) return []
+    if (!r.ok) return []
+    const data = await r.json()
+    return data.results ?? []
+  } catch {
+    return []
+  }
+}
+
+export async function semanticStatus(): Promise<number> {
+  try {
+    const r = await fetch(`${API_BASE}/semantic/status`)
+    if (!r.ok) return 0
+    const data = await r.json()
+    return data.indexed_count ?? 0
+  } catch {
+    return 0
+  }
+}

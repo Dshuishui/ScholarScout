@@ -20,6 +20,7 @@ dependencies = [
     "apscheduler>=3.10.0,<4.0",
     "aiosmtplib>=3.0",
     "alembic>=1.18.4",
+    "chromadb>=1.5.9",
 ]
 
 [dependency-groups]

@@ -4,6 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from routers import search, auth as auth_router, user as user_router, feedback as feedback_router, paper as paper_router
 from routers import subscriptions as subscriptions_router
+from routers import semantic as semantic_router
 from database import init_db
 from config import CORS_ORIGINS
 from scheduler import setup_scheduler
@@ -39,3 +40,4 @@ app.include_router(user_router.router, prefix="/api/user")
 app.include_router(feedback_router.router, prefix="/api/feedback")
 app.include_router(paper_router.router, prefix="/api/paper")
 app.include_router(subscriptions_router.router, prefix="/api")
+app.include_router(semantic_router.router, prefix="/api/semantic")
