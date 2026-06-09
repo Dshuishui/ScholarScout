@@ -12,6 +12,18 @@ from config import CORE_API_KEY, NASA_ADS_API_KEY, SERPAPI_KEY, PROXY_URL, POLIT
 logger = logging.getLogger(__name__)
 
 
+async def _get_with_retry(client: httpx.AsyncClient, url: str, **kwargs) -> httpx.Response:
+    """遇到 429 等待后重试一次；其余状态码直接返回。"""
+    resp = await client.get(url, **kwargs)
+    if resp.status_code == 429:
+        retry_after = int(resp.headers.get("retry-after", 5))
+        wait = min(retry_after, 10)
+        logger.debug("429 from %s, retrying after %ss", url, wait)
+        await asyncio.sleep(wait)
+        resp = await client.get(url, **kwargs)
+    return resp
+
+
 async def _search_arxiv(parsed: ParsedQuery, limit: int) -> list[Paper]:
     try:
         kw_part = " OR ".join(f'all:"{kw}"' for kw in parsed.keywords)
@@ -23,8 +35,9 @@ async def _search_arxiv(parsed: ParsedQuery, limit: int) -> list[Paper]:
             search_query = f'({kw_part})'
             sort_by = "relevance"
 
-        async with httpx.AsyncClient(timeout=20) as client:
-            resp = await client.get(
+        async with httpx.AsyncClient(timeout=25) as client:
+            resp = await _get_with_retry(
+                client,
                 "https://export.arxiv.org/api/query",
                 params={"search_query": search_query, "max_results": limit,
                         "sortBy": sort_by, "sortOrder": "descending"},
@@ -70,9 +83,11 @@ async def _search_semantic_scholar(parsed: ParsedQuery, limit: int) -> list[Pape
         }
         if parsed.date_from:
             params["year"] = f"{parsed.date_from[:4]}-"
-        async with httpx.AsyncClient(timeout=15) as client:
-            resp = await client.get(
-                "https://api.semanticscholar.org/graph/v1/paper/search", params=params
+        async with httpx.AsyncClient(timeout=20) as client:
+            resp = await _get_with_retry(
+                client,
+                "https://api.semanticscholar.org/graph/v1/paper/search",
+                params=params,
             )
             resp.raise_for_status()
             data = resp.json()
