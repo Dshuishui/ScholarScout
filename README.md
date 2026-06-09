@@ -1,127 +1,138 @@
 # ScholarScout
 
-> 用自然语言找论文，不需要懂技术。
+> 用自然语言找论文，AI 验证相关性，向量检索挖掘语义关联。
 
 [English](README.en.md) | 中文
 
 [![Python](https://img.shields.io/badge/Python-3.11+-blue?logo=python&logoColor=white)](https://www.python.org)
-[![uv](https://img.shields.io/badge/package_manager-uv-purple?logo=python)](https://github.com/astral-sh/uv)
-[![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=white)](https://react.dev)
+[![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=white)](https://react.dev)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
 [![CI](https://github.com/Dshuishui/ScholarScout/actions/workflows/ci.yml/badge.svg)](https://github.com/Dshuishui/ScholarScout/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/License-MIT-green)](LICENSE)
-[![Made with Claude](https://img.shields.io/badge/Made%20with-Claude-orange?logo=anthropic)](https://claude.ai)
+[![uv](https://img.shields.io/badge/package_manager-uv-8A2BE2?logo=python)](https://github.com/astral-sh/uv)
 
-ScholarScout 是一个面向非计算机专业研究者的学术论文搜索工具。你只需要用中文描述自己的需求，它会自动理解、搜索、过滤，把真实存在的相关论文列表返回给你，并支持一键预览和下载 PDF。
-
-**订阅感兴趣的关键词后，系统会预先搜索相关论文、排好推送队列，每天早 8 点在邮箱收到一篇精选推送，不错过领域最新进展。勾选多篇论文可一键生成 AI 对比分析、文献综述或研究趋势报告。**
+ScholarScout 是一个全栈学术论文搜索平台。前端用自然语言输入需求，后端并发查询 10 个学术数据库、经 LLM 二次验证后返回结果，并将论文摘要异步向量化入库，支持语义检索、多文献 RAG 问答和相似度关系图谱。
 
 **在线体验**：[http://118.25.192.117](http://118.25.192.117)
 
-> ⚡ **注册并验证邮箱即可免费体验 3 次搜索**，无需配置任何 API Key。也可以填入自己的 DeepSeek API Key 无限使用。
+> 注册并验证邮箱即可获得 **3 次免费搜索**，无需配置 API Key。也可填入自己的 DeepSeek API Key 无限使用。
 
 ---
 
 ## 界面预览
 
-### AI 独立对话（核心特性）
-> 每篇论文右下角「AI 对话」按钮，独立上下文，不影响主对话
-
-![AI 论文对话抽屉](docs/images/03_ai_chat_drawer.png)
-
 ### 搜索结果
 ![搜索结果](docs/images/02_search_results.png)
 
+### AI 论文对话
+> 每篇论文独立对话上下文，支持上传 PDF 全文分析
+
+![AI 论文对话](docs/images/03_ai_chat_drawer.png)
+
 ---
 
-## 功能
+## 核心特性
 
 ### 搜索与发现
-- **自然语言搜索**：直接说"找 2023 年后关于大模型幻觉问题的论文"，不需要手动拼关键词
-- **关键词可视化确认**：AI 提取关键词后先展示给用户，可增删后再开始搜索；结果页持续显示关键词，随时调整并重新搜索
-- **搜索历史**：自动记录最近 10 条搜索，一键复用，跳过 AI 解析直接重搜
-- **搜索源多选**：界面顶部可自由勾选 10 个数据源，全选或只搜特定领域的库
+- **自然语言搜索**：输入"找 2023 年后关于大模型幻觉问题的论文"，AI 自动提取关键词、时间范围，无需手动拼 Boolean 查询
+- **关键词可视化确认**：AI 提取结果先展示供用户确认，可增删后再搜索，结果页随时调整并重新搜索
 - **10 源并发搜索**：同时检索 arXiv、Semantic Scholar、OpenAlex、PubMed、Europe PMC、INSPIRE-HEP、CORE、NASA ADS、CrossRef、Google Scholar
 - **智能去重合并**：DOI 精确匹配 + 标题规范化双重判断，重复论文合并最优字段（PDF、摘要、引用数）
-- **多来源链接**：同一论文被多个源命中时，卡片展示所有来源按钮
+- **AI 相关性验证**：搜索结果经 LLM 二次过滤，可切换"AI 筛选后 / 全部结果"对比查看
 
-### 结果展示
-- **AI 相关性过滤**：搜索结果经大模型二次验证；Tab 切换"AI 筛选后 / 全部结果"，被过滤论文可查看
-- **列表 / 分组视图切换**：按来源分组展示，快速定位特定数据库的结果
-- **期刊 / 会议标注**：从各数据源提取发表 venue，显示在作者行右侧，便于快速判断论文质量
-- **排序**：相关性优先 / 引用数最高 / 最新发表 / 最早发表
-- **灵活参数配置**：界面直接调整每源抓取数量（最多 200）和展示上限（最多 500），修改后一键重新搜索
+### PDF 获取
+- **PDF 深度查找**：无 PDF 的论文自动通过 Kimi 联网查找开放获取版本
+- **备用入口**：找不到时展示 Sci-Hub、ResearchGate、CORE 等 8 个平台的跳转链接
+- **批量打包下载**：勾选论文后一键下载 ZIP，失败明细写入压缩包内日志
 
-### PDF 与下载
-- **PDF 深度查找**：搜索后自动为无 PDF 论文联网查找开放获取版本；找不到则展示 Sci-Hub、ResearchGate、CORE 等 8 个平台的跳转链接
-- **批量下载**：勾选论文后一键打包下载 PDF（ZIP），失败明细自动写入压缩包
-- **导出为 CSV**：支持两种模式——仅导出 AI 筛选后的论文（默认），或导出全部结果；弹窗实时显示将导出的篇数
+### AI 分析
+- **多论文 AI 分析**：勾选 2 篇以上，支持三种全屏分析模式：
+  - **对比分析**：汇总表格 + 方法路线、创新点、实验结果逐项对比
+  - **文献综述**：正式学术风格，可直接用作 Related Work 草稿
+  - **研究趋势**：时间线梳理技术演进，预测未来研究方向
+- **论文独立对话**：每张卡片独立 AI 对话抽屉，上下文互不干扰
+- **PDF 全文分析**：上传 PDF 后切换为全文模式，支持 DeepSeek V4 百万 token 上下文
+- **PDF 云端持久化**：上传的全文保存服务端，换设备登录后自动恢复
 
-### 🤖 多论文 AI 分析（亮点功能）
+### 语义检索与 RAG
+- **向量语义检索**：搜索结果异步向量化入库（ChromaDB + ONNX MiniLM L6 v2，本地推理，无需 API Key）；后续可用自然语言在已有论文库里做语义相似搜索，跨越关键词限制
+- **多文献 RAG 问答**：勾选 2 篇以上，进入 RAG 问答面板；问题和论文摘要一起送入 DeepSeek，流式返回带引用标注的回答
+- **实时向量化通知**：索引完成后通过 WebSocket 推送"已索引 N 篇论文"提示
 
-搜到一批相关论文后，勾选 2 篇以上，一键触发全屏 AI 分析面板，支持三种模式：
+### 论文关系图谱
+- **语义相似度图谱**：选中多篇论文，后端逐对计算 cosine 相似度，返回 `{nodes, links}`
+- **力导向可视化**：`react-force-graph-2d` 渲染，节点大小 = log(引用数)，边粗细 = 相似度分值
+- **可调阈值**：顶栏滑块实时调节相似度阈值，低于阈值的边自动隐去
 
-- **对比分析**：AI 自动生成总览表格（标题、年份、核心方法、贡献），并对方法路线、创新点、实验结果、优缺点逐项对比，理清论文之间的传承关系
-- **文献综述**：自动生成一段专业学术综述，涵盖研究背景、各论文核心贡献及相互关联，风格正式，可直接用作论文 Related Work 章节草稿
-- **研究趋势**：按时间线梳理技术演进脉络、研究热点变化，并预测未来研究方向
-
-每种模式的分析结果独立缓存（切换模式不丢失），支持 Stop 中断和"重新生成"，AI 输出全程 Markdown 渲染（含表格）。
-
-### AI 对话
-- **论文独立对话**：每张论文卡片右下角的「AI 对话」按钮，打开右侧抽屉与 AI 深入讨论该论文（方法、贡献、局限性等）；每篇论文保留独立上下文，不影响主对话
-- **上传 PDF 全文分析**：在对话抽屉中上传论文 PDF，AI 切换为全文模式（支持 DeepSeek V4 百万 token 上下文，覆盖任意长度论文）
-- **PDF 云端持久化**：上传过的论文 PDF 文本保存在服务器，刷新页面或换设备登录后自动恢复，无需重复上传——与 Claude 网页端体验一致
-- **Markdown 渲染**：AI 回复支持表格、代码块、标题等格式
-- **Stop 按钮**：流式输出时随时中断，已生成内容保留
-- **一键复制**：hover AI 消息右上角即可复制
-- **可配置快捷提问**：对话抽屉中的快捷提问可自由增删编辑，保存在本地
-- **主对话**：不想搜论文时也可以直接在左侧对话框问 AI
+### 订阅与每日推送
+- **关键词订阅**：搜索完成后一键订阅，系统立即在后台建立推送队列
+- **每日推送**：每天 08:00 CST 从队列取出当天论文发送邮件，AI 过滤确保相关性
+- **队列自动补充**：剩余不足 5 篇时自动后台补搜；也可手动刷新
+- **推送进度可查**：订阅管理页展示完整队列（✅ 已发 / 📅 待发 + 计划日期）
 
 ### 账号与权限
-- **邮箱注册 + 验证**：注册后发送验证邮件，点击链接完成激活
-- **免费试用**：新用户验证邮箱后立即获得 **3 次免费搜索额度**，无需配置 API Key 即可体验全部功能
-- **自带 Key 无限使用**：填入自己的 DeepSeek API Key 后不受次数限制
-- **收藏夹**：登录后点击论文卡片上的书签图标收藏论文，随时在收藏夹页面查看和取消收藏
-- **阅读历史**：每次打开论文 AI 对话时自动记录，历史页面展示最近 100 篇
-- **安全保障**：注册限流（5 次/小时/IP）、登录失败限流（10 次/15 分钟/IP）、256-bit 验证 token、系统 Key 仅服务端使用
+- **邮箱注册 + 验证**：JWT 认证，注册/登录接口限流防暴力
+- **免费试用**：验证邮箱后原子扣减免费额度（`WHERE free_searches > 0` 防并发超额）
+- **收藏夹 / 阅读历史 / 搜索会话**：登录后全端同步
 
-### 📬 关键词订阅与每日推送（主推功能）
-
-不需要每天来刷新搜索——订阅一次，论文自动来找你。
-
-- **一键订阅**：搜索完成后点击关键词旁的「订阅更新」按钮，弹出确认弹窗显示订阅的关键词、推送时间（每天 08:00 北京时间）和接收邮箱
-- **智能推送队列**：订阅后系统立即在后台搜索相关论文，自动建立推送队列并按天排好日程。每天早 8 点从队列取出当天该发的论文，一篇不重复地发送到邮箱
-- **每日推送篇数可调**：默认每天推 1 篇（精读友好），在订阅管理页面可调整为 1～10 篇，按需设定
-- **推送进度可查**：在订阅管理页面展开任意订阅，可以看到完整推送队列——✅ 已发送（含日期）/ 📅 待推送（含计划日期），清楚知道下一篇是什么、什么时候发
-- **队列自动补充**：队列剩余不足 5 篇时，系统自动在后台搜索新论文追加，持续不断；也可手动点「刷新队列」立即补充
-- **AI 过滤入队**：进入队列的论文都经过 AI 相关性验证，不推无关结果
-- **订阅管理**：可随时开关、删除订阅；最多同时维护 20 个关键词组合
+### 实时推送（WebSocket）
+- 前端与后端保持持久 WebSocket 连接，支持可选 JWT 认证和 ping/pong 保活
+- 向量索引完成、订阅队列就绪等后台事件实时推送 toast 通知
+- 连接状态指示（绿/黄/灰小圆点），指数退避自动重连
 
 ---
 
-## 工作原理
+## 技术栈
 
-![架构图](docs/images/Architecture.png)
+| 层级 | 技术 | 说明 |
+|------|------|------|
+| **前端** | React 19 + TypeScript + Vite + Tailwind CSS v4 | |
+| **图谱可视化** | react-force-graph-2d | D3 力导向，Canvas 渲染 |
+| **后端** | Python 3.11 + FastAPI | 异步优先 |
+| **实时通信** | SSE（搜索进度流）+ WebSocket（后台事件推送） | 双通道 |
+| **数据库** | SQLAlchemy async + Alembic 迁移 | SQLite（开发）/ PostgreSQL（生产）|
+| **向量数据库** | ChromaDB + ONNX MiniLM L6 v2 | 本地推理，无需 API |
+| **缓存** | Redis（可选）| 搜索结果缓存，TTL 1h，未配置时自动降级 |
+| **AI** | DeepSeek API（OpenAI 兼容）| 意图识别、相关性验证、RAG 问答 |
+| **日志** | structlog | JSON / 彩色控制台双模式 |
+| **错误追踪** | Sentry SDK | FastAPI + SQLAlchemy 集成，未配置时无副作用 |
+| **测试** | pytest + httpx AsyncClient | 异步集成测试，rate-limit fixture 隔离 |
+| **CI/CD** | GitHub Actions | lint → test → build，uv 缓存加速 |
+| **包管理** | uv（后端）/ npm（前端）| |
 
 ---
 
-## 使用方法
+## 技术亮点
 
-### 方式一：免费试用（推荐新用户）
+> 记录几个非平凡的工程决策，供技术背景的读者参考。
 
-1. 访问 [118.25.192.117](http://118.25.192.117)
-2. 点击「**免费注册开始体验**」，填写邮箱和密码
-3. 查收验证邮件，点击链接完成激活
-4. 自动登录并获得 **3 次免费搜索**，立即可用
+1. **向量化不阻塞 SSE 流**：搜索完成后用 `asyncio.create_task` + 独立 `ThreadPoolExecutor` 异步触发 ChromaDB 写入，主 SSE 响应不等待。
 
-### 方式二：使用自己的 API Key（无限使用）
+2. **现有数据库无损接入 Alembic**：`init_db()` 检测是否存在 `alembic_version` 表，首次启动旧库时自动 `stamp head` 而非直接 `upgrade`，避免误判为空库执行 DDL。
 
-1. 访问 [platform.deepseek.com](https://platform.deepseek.com) 注册并创建 API Key（格式 `sk-xxxxxxxx`）
-2. 访问 [118.25.192.117](http://118.25.192.117)，在封面输入框粘贴 Key 即可开始
+3. **WebSocket 推送按 client_key 分组**：`ConnectionManager` 以 `user:{id}` 或 `anon:{cid}` 为 key 管理连接 set，同一用户多标签页同时在线均可收到通知，且死连接在下一次发送时惰性清理。
 
-> DeepSeek 价格很低，日常搜索几乎可以忽略不计。
+4. **Redis 缓存零侵入降级**：`cache_service.py` 在模块级懒初始化，`REDIS_URL` 为空时 `_get_redis()` 返回 `None`，所有 `get/set` 调用提前 return，业务代码无需 try/except 包裹。
 
-> **注意**：演示站部署在个人云服务器上，预计开放至 **2027 年初**。纯粹是闲来无事搭着玩，服务稳定性不做任何承诺，建议重要场景自行部署。
+5. **PostgreSQL 连接池按方言启用**：`create_async_engine` 的 `pool_size / max_overflow / pool_pre_ping` 只在非 SQLite 时传入，避免 SQLite 模式下触发 `ProgrammingError`。
+
+6. **Alembic `render_as_batch` 按方言动态开关**：SQLite 不支持原生 `ALTER COLUMN`，需 batch mode；PostgreSQL 原生支持。`env.py` 通过 `"sqlite" in url` 判断，两套数据库共用同一迁移文件。
+
+7. **免费额度原子扣减**：`UPDATE users SET free_searches = free_searches - 1 WHERE id = ? AND free_searches > 0`，行级锁保证并发安全，`rowcount == 0` 时快速失败，无需应用层加锁。
+
+8. **SSE 流中的并发源进度上报**：每个数据源完成后通过 `asyncio.Queue` 把 `{source, count}` 塞进队列，主 generator 在等搜索 task 期间非阻塞轮询队列并 yield `source_done` 事件，前端进度条实时更新。
+
+9. **structlog 双模式渲染**：`LOG_FORMAT=console`（开发，彩色 key=value）/ `json`（生产，JSON 行适合 Loki/Datadog），同一 `get_logger()` 调用，运行时按环境切换，不改代码。
+
+10. **前端 WS 指数退避重连**：`useWebSocket` hook 在 `onclose` 时 `setTimeout(connect, delay)`，每次失败后 `delay = min(delay * 2, 30000)`，连接恢复后重置为 1s；ping/pong 25s 一次保活，防止 Nginx 60s 空闲超时断开。
+
+---
+
+## 快速开始
+
+### 在线体验
+
+访问 [118.25.192.117](http://118.25.192.117)，注册并验证邮箱即可免费体验 3 次搜索。
 
 **示例搜索**
 
@@ -131,78 +142,74 @@ diffusion model 在医学图像分割方面的应用，最近两年的
 帮我找强化学习用于机器人控制的论文，要求是顶会发表的
 ```
 
-> **时间范围说明**：未指定时间时，默认搜索**近 5 年**的论文。如需搜索更早的文献，请在描述中明确说明，例如"找 2015 年以后的……"或"不限时间，找……"。
+> 未指定时间时默认搜索近 5 年。
 
 ---
 
-## 本地运行（个人电脑）
+## 本地开发
 
-如果你不想依赖演示站，想在自己的电脑上本地运行，按以下步骤操作。整个过程不需要服务器，不需要 Nginx，在自己浏览器里打开即可使用。
-
-**环境要求**：Python 3.11+、[uv](https://github.com/astral-sh/uv)、Node.js 18+、npm
-
-**第一步：安装 uv（Python 包管理器）**
+**环境要求**：Python 3.11+、[uv](https://github.com/astral-sh/uv)、Node.js 18+
 
 ```bash
-# macOS / Linux
-curl -LsSf https://astral.sh/uv/install.sh | sh
-
-# Windows（PowerShell）
-powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
-```
-
-**第二步：克隆仓库**
-
-```bash
+# 克隆仓库
 git clone https://github.com/Dshuishui/ScholarScout.git
 cd ScholarScout
-```
 
-**第三步：启动后端**（新开一个终端窗口）
-
-```bash
+# 后端
 cd backend
-uv sync          # 自动创建虚拟环境并安装依赖（首次运行需要一点时间）
+uv sync
 uv run uvicorn main:app --reload --port 8000
-```
 
-看到 `Uvicorn running on http://127.0.0.1:8000` 说明后端启动成功。
-
-**第四步：启动前端**（再开一个终端窗口）
-
-```bash
+# 前端（另开终端）
 cd frontend
-npm install      # 安装前端依赖（首次运行需要一点时间）
+npm install
 npm run dev
 ```
 
-看到 `Local: http://localhost:5173` 说明前端启动成功。
-
-**第五步：打开浏览器**
-
-访问 [http://localhost:5173](http://localhost:5173)，输入你的 DeepSeek API Key 即可开始使用。
+访问 [http://localhost:5173](http://localhost:5173)，输入 DeepSeek API Key 即可使用。
 
 ---
 
-## 可选数据源配置（API Key）
+## 环境变量参考
 
-ScholarScout 默认已启用 7 个无需注册的数据源。以下数据源需要免费注册 API Key 才能启用：
+复制 `backend/.env.example` 为 `backend/.env` 并按需填写。未填写的变量均有合理默认值，不影响启动。
 
-| 数据源 | 覆盖领域 | Key 获取 |
+| 变量 | 默认值 | 说明 |
+|------|--------|------|
+| `DATABASE_URL` | `sqlite+aiosqlite:///./scholarscout.db` | 生产环境替换为 `postgresql+asyncpg://...` |
+| `REDIS_URL` | _(空，禁用缓存)_ | `redis://localhost:6379/0` |
+| `CACHE_SEARCH_TTL` | `3600` | 搜索结果缓存时间（秒） |
+| `SENTRY_DSN` | _(空，禁用)_ | Sentry 项目 DSN |
+| `SENTRY_ENVIRONMENT` | `development` | `production` / `staging` |
+| `SENTRY_TRACES_SAMPLE_RATE` | `0.1` | 性能追踪采样率 |
+| `LOG_FORMAT` | `console` | `json` 输出结构化日志 |
+| `LOG_LEVEL` | `INFO` | `DEBUG` / `WARNING` |
+| `CORE_API_KEY` | _(空)_ | [core.ac.uk](https://core.ac.uk/services/api) 免费申请 |
+| `NASA_ADS_API_KEY` | _(空)_ | [ads.harvard.edu](https://ui.adsabs.harvard.edu/user/settings/token) 免费申请 |
+| `JWT_SECRET` | `dev-secret-change-in-production` | **生产必须替换** |
+| `DEEPSEEK_SYSTEM_KEY` | _(空)_ | 免费试用功能所需的系统 Key |
+| `SMTP_HOST / SMTP_USER / SMTP_PASS` | _(空)_ | 邮件推送配置（QQ 邮箱授权码） |
+
+---
+
+## 数据源说明
+
+| 数据源 | 擅长领域 | 需要 Key |
 |--------|---------|---------|
-| **CORE** | 1.7 亿+ 开放获取论文 | [core.ac.uk/services/api](https://core.ac.uk/services/api) |
-| **NASA ADS** | 天文 / 天体物理 / 地球科学 | [ui.adsabs.harvard.edu/user/settings/token](https://ui.adsabs.harvard.edu/user/settings/token) |
-| **Semantic Scholar** | 综合，语义搜索 | [semanticscholar.org/product/api](https://www.semanticscholar.org/product/api) |
+| **arXiv** | CS / 物理 / 数学 / 经济，最新预印本 | 否 |
+| **Semantic Scholar** | 综合，语义搜索能力强 | 否（有 Key 可提升限速） |
+| **OpenAlex** | 综合，2 亿+ 论文，开放获取友好 | 否 |
+| **PubMed** | 医学 / 生物 / 生命科学 | 否 |
+| **Europe PMC** | 生命科学 / 医学，含 bioRxiv / medRxiv | 否 |
+| **INSPIRE-HEP** | 高能物理 / 粒子物理（CERN 运营） | 否 |
+| **CrossRef** | 综合，1.5 亿+ 文献元数据，覆盖人文 / 工程 | 否 |
+| **CORE** | 1.7 亿+ 开放获取全文 | 是（免费） |
+| **NASA ADS** | 天文 / 天体物理 / 地球科学 | 是（免费） |
+| **Google Scholar** | 综合，覆盖面最广 | 是（免费额度） |
 
-均完全免费。**没有 Key 的数据源会自动跳过，不影响其他数据源正常使用。**
+搜索后通过 **Unpaywall** 自动为有 DOI 的论文补全合法开放获取 PDF（无需 Key）。
 
-### 本地运行时配置
-
-```bash
-cd backend
-cp .env.example .env
-# 用编辑器打开 .env，填入你拥有的 Key
-```
+> **中文论文**：目前接入的数据源以英文学术库为主。知网、万方等主要中文库的 API 需机构授权，暂未接入。
 
 ---
 
@@ -211,80 +218,49 @@ cp .env.example .env
 ```bash
 git clone https://github.com/Dshuishui/ScholarScout.git
 cd ScholarScout
-bash deploy/setup.sh   # 首次部署
+bash deploy/setup.sh    # 首次部署
+
+bash deploy/deploy.sh   # 后续更新
 ```
 
-后续更新：
-
-```bash
-bash deploy/deploy.sh
-```
-
-**环境要求**：Ubuntu 22.04+，4 核 4 GB 内存以上，需要可访问境外网络。
-
----
-
-## 技术栈
-
-| 层级 | 技术 |
-|------|------|
-| 前端 | React 18 + TypeScript + Vite + Tailwind CSS |
-| 后端 | Python 3.11 + FastAPI + SSE 流式推送 + SQLite（用户数据） |
-| 包管理 | [uv](https://github.com/astral-sh/uv)（后端）/ npm（前端） |
-| AI | DeepSeek API（意图识别、关键词解析、相关性验证） |
-| 搜索源 | 10 个学术数据库 + Unpaywall PDF 补全 |
-| 部署 | Nginx + systemd，GitHub Actions CI |
-
----
-
-## 搜索层说明
-
-| 数据源 | 擅长领域 | 需要 Key |
-|--------|---------|---------|
-| **arXiv** | CS / 物理 / 数学 / 经济，覆盖最新预印本 | 否 |
-| **Semantic Scholar** | 综合，语义搜索能力强 | 否（有 Key 可提升限速） |
-| **OpenAlex** | 综合，2 亿+ 论文，开放获取友好 | 否 |
-| **PubMed** | 医学 / 生物 / 生命科学 | 否 |
-| **Europe PMC** | 生命科学 / 生化 / 医学，含 bioRxiv / medRxiv | 否 |
-| **INSPIRE-HEP** | 高能物理 / 粒子物理 / 理论物理（CERN 运营） | 否 |
-| **CrossRef** | 综合，1.5 亿+ 文献元数据，覆盖人文 / 工程 | 否 |
-| **CORE** | 1.7 亿+ 开放获取全文 | 是（免费） |
-| **NASA ADS** | 天文 / 天体物理 / 地球科学 | 是（免费） |
-| **Google Scholar** | 综合，覆盖面最广 | 是（免费额度） |
-
-搜索后通过 **Unpaywall** 自动为有 DOI 的论文补全合法开放获取 PDF（无需 Key）。
-
-> **中文论文说明**：目前接入的数据源以英文学术库为主，对中文论文的支持有限。知网（CNKI）、万方、维普等主要中文数据库的 API 需要机构授权，暂未接入。如需查找中文文献，建议直接前往知网等平台检索。
+**环境要求**：Ubuntu 22.04+，4 核 4 GB 内存以上，需可访问境外网络。
 
 ---
 
 ## 项目状态
 
-🚧 **项目正在持续改进中**，目前处于早期阶段。
+**已完成**
 
-**已完成**：
-- 账号系统：邮箱注册 / 验证 / 登录，JWT 认证，401 自动退出
-- 免费试用：新用户验证邮箱后获得 3 次免费搜索（系统代付，原子扣减防并发）
-- 论文收藏夹、阅读历史
-- **关键词订阅 + 每日推送队列**：AI 过滤后预建队列，每天 08:00 CST 按顺序推送；篇数可配置（1～10）；订阅管理页展示完整推送进度（已发 / 待发 + 日期）；队列自动补充
-- **多论文 AI 分析**：勾选 2+ 篇，全屏面板支持对比分析（含汇总表格）/ 文献综述（可直接引用）/ 研究趋势（时序演进 + 预测），各模式结果独立缓存
-- PDF 全文对话（云端持久化，刷新 / 换设备自动恢复）
-- 导出 CSV（可选仅导出 AI 筛选后论文）
-- 移动端响应式（底部 Tab Bar + 底部抽屉 Sheet）
-- Bundle 代码分割：首屏主包 gzip 126 KB（-29%）
+- 全栈搜索管线：自然语言 → 关键词提取 → 10 源并发 → LLM 验证 → SSE 流式返回
+- 向量语义检索：ChromaDB + ONNX 本地嵌入，无需外部 API
+- 多文献 RAG 问答：DeepSeek 流式，引用标注
+- 论文相似度关系图谱：pairwise cosine + react-force-graph-2d
+- WebSocket 实时推送通知（后台任务完成事件）
+- PostgreSQL / Redis 生产就绪（环境变量驱动，SQLite 降级）
+- Alembic 数据库迁移（`render_as_batch` 按方言动态开关）
+- structlog 结构化日志 + Sentry 错误追踪（均可无副作用禁用）
+- GitHub Actions CI（lint + test + build）
+- 关键词订阅 + 每日邮件推送队列（APScheduler）
+- 多论文 AI 分析（对比 / 综述 / 趋势，独立缓存）
+- PDF 全文对话（云端持久化）
+- 邮箱注册 / JWT 认证 / 免费额度原子扣减
+- 移动端响应式
 
-**近期计划**：更多模型支持（Claude、GPT 等）、用户统计主页、移动端落地页适配。
+**近期计划**
 
-本项目的代码主要由 **AI（Claude）辅助生成**，作者利用业余时间玩着做的，并非严肃的生产级项目。如果你在使用过程中遇到 bug 或有改进想法，非常欢迎通过 [GitHub Issues](https://github.com/Dshuishui/ScholarScout/issues) 友好地告知——毕竟大家都是第一次，轻喷 🙏
+- 更多模型支持（Claude、GPT-4o）
+- 用户搜索统计主页
+- 中文论文数据源接入
 
 ---
 
 ## 致谢
 
-- [DeepSeek](https://www.deepseek.com) — 提供 AI 推理能力
-- [arXiv](https://arxiv.org)、[Semantic Scholar](https://www.semanticscholar.org)、[OpenAlex](https://openalex.org)、[PubMed](https://pubmed.ncbi.nlm.nih.gov)、[Europe PMC](https://europepmc.org)、[INSPIRE-HEP](https://inspirehep.net)、[CORE](https://core.ac.uk)、[NASA ADS](https://ui.adsabs.harvard.edu)、[CrossRef](https://www.crossref.org) — 提供免费开放的学术数据 API
-- [Unpaywall](https://unpaywall.org) — 提供开放获取 PDF 链接查询服务
-- [astral-sh/uv](https://github.com/astral-sh/uv) — 极速 Python 包管理工具
+- [DeepSeek](https://www.deepseek.com) — AI 推理能力
+- [ChromaDB](https://www.trychroma.com) — 本地向量数据库
+- [arXiv](https://arxiv.org)、[Semantic Scholar](https://www.semanticscholar.org)、[OpenAlex](https://openalex.org)、[PubMed](https://pubmed.ncbi.nlm.nih.gov)、[Europe PMC](https://europepmc.org)、[INSPIRE-HEP](https://inspirehep.net)、[CORE](https://core.ac.uk)、[NASA ADS](https://ui.adsabs.harvard.edu)、[CrossRef](https://www.crossref.org) — 免费开放学术数据 API
+- [Unpaywall](https://unpaywall.org) — 开放获取 PDF 查询
+- [astral-sh/uv](https://github.com/astral-sh/uv) — 极速 Python 包管理
 
 ---
 

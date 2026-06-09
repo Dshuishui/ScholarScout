@@ -1,289 +1,263 @@
 # ScholarScout
 
-> Find academic papers in plain language — no technical knowledge required.
+> Natural language paper search, AI relevance filtering, vector-based semantic retrieval.
 
 [中文](README.md) | English
 
 [![Python](https://img.shields.io/badge/Python-3.11+-blue?logo=python&logoColor=white)](https://www.python.org)
-[![uv](https://img.shields.io/badge/package_manager-uv-purple?logo=python)](https://github.com/astral-sh/uv)
-[![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=white)](https://react.dev)
+[![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=white)](https://react.dev)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
 [![CI](https://github.com/Dshuishui/ScholarScout/actions/workflows/ci.yml/badge.svg)](https://github.com/Dshuishui/ScholarScout/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/License-MIT-green)](LICENSE)
-[![Made with Claude](https://img.shields.io/badge/Made%20with-Claude-orange?logo=anthropic)](https://claude.ai)
+[![uv](https://img.shields.io/badge/package_manager-uv-8A2BE2?logo=python)](https://github.com/astral-sh/uv)
 
-ScholarScout is an academic paper search tool built for non-CS researchers. Describe what you're looking for in natural language, and it automatically interprets your intent, searches across 10 databases simultaneously, filters results with AI, and returns a list of real, relevant papers — with one-click PDF preview and download.
-
-**Subscribe to a keyword set and the system pre-fetches papers, builds a push queue, and delivers one curated paper to your inbox every morning at 08:00 — no daily check-ins needed. Select multiple papers to instantly generate an AI comparative analysis, literature review, or research trend report.**
+ScholarScout is a full-stack academic paper search platform. Describe what you're looking for in plain language; the backend concurrently queries 10 academic databases, runs LLM-based relevance validation, and streams results back via SSE. Paper abstracts are asynchronously embedded into a local vector store, enabling semantic retrieval, multi-paper RAG Q&A, and similarity graph visualisation.
 
 **Live demo**: [http://118.25.192.117](http://118.25.192.117)
 
-> ⚡ **Sign up and verify your email to get 3 free searches** — no API key needed. You can also use your own DeepSeek API key for unlimited access.
+> Sign up and verify your email to get **3 free searches** — no API key required. Add your own DeepSeek API key for unlimited access.
 
 ---
 
 ## Screenshots
 
-### AI Paper Chat (core feature)
-> Click "AI Chat" on any paper card to open a dedicated conversation drawer — each paper has its own context
-
-![AI Paper Chat Drawer](docs/images/03_ai_chat_drawer.png)
-
 ### Search Results
 ![Search Results](docs/images/02_search_results.png)
+
+### AI Paper Chat
+> Each paper has its own isolated conversation context; PDF full-text upload supported
+
+![AI Paper Chat](docs/images/03_ai_chat_drawer.png)
 
 ---
 
 ## Features
 
 ### Search & Discovery
-- **Natural language search**: Just say "find papers on LLM hallucination after 2023" — no manual keyword crafting needed
-- **Editable keyword chips**: AI extracts keywords and displays them before searching; you can add, remove, or edit them and re-search any time
-- **Search history**: Last 10 searches auto-saved, one click to reuse
-- **10-source selection**: Toggle any of 10 data sources from the header; mix and match by research domain
-- **10-source concurrent search**: Simultaneously queries arXiv, Semantic Scholar, OpenAlex, PubMed, Europe PMC, INSPIRE-HEP, CORE, NASA ADS, CrossRef, and Google Scholar
-- **Smart deduplication**: DOI exact match + normalized title comparison; duplicates are merged, keeping the best fields (PDF, abstract, citation count)
-- **Multi-source badges**: Papers found in multiple sources show all source buttons on the card
+- **Natural language queries**: "Find papers on LLM hallucination after 2023" — no Boolean syntax needed
+- **Editable keyword chips**: AI extracts keywords before searching; edit or remove them, then re-search at any time
+- **10-source concurrent search**: arXiv, Semantic Scholar, OpenAlex, PubMed, Europe PMC, INSPIRE-HEP, CORE, NASA ADS, CrossRef, Google Scholar — all in parallel
+- **Smart deduplication**: DOI exact match + normalised title comparison; duplicates are merged, preserving the best fields (PDF, abstract, citations)
+- **AI relevance filtering**: LLM second-pass validation; toggle between "AI filtered" and "all results"
 
-### Results Display
-- **AI relevance filtering**: Results are validated by LLM; switch between "AI filtered" and "all results" tabs; filtered-out papers are still accessible
-- **List / grouped view**: Group by source to quickly see which databases returned what
-- **Venue labels**: Journal/conference name extracted per paper, shown next to authors for quick quality assessment
-- **Sorting**: Relevance / most cited / newest / oldest
-- **Configurable limits**: Adjust per-source fetch count (up to 200) and display limit (up to 500) directly in the UI
+### PDF Access
+- **Deep PDF search**: Papers without a PDF link are automatically searched via Kimi for open-access versions
+- **Fallback links**: If no PDF is found, 8 platform links are shown (Sci-Hub, ResearchGate, CORE, etc.)
+- **Batch ZIP download**: Select papers and download all available PDFs in one click; failures are logged inside the archive
 
-### PDF & Downloads
-- **PDF deep search**: After search, automatically scans for open-access PDFs for papers without one; falls back to links for Sci-Hub, ResearchGate, CORE, and 5 other platforms
-- **Bulk download**: Select papers and download all PDFs as a ZIP; failed downloads are logged in the archive
-- **CSV export**: Two modes — export only AI-filtered papers (default) or export everything; live count shown in the dialog
+### AI Analysis
+- **Multi-paper analysis**: Select 2+ papers for full-screen AI analysis in three modes:
+  - **Comparative**: Summary table + method, contribution, and result comparison
+  - **Literature review**: Formal academic prose, ready to use as a Related Work draft
+  - **Research trends**: Chronological technique evolution with future direction predictions
+- **Per-paper AI chat**: Each card has its own conversation drawer with isolated context
+- **PDF full-text mode**: Upload a PDF to switch to full-text analysis (DeepSeek V4, 1M-token context)
+- **Cloud PDF persistence**: Uploaded full text is stored server-side and restored automatically on re-login
 
-### 🤖 Multi-Paper AI Analysis (Flagship Feature)
+### Semantic Retrieval & RAG
+- **Vector semantic search**: Search results are asynchronously embedded into ChromaDB using ONNX MiniLM L6 v2 (local inference, no external API key). Natural language queries match papers by meaning, not just keywords.
+- **Multi-paper RAG Q&A**: Select papers and ask questions; abstracts are injected as context into DeepSeek streaming, with citation markers `[1][2]` in the response
+- **Real-time indexing notification**: WebSocket push notifies the UI when background vector indexing completes
 
-After a search, select 2 or more papers and trigger a full-screen AI analysis panel with three modes:
+### Similarity Graph
+- **Pairwise cosine graph**: Backend computes cosine similarity across all selected papers' embeddings and returns `{nodes, links}`
+- **Force-directed visualisation**: `react-force-graph-2d` renders the graph — node size = log(citations), edge width = similarity score
+- **Adjustable threshold**: Slider in the header filters edges below the chosen similarity value in real time
 
-- **Comparative analysis**: AI generates a summary table (title, year, core method, contribution) and systematically compares methodology, innovations, experimental results, and limitations across all selected papers
-- **Literature review**: Produces a publication-ready academic paragraph covering research background, each paper's key contribution, and how they relate — ready to drop into a Related Work section
-- **Research trends**: Traces the technical evolution along a timeline, identifies shifting research hotspots, and predicts future directions
+### Subscriptions & Daily Push
+- **Keyword subscriptions**: Subscribe after any search; the system immediately builds a push queue in the background
+- **Daily email**: Delivers one curated paper to your inbox at 08:00 CST; AI filtering ensures relevance
+- **Auto-replenishment**: Queue is refilled automatically when fewer than 5 papers remain; manual refresh also available
+- **Queue visibility**: Subscription management page shows the full queue (✅ sent with date / 📅 scheduled with date)
 
-Each mode's output is independently cached (switch modes without losing results), supports mid-stream Stop and regeneration, and renders full Markdown including tables.
+### Accounts & Auth
+- **Email registration + verification**: JWT authentication; registration and login endpoints are rate-limited
+- **Atomic free-quota deduction**: `WHERE free_searches > 0` row-level lock prevents concurrent over-spend
+- **Saved papers / reading history / search sessions**: Synced across devices after login
 
-### AI Conversations
-- **Per-paper AI chat**: Each paper card has an "AI Chat" button that opens a right-side drawer for deep discussion (methods, contributions, limitations, etc.); each paper has its own independent conversation context
-- **Full-text analysis via PDF**: Upload the paper's PDF in the chat drawer and AI switches to full-text mode — supports DeepSeek V4's 1M token context window, covering papers of any length
-- **Cloud PDF persistence**: Uploaded PDF text is saved server-side and tied to your account — just like Claude.ai, it's automatically restored after page refresh or when logging in from another device; no re-uploading needed
-- **Markdown rendering**: AI responses render tables, code blocks, and formatted text
-- **Stop button**: Interrupt streaming at any time, keeping the content generated so far
-- **Copy button**: Hover any AI message to copy it
-- **Configurable quick prompts**: Pre-set questions in the chat drawer are fully editable and saved locally
-
-### Account & Access
-- **Email registration + verification**: Sign up, receive a verification email, click the link to activate
-- **Free trial**: Verified new users get **3 free searches** powered by the system — no API key needed to experience all features
-- **Unlimited with your own key**: Enter your DeepSeek API key to remove all usage limits
-- **Bookmarks**: Save papers with the bookmark icon; view and manage in the Bookmarks page
-- **Chat history**: Every paper you open an AI conversation for is automatically logged; view the last 100 in History
-- **Security**: Registration rate-limiting (5/hr/IP), login failure throttling (10/15min/IP), 256-bit verification tokens, system key server-side only
-
-### 📬 Keyword Subscriptions & Daily Push (Flagship Feature)
-
-No need to check back every day — subscribe once and let papers come to you.
-
-- **One-click subscribe**: After a search, click "Subscribe" next to the keyword chips. A confirmation modal shows the subscribed keywords, push schedule (daily 08:00 CST), and receiving email address
-- **Smart push queue**: On subscription, the system immediately searches for relevant papers in the background, builds a queue, and schedules them day by day. Each morning it picks the next paper in line and sends it — no duplicates, no gaps
-- **Configurable daily volume**: Defaults to 1 paper per day (great for deep reading). Adjustable to 1–10 papers/day in the Subscriptions page
-- **Push progress visible**: Expand any subscription card to see the full queue — ✅ sent (with date) / 📅 pending (with planned date) — so you always know what's coming next
-- **Auto-refill**: When fewer than 5 papers remain in the queue, the system automatically searches for new papers and appends them; you can also manually trigger a refresh
-- **AI-filtered queue**: Only papers that pass AI relevance validation enter the queue — no off-topic results
-- **Subscription management**: Toggle or delete anytime; up to 20 active keyword sets
+### Real-time WebSocket Push
+- Persistent WebSocket connection between frontend and backend; optional JWT auth; ping/pong keepalive
+- Background events (vector index done, subscription queue ready) pushed as toast notifications
+- Connection status indicator (green/amber/grey dot); exponential-backoff auto-reconnect
 
 ---
 
-## How It Works
+## Tech Stack
 
-![Architecture](docs/images/Architecture.png)
+| Layer | Technology | Notes |
+|-------|-----------|-------|
+| **Frontend** | React 19 + TypeScript + Vite + Tailwind CSS v4 | |
+| **Graph viz** | react-force-graph-2d | D3 force-directed, Canvas renderer |
+| **Backend** | Python 3.11 + FastAPI | Async-first |
+| **Real-time** | SSE (search progress) + WebSocket (background events) | Dual channel |
+| **Database** | SQLAlchemy async + Alembic migrations | SQLite (dev) / PostgreSQL (prod) |
+| **Vector DB** | ChromaDB + ONNX MiniLM L6 v2 | Local inference, no external API |
+| **Cache** | Redis (optional) | Search result cache, 1h TTL, graceful no-op fallback |
+| **AI** | DeepSeek API (OpenAI-compatible) | Intent parsing, validation, RAG |
+| **Logging** | structlog | JSON or coloured console, runtime-switchable |
+| **Error tracking** | Sentry SDK | FastAPI + SQLAlchemy integrations; disabled when no DSN |
+| **Testing** | pytest + httpx AsyncClient | Async integration tests; rate-limit fixture isolation |
+| **CI/CD** | GitHub Actions | lint → test → build; uv cache for fast installs |
+| **Package mgmt** | uv (backend) / npm (frontend) | |
 
 ---
 
-## Usage
+## Engineering Notes
 
-### Option 1 — Free trial (recommended for new users)
+> Non-obvious decisions worth calling out for technical readers.
 
-1. Visit [118.25.192.117](http://118.25.192.117)
-2. Click **"Sign up for free"**, enter your email and password
-3. Check your inbox and click the verification link
-4. You're automatically logged in with **3 free searches** — start exploring
+1. **Non-blocking vector indexing**: After yielding the final SSE `done` event, `asyncio.create_task` fires off ChromaDB writes in a dedicated `ThreadPoolExecutor`. The HTTP response is never held waiting.
 
-### Option 2 — Your own API key (unlimited)
+2. **Zero-downtime Alembic bootstrap**: On startup, `init_db()` inspects whether `alembic_version` exists. Pre-Alembic databases are `stamp head`-ed rather than migrated, preventing false "empty schema" detection.
 
-1. Sign up at [platform.deepseek.com](https://platform.deepseek.com) and create an API key (`sk-xxxxxxxx`)
-2. Visit [118.25.192.117](http://118.25.192.117), paste your key in the input field, and start searching
+3. **WebSocket connection grouping**: `ConnectionManager` groups sockets by `user:{id}` or `anon:{cid}`. Multiple tabs for the same user all receive notifications. Dead connections are lazily pruned on the next send attempt — no background sweeper needed.
 
-> DeepSeek pricing is very low; typical usage costs are negligible.
+4. **Redis zero-friction fallback**: `cache_service.py` lazily initialises the Redis client at module level. When `REDIS_URL` is unset, every `get/set` returns early — no try/except required in calling code.
 
-> **Note**: The demo is hosted on a personal cloud server, expected to stay up until **early 2027**. It's a side project with no uptime guarantees — for anything important, consider self-hosting.
+5. **Dialect-aware connection pooling**: `pool_size`, `max_overflow`, and `pool_pre_ping` are only passed to `create_async_engine` for non-SQLite engines, avoiding `ProgrammingError` in dev.
+
+6. **Conditional `render_as_batch`**: SQLite requires Alembic batch mode for `ALTER COLUMN`; PostgreSQL does not. `env.py` detects the dialect at migration time so one migration file serves both databases.
+
+7. **Atomic free-quota deduction**: `UPDATE users SET free_searches = free_searches - 1 WHERE id = ? AND free_searches > 0` — row-level locking prevents concurrent over-spend; `rowcount == 0` fast-fails without application-level locks.
+
+8. **SSE + concurrent source progress**: Each data source signals completion via an `asyncio.Queue`. The main generator non-blockingly drains the queue while awaiting the search task, yielding `source_done` events so the frontend progress bar updates per source in real time.
+
+9. **structlog dual-mode rendering**: `LOG_FORMAT=console` → coloured key=value for development; `json` → structured JSON lines for Loki/Datadog in production. One `get_logger()` call everywhere; renderer selected at startup.
+
+10. **WebSocket exponential backoff**: `useWebSocket` hook doubles the retry delay on each `onclose` (capped at 30 s) and resets to 1 s on successful reconnect. A 25 s ping interval prevents Nginx idle-timeout disconnection.
+
+---
+
+## Quick Start
+
+### Online Demo
+
+Visit [118.25.192.117](http://118.25.192.117), register, verify your email, and use 3 free searches immediately.
 
 **Example queries**
 
 ```
 Find survey papers on RAG (retrieval-augmented generation) after 2023
-Diffusion models for medical image segmentation, recent two years
-Reinforcement learning for robot control, top-venue publications only
+Diffusion models for medical image segmentation, last two years
+Reinforcement learning for robot control, top-venue papers only
 ```
 
-> **Time range**: When no date is specified, the search defaults to the **last 5 years**. To search older literature, explicitly state a range, e.g. "papers from 2015 onwards" or "no date restriction".
+> Default time window is the last 5 years when no date is specified.
 
 ---
 
-## Local Setup
+## Local Development
 
-Run ScholarScout on your own machine — no server, no Nginx needed.
-
-**Requirements**: Python 3.11+, [uv](https://github.com/astral-sh/uv), Node.js 18+, npm
-
-**1. Install uv**
-
-```bash
-# macOS / Linux
-curl -LsSf https://astral.sh/uv/install.sh | sh
-
-# Windows (PowerShell)
-powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
-```
-
-**2. Clone the repo**
+**Prerequisites**: Python 3.11+, [uv](https://github.com/astral-sh/uv), Node.js 18+
 
 ```bash
 git clone https://github.com/Dshuishui/ScholarScout.git
 cd ScholarScout
-```
 
-**3. Start the backend** (new terminal)
-
-```bash
+# Backend
 cd backend
-uv sync          # creates virtualenv and installs dependencies
+uv sync
 uv run uvicorn main:app --reload --port 8000
-```
 
-When you see `Uvicorn running on http://127.0.0.1:8000`, the backend is ready.
-
-**4. Start the frontend** (another terminal)
-
-```bash
+# Frontend (new terminal)
 cd frontend
 npm install
 npm run dev
 ```
 
-When you see `Local: http://localhost:5173`, the frontend is ready.
-
-**5. Open in browser**
-
-Go to [http://localhost:5173](http://localhost:5173) and enter your DeepSeek API key.
+Open [http://localhost:5173](http://localhost:5173) and enter your DeepSeek API key.
 
 ---
 
-## Optional Data Source API Keys
+## Environment Variables
 
-ScholarScout works out of the box with 7 sources that require no registration. The following sources need a free API key:
+Copy `backend/.env.example` to `backend/.env`. All variables have sensible defaults — the app starts without any of them configured.
 
-| Source | Coverage | Get Key |
-|--------|----------|---------|
-| **CORE** | 170M+ open-access papers | [core.ac.uk/services/api](https://core.ac.uk/services/api) |
-| **NASA ADS** | Astronomy / astrophysics / earth science | [ui.adsabs.harvard.edu/user/settings/token](https://ui.adsabs.harvard.edu/user/settings/token) |
-| **Semantic Scholar** | General, strong semantic search | [semanticscholar.org/product/api](https://www.semanticscholar.org/product/api) |
-
-All are completely free. **Sources without a key are silently skipped; everything else still works.**
-
-### Local config
-
-```bash
-cd backend
-cp .env.example .env
-# Edit .env and fill in the keys you have
-```
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `DATABASE_URL` | `sqlite+aiosqlite:///./scholarscout.db` | Set to `postgresql+asyncpg://...` for production |
+| `REDIS_URL` | _(empty, disabled)_ | e.g. `redis://localhost:6379/0` |
+| `CACHE_SEARCH_TTL` | `3600` | Search result cache TTL in seconds |
+| `SENTRY_DSN` | _(empty, disabled)_ | Sentry project DSN |
+| `SENTRY_ENVIRONMENT` | `development` | `production` / `staging` |
+| `SENTRY_TRACES_SAMPLE_RATE` | `0.1` | Performance tracing sample rate |
+| `LOG_FORMAT` | `console` | `json` for structured log lines |
+| `LOG_LEVEL` | `INFO` | `DEBUG` / `WARNING` |
+| `CORE_API_KEY` | _(empty)_ | Free: [core.ac.uk](https://core.ac.uk/services/api) |
+| `NASA_ADS_API_KEY` | _(empty)_ | Free: [ads.harvard.edu](https://ui.adsabs.harvard.edu/user/settings/token) |
+| `JWT_SECRET` | `dev-secret-change-in-production` | **Must be changed in production** |
+| `DEEPSEEK_SYSTEM_KEY` | _(empty)_ | Server-side key for free-trial searches |
+| `SMTP_HOST / SMTP_USER / SMTP_PASS` | _(empty)_ | Email delivery configuration |
 
 ---
 
-## Server Deployment
+## Data Sources
+
+| Source | Coverage | Key required |
+|--------|---------|--------------|
+| **arXiv** | CS / Physics / Math / Economics, latest preprints | No |
+| **Semantic Scholar** | General, strong semantic search | No (key raises rate limit) |
+| **OpenAlex** | General, 200M+ papers, OA-friendly | No |
+| **PubMed** | Medicine / Biology / Life sciences | No |
+| **Europe PMC** | Life sciences / Medicine, incl. bioRxiv / medRxiv | No |
+| **INSPIRE-HEP** | High energy physics / Particle physics (CERN) | No |
+| **CrossRef** | General, 150M+ metadata records, incl. humanities | No |
+| **CORE** | 170M+ open-access full texts | Yes (free) |
+| **NASA ADS** | Astronomy / Astrophysics / Earth sciences | Yes (free) |
+| **Google Scholar** | General, broadest coverage | Yes (free quota) |
+
+**Unpaywall** automatically supplements DOI-bearing papers with legal open-access PDF links (no key required).
+
+---
+
+## Deployment
 
 ```bash
 git clone https://github.com/Dshuishui/ScholarScout.git
 cd ScholarScout
-bash deploy/setup.sh   # first-time setup
-```
+bash deploy/setup.sh    # first deployment
 
-Subsequent updates:
-
-```bash
-bash deploy/deploy.sh
+bash deploy/deploy.sh   # subsequent updates
 ```
 
 **Requirements**: Ubuntu 22.04+, 4 CPU cores / 4 GB RAM, outbound internet access.
 
 ---
 
-## Tech Stack
-
-| Layer | Technology |
-|-------|-----------|
-| Frontend | React 18 + TypeScript + Vite + Tailwind CSS |
-| Backend | Python 3.11 + FastAPI + SSE streaming + SQLite |
-| Package management | [uv](https://github.com/astral-sh/uv) (backend) / npm (frontend) |
-| AI | DeepSeek API (intent parsing, keyword extraction, relevance filtering) |
-| Search sources | 10 academic databases + Unpaywall PDF lookup |
-| Deployment | Nginx + systemd, GitHub Actions CI |
-
----
-
-## Search Sources
-
-| Source | Strengths | Key Required |
-|--------|-----------|-------------|
-| **arXiv** | CS / Physics / Math / Economics, latest preprints | No |
-| **Semantic Scholar** | General, strong semantic search | No (key improves rate limits) |
-| **OpenAlex** | General, 200M+ papers, OA-friendly | No |
-| **PubMed** | Medicine / Biology / Life sciences | No |
-| **Europe PMC** | Life science / Biochem / Medicine, incl. bioRxiv / medRxiv | No |
-| **INSPIRE-HEP** | High-energy physics / Particle physics / Theoretical physics (CERN) | No |
-| **CrossRef** | General, 150M+ metadata records, incl. humanities / engineering | No |
-| **CORE** | 170M+ open-access full texts | Yes (free) |
-| **NASA ADS** | Astronomy / Astrophysics / Earth science | Yes (free) |
-| **Google Scholar** | General, broadest coverage | Yes (free tier) |
-
-After search, **Unpaywall** automatically finds legal open-access PDFs for papers with a DOI (no key needed).
-
-> **Note on non-English papers**: Current data sources are primarily English-language academic databases. Support for Chinese-language papers is limited — CNKI, Wanfang, and similar platforms require institutional API access that isn't currently integrated.
-
----
-
 ## Project Status
 
-🚧 **Actively developed** — early stage.
+**Completed**
 
-**Completed**:
-- Account system: email sign-up / verification / login, JWT auth, auto-logout on expiry
-- Free trial: verified new users get 3 free searches (system-funded, atomic decrement to prevent abuse)
-- Bookmarks and reading history
-- **Keyword subscriptions with daily push queue**: AI-filtered papers pre-scheduled into a per-day queue; sends at 08:00 CST; configurable volume (1–10/day); Subscriptions page shows full push progress (sent/pending with dates); auto-refills when queue runs low
-- **Multi-paper AI analysis**: Select 2+ papers for full-screen comparative analysis (with summary table) / literature review (draft-ready) / research trends (timeline + prediction); each mode cached independently
-- Full-text PDF chat with server-side persistence (no re-upload across sessions and devices)
-- CSV export with AI-filtered-only option
-- Mobile-responsive layout (bottom tab bar + bottom sheet drawer)
-- Bundle code splitting: initial gzip 126 KB (−29%)
+- Full search pipeline: natural language → keyword extraction → 10-source concurrent → LLM validation → SSE streaming
+- Vector semantic retrieval: ChromaDB + ONNX local embeddings, no external API
+- Multi-paper RAG Q&A: DeepSeek streaming with citation markers
+- Similarity graph: pairwise cosine + react-force-graph-2d visualisation
+- WebSocket real-time push notifications for background task completion
+- PostgreSQL / Redis production-ready (env-driven, SQLite fallback)
+- Alembic migrations with dialect-aware `render_as_batch`
+- structlog structured logging + Sentry error tracking (both gracefully disabled when unconfigured)
+- GitHub Actions CI (lint + test + build)
+- Keyword subscriptions + daily email push queue (APScheduler)
+- Multi-paper AI analysis (compare / review / trends; results independently cached)
+- PDF full-text chat with cloud persistence
+- Email registration / JWT auth / atomic free-quota deduction
+- Mobile-responsive layout
 
-**Planned**: More model support (Claude, GPT), user stats dashboard, mobile-optimized landing page.
+**Planned**
 
-Most of this codebase was written with **AI assistance (Claude)**. It's a hobby project, not a production system. If you find a bug or have an idea, feel free to open a [GitHub Issue](https://github.com/Dshuishui/ScholarScout/issues) — all feedback welcome 🙏
+- Additional model support (Claude, GPT-4o)
+- User statistics dashboard
+- Chinese academic database integration
 
 ---
 
-## Acknowledgments
+## Acknowledgements
 
 - [DeepSeek](https://www.deepseek.com) — AI inference
-- [arXiv](https://arxiv.org), [Semantic Scholar](https://www.semanticscholar.org), [OpenAlex](https://openalex.org), [PubMed](https://pubmed.ncbi.nlm.nih.gov), [Europe PMC](https://europepmc.org), [INSPIRE-HEP](https://inspirehep.net), [CORE](https://core.ac.uk), [NASA ADS](https://ui.adsabs.harvard.edu), [CrossRef](https://www.crossref.org) — free open academic data APIs
+- [ChromaDB](https://www.trychroma.com) — local vector database
+- [arXiv](https://arxiv.org), [Semantic Scholar](https://www.semanticscholar.org), [OpenAlex](https://openalex.org), [PubMed](https://pubmed.ncbi.nlm.nih.gov), [Europe PMC](https://europepmc.org), [INSPIRE-HEP](https://inspirehep.net), [CORE](https://core.ac.uk), [NASA ADS](https://ui.adsabs.harvard.edu), [CrossRef](https://www.crossref.org) — open academic data APIs
 - [Unpaywall](https://unpaywall.org) — open-access PDF lookup
-- [astral-sh/uv](https://github.com/astral-sh/uv) — blazing-fast Python package manager
+- [astral-sh/uv](https://github.com/astral-sh/uv) — fast Python package management
 
 ---
 

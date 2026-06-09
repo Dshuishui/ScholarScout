@@ -776,7 +776,11 @@ const addKeyword = () => {
           <div className="flex-shrink-0 flex flex-col items-end gap-0.5">
             {searchDateRange && (
               <span className="text-[11px] text-gray-400 tabular-nums">
-                {searchDateRange.from?.slice(0, 4) ?? '…'}–{searchDateRange.to?.slice(0, 4) ?? String(new Date().getFullYear())} 年
+                {(() => {
+                  const from = searchDateRange.from?.slice(0, 4) ?? '…'
+                  const to = searchDateRange.to?.slice(0, 4) ?? String(new Date().getFullYear())
+                  return from === to ? `${from} 年` : `${from}–${to} 年`
+                })()}
               </span>
             )}
             <button
