@@ -60,8 +60,8 @@ async def test_validate_papers_filters_irrelevant():
     with patch("services.llm_service.AsyncOpenAI") as MockClient:
         MockClient.return_value.chat.completions.create = AsyncMock(return_value=_mock_llm({
             "results": [
-                {"id": "1", "relevant": True,  "reason": "直接研究 RAG 应用"},
-                {"id": "2", "relevant": False, "reason": "与 RAG 无关"},
+                {"id": "1", "score": 9, "reason": "直接研究 RAG 应用", "tldr": "将RAG应用于法律文本检索"},
+                {"id": "2", "score": 1, "reason": "与 RAG 无关", "tldr": "CNN图像分类"},
             ]
         }))
         accepted, rejected = await validate_papers(papers, "找RAG相关论文", "sk-fake-key")
@@ -69,6 +69,8 @@ async def test_validate_papers_filters_irrelevant():
     assert len(accepted) == 1
     assert accepted[0].paper_id == "1"
     assert accepted[0].relevance_reason == "直接研究 RAG 应用"
+    assert accepted[0].relevance_score == 9.0
+    assert accepted[0].tldr == "将RAG应用于法律文本检索"
 
 
 @pytest.mark.asyncio
@@ -80,8 +82,8 @@ async def test_validate_papers_returns_rejected():
     with patch("services.llm_service.AsyncOpenAI") as MockClient:
         MockClient.return_value.chat.completions.create = AsyncMock(return_value=_mock_llm({
             "results": [
-                {"id": "1", "relevant": True,  "reason": "相关"},
-                {"id": "2", "relevant": False, "reason": "不相关"},
+                {"id": "1", "score": 8, "reason": "相关", "tldr": "RAG综述"},
+                {"id": "2", "score": 2, "reason": "不相关", "tldr": "CNN分类"},
             ]
         }))
         accepted, rejected = await validate_papers(papers, "找RAG相关论文", "sk-fake-key")
