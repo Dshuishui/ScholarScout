@@ -9,6 +9,7 @@ const MODEL_STORAGE_KEY = 'scholarscout_model'
 
 interface Props {
   onKeySubmit: (key: string) => void
+  onGuestEnter?: () => void
 }
 
 function useTypewriter(text: string, startDelay: number, speed = 70) {
@@ -56,7 +57,7 @@ const persistKey = (key: string) => {
 
 const maskKey = (key: string) => `sk-···${key.slice(-4)}`
 
-export function KeySetupScreen({ onKeySubmit }: Props) {
+export function KeySetupScreen({ onKeySubmit, onGuestEnter }: Props) {
   const [input, setInput] = useState('')
   const [error, setError] = useState('')
   const [isValidating, setIsValidating] = useState(false)
@@ -323,7 +324,6 @@ export function KeySetupScreen({ onKeySubmit }: Props) {
                     <div className="flex items-center gap-2 mb-2">
                       <span className="text-xl">⚡</span>
                       <span className="font-bold text-indigo-700 text-base">免费体验 3 次搜索</span>
-                      <span className="ml-auto text-[10px] bg-indigo-100 text-indigo-500 px-2 py-0.5 rounded-full font-medium flex-shrink-0">无需信用卡</span>
                     </div>
                     <p className="text-xs text-indigo-600/80 mb-4 leading-relaxed">
                       注册并验证邮箱，立即获得 3 次免费搜索额度，<br />无需配置任何 API Key 即可体验全部功能。
@@ -445,6 +445,22 @@ export function KeySetupScreen({ onKeySubmit }: Props) {
               <a href="https://platform.deepseek.com" target="_blank" rel="noopener noreferrer"
                 className="text-blue-500 hover:underline ml-1">免费注册 DeepSeek →</a>
             </p>
+
+            {onGuestEnter && (
+              <div className="flex items-center gap-3 my-3">
+                <div className="flex-1 h-px bg-gray-200" />
+                <span className="text-xs text-gray-400 flex-shrink-0">或</span>
+                <div className="flex-1 h-px bg-gray-200" />
+              </div>
+            )}
+            {onGuestEnter && (
+              <button
+                onClick={onGuestEnter}
+                className="w-full py-2.5 rounded-xl border border-gray-200 bg-white hover:bg-gray-50 text-gray-500 hover:text-gray-700 text-sm font-medium transition-all"
+              >
+                不配置 Key，先进去看看 →
+              </button>
+            )}
 
             <div className="mt-auto pt-4 border-t border-gray-100 text-center space-y-1">
               <p className="text-sm text-gray-400">

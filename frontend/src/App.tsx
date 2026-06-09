@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { KeySetupScreen } from './components/KeySetupScreen'
 import { MainLayout } from './components/MainLayout'
 import { useApiKey } from './hooks/useApiKey'
@@ -8,6 +8,7 @@ import { toast } from './components/Toast'
 function AppInner() {
   const { apiKey, setApiKey, clearApiKey, hasKey } = useApiKey()
   const { isLoggedIn, user, loginWithToken } = useAuth()
+  const [guestMode, setGuestMode] = useState(false)
 
   // 邮箱验证回调：URL 含 ?verify=<token> 时自动完成验证并登录
   useEffect(() => {
@@ -35,11 +36,16 @@ function AppInner() {
 
   // 试用模式：已登录 + 有免费额度 → 无需 API Key 也能进入
   const hasTrial = isLoggedIn && (user?.freeSearches ?? 0) > 0
-  const canEnter = hasKey || hasTrial
+  const canEnter = hasKey || hasTrial || guestMode
+
+  const handleClearKey = () => {
+    clearApiKey()
+    setGuestMode(false)
+  }
 
   return canEnter
-    ? <MainLayout apiKey={apiKey} onClearKey={clearApiKey} />
-    : <KeySetupScreen onKeySubmit={setApiKey} />
+    ? <MainLayout apiKey={apiKey} onClearKey={handleClearKey} />
+    : <KeySetupScreen onKeySubmit={setApiKey} onGuestEnter={() => setGuestMode(true)} />
 }
 
 export default function App() {
