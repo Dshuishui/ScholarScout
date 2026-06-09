@@ -10,7 +10,7 @@ from typing import Optional
 from database import get_db
 from models_db import Feedback, User
 from services.auth_service import decode_token
-from services.email_service import send_feedback_notification
+from services.email_service import send_feedback_notification, send_reply_notification
 from jose import JWTError
 
 router = APIRouter()
@@ -144,6 +144,17 @@ async def submit_feedback(
 
     if not is_author:
         asyncio.create_task(send_feedback_notification(fb.content, location, category))
+
+    if req.reply_to_id:
+        orig_res = await db.execute(select(Feedback).where(Feedback.id == req.reply_to_id))
+        orig = orig_res.scalar_one_or_none()
+        if orig and orig.user_id and orig.user_id != user_id:
+            user_res = await db.execute(select(User).where(User.id == orig.user_id))
+            orig_user = user_res.scalar_one_or_none()
+            if orig_user and orig_user.email:
+                asyncio.create_task(
+                    send_reply_notification(orig_user.email, orig.content or "", fb.content)
+                )
 
     return {"ok": True, "id": fb.id, "created_at": fb.created_at.isoformat()}
 

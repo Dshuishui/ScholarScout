@@ -205,6 +205,59 @@ async def send_feedback_notification(content: str, location: str | None, categor
         return False
 
 
+async def send_reply_notification(to_email: str, original_content: str, reply_content: str) -> bool:
+    """有人回复用户留言时通知该用户。"""
+    if not SMTP_USER or not SMTP_PASS:
+        return False
+
+    subject = f"[ScholarScout] 您的留言有新回复"
+    preview = original_content[:60] + ("…" if len(original_content) > 60 else "")
+
+    html_body = f"""<!DOCTYPE html>
+<html lang="zh-CN">
+<head><meta charset="UTF-8"></head>
+<body style="font-family:-apple-system,Arial,sans-serif;max-width:520px;margin:0 auto;padding:24px;color:#111827;">
+<div style="background:#fff;border-radius:12px;padding:24px;border:1px solid #e5e7eb;">
+  <div style="font-size:18px;font-weight:700;color:#4f46e5;margin-bottom:16px;">ScholarScout 留言板</div>
+  <div style="font-size:14px;color:#6b7280;margin-bottom:8px;">您的留言收到了新回复：</div>
+  <div style="background:#f3f4f6;border-radius:6px;padding:10px 14px;margin-bottom:16px;font-size:13px;color:#6b7280;border-left:3px solid #d1d5db;">
+    {preview}
+  </div>
+  <div style="background:#eef2ff;border-radius:8px;padding:14px 16px;font-size:15px;line-height:1.7;color:#111827;">
+    {reply_content}
+  </div>
+  <div style="margin-top:20px;">
+    <a href="http://118.25.192.117" style="display:inline-block;background:#4f46e5;color:#fff;font-size:13px;font-weight:600;padding:9px 20px;border-radius:8px;text-decoration:none;">
+      前往留言板查看
+    </a>
+  </div>
+</div>
+</body>
+</html>"""
+
+    msg = MIMEMultipart("alternative")
+    msg["Subject"] = subject
+    msg["From"] = f"{SMTP_FROM_NAME} <{SMTP_USER}>"
+    msg["To"] = to_email
+    msg["Date"] = formatdate(localtime=True)
+    msg.attach(MIMEText(html_body, "html", "utf-8"))
+
+    try:
+        await aiosmtplib.send(
+            msg,
+            hostname=SMTP_HOST,
+            port=SMTP_PORT,
+            use_tls=True,
+            username=SMTP_USER,
+            password=SMTP_PASS,
+        )
+        logger.info("Reply notification sent to %s", to_email)
+        return True
+    except Exception as e:
+        logger.error("Failed to send reply notification to %s: %s", to_email, e)
+        return False
+
+
 async def send_subscription_email(
     to_email: str,
     keywords: list[str],
