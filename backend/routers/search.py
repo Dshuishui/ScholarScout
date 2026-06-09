@@ -11,7 +11,8 @@ from fastapi.responses import StreamingResponse, Response
 from sqlalchemy import update as sa_update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-logger = logging.getLogger(__name__)
+from logging_config import get_logger
+logger = get_logger(__name__)
 
 from database import get_db
 from dependencies import get_optional_user
@@ -21,6 +22,7 @@ from services.llm_service import classify_intent, parse_query, validate_papers
 from services.search_service import search_all_sources, enhance_with_unpaywall, get_source_names
 from services.download_service import fetch_pdf_with_fallback
 from services.pdf_finder_service import find_pdfs_with_kimi, generate_fallback_links
+from services.cache_service import get_cached_search, cache_search
 from config import (
     CORE_API_KEY, NASA_ADS_API_KEY, SERPAPI_KEY, KIMI_API_KEY,
     DEEPSEEK_BASE_URL, DEEPSEEK_MODEL, DEEPSEEK_SYSTEM_KEY,
@@ -33,10 +35,12 @@ async def _index_papers_async(papers_dict: list[dict]) -> None:
     """Fire-and-forget: index search results into the vector store."""
     try:
         from services.vector_service import index_papers
+        from services.ws_manager import manager as ws_manager
         loop = asyncio.get_event_loop()
         n = await loop.run_in_executor(_index_executor, lambda: index_papers(papers_dict))
         if n:
             logger.info("Indexed %d papers into vector store", n)
+            await ws_manager.broadcast("search_indexed", {"count": n})
     except Exception as e:
         logger.warning("Vector indexing failed (non-fatal): %s", e)
 
@@ -151,6 +155,20 @@ async def search(
             kw_str = "、".join(parsed.keywords)
             yield sse("progress", {"message": f"正在搜索关键词：{kw_str}..."})
 
+            # Check Redis cache before hitting external APIs
+            cached_papers = await get_cached_search(
+                parsed.keywords, request.sources or [],
+                parsed.date_from or "", parsed.date_to or "",
+            )
+            if cached_papers:
+                yield sse("cache_hit", {"message": f"已从缓存加载 {len(cached_papers)} 篇论文"})
+                yield sse("done", {
+                    "papers": cached_papers,
+                    "rejected_papers": [],
+                    "message": f"从缓存加载 {len(cached_papers)} 篇相关论文。",
+                })
+                return
+
             # Notify frontend which sources will be searched
             source_names = get_source_names(request.sources)
             yield sse("search_start", {
@@ -204,6 +222,12 @@ async def search(
 
             # 异步向量索引（不阻塞，失败不影响搜索）
             asyncio.create_task(_index_papers_async(papers_dict))
+
+            # Store validated results in Redis (non-blocking)
+            asyncio.create_task(cache_search(
+                parsed.keywords, request.sources or [],
+                papers_dict, parsed.date_from or "", parsed.date_to or "",
+            ))
 
             # ── PDF 深度查找（异步补充，不阻塞结果展示）──────────────────
             no_pdf = [p for p in final if not p.pdf_url]

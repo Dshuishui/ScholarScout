@@ -127,6 +127,7 @@ async def create_subscription(
 async def _bg_populate_queue(sub_id: int) -> None:
     """后台任务：为新创建的订阅填充推送队列。"""
     from scheduler import populate_queue
+    from services.ws_manager import manager as ws_manager
     now = datetime.now(timezone.utc)
     async with AsyncSessionLocal() as db:
         result = await db.execute(
@@ -134,7 +135,13 @@ async def _bg_populate_queue(sub_id: int) -> None:
         )
         sub = result.scalar_one_or_none()
         if sub:
-            await populate_queue(sub, db, now, search_days=30, max_add=30)
+            added = await populate_queue(sub, db, now, search_days=30, max_add=30)
+            client_key = f"user:{sub.user_id}"
+            await ws_manager.send(client_key, "subscription_ready", {
+                "sub_id": sub_id,
+                "keywords": sub.keywords,
+                "added": added if isinstance(added, int) else 0,
+            })
 
 
 @router.delete("/subscriptions/{sub_id}", status_code=204)

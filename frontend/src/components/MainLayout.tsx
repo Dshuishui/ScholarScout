@@ -8,6 +8,7 @@ import { useSettings } from '../hooks/useSettings'
 import { usePaperChat } from '../hooks/usePaperChat'
 import { useModel } from '../hooks/useModel'
 import { useAuth } from '../hooks/useAuth'
+import { useWebSocket } from '../hooks/useWebSocket'
 import { useIsMobile } from '../hooks/useIsMobile'
 import { UserMenu } from './UserMenu'
 import { SavedPage } from '../pages/SavedPage'
@@ -15,6 +16,7 @@ import { HistoryPage } from '../pages/HistoryPage'
 import { SessionsPage } from '../pages/SessionsPage'
 import { SemanticSearchPanel } from './SemanticSearchPanel'
 import { RagChatPanel } from './RagChatPanel'
+import { PaperGraphPanel } from './PaperGraphPanel'
 const SubscriptionsPage = lazy(() => import('../pages/SubscriptionsPage').then(m => ({ default: m.SubscriptionsPage })))
 import { FeedbackWidget } from './FeedbackWidget'
 import { RedPandaWidget } from './RedPandaWidget'
@@ -28,11 +30,13 @@ interface Props {
 
 export function MainLayout({ apiKey, onClearKey }: Props) {
   const { settings, updateSettings } = useSettings()
+  const { lastMessage, status: wsStatus } = useWebSocket()
   const { model } = useModel()
   const { token, isLoggedIn } = useAuth()
   const isMobile = useIsMobile()
   const [activePage, setActivePage] = useState<'saved' | 'history' | 'subscriptions' | 'sessions' | 'semantic' | null>(null)
   const [ragPapers, setRagPapers] = useState<Paper[] | null>(null)
+  const [graphPapers, setGraphPapers] = useState<Paper[] | null>(null)
   const [expandSubId, setExpandSubId] = useState<number | null>(null)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [mobileTab, setMobileTab] = useState<'search' | 'results'>('search')
@@ -119,6 +123,21 @@ export function MainLayout({ apiKey, onClearKey }: Props) {
     return () => window.removeEventListener('auth:expired', handler)
   }, [])
 
+  // WebSocket 推送通知
+  useEffect(() => {
+    if (!lastMessage) return
+    if (lastMessage.event === 'search_indexed') {
+      const n = lastMessage.data.count as number
+      toast.show(`已索引 ${n} 篇论文到语义库`)
+    } else if (lastMessage.event === 'subscription_ready') {
+      const added = lastMessage.data.added as number
+      const kws = (lastMessage.data.keywords as string[] | undefined)?.join('、') ?? ''
+      if (added > 0) {
+        toast.show(`订阅「${kws}」已就绪，找到 ${added} 篇论文`)
+      }
+    }
+  }, [lastMessage])
+
   // 键盘快捷键：/ 聚焦搜索框，Esc 关闭抽屉
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -199,6 +218,15 @@ export function MainLayout({ apiKey, onClearKey }: Props) {
         </div>
 
         <div className="relative flex items-center gap-3">
+          {/* WS 连接指示 */}
+          <span
+            className={`w-1.5 h-1.5 rounded-full flex-shrink-0 transition-colors ${
+              wsStatus === 'connected' ? 'bg-emerald-400' :
+              wsStatus === 'connecting' ? 'bg-amber-400 animate-pulse' :
+              'bg-gray-600'
+            }`}
+            title={wsStatus === 'connected' ? '实时推送已连接' : wsStatus === 'connecting' ? '连接中…' : '推送未连接'}
+          />
           <button
             onClick={() => setActivePage('semantic')}
             className="text-xs text-indigo-300/70 hover:text-indigo-200 transition-colors px-2 py-1 rounded hover:bg-white/5 flex items-center gap-1"
@@ -297,6 +325,7 @@ export function MainLayout({ apiKey, onClearKey }: Props) {
             searchDateRange={searchDateRange}
             sessionId={currentSessionId}
             onOpenRag={(selectedPapers) => setRagPapers(selectedPapers)}
+            onOpenGraph={(selectedPapers) => setGraphPapers(selectedPapers)}
           />
         </div>
       </div>
@@ -404,6 +433,11 @@ export function MainLayout({ apiKey, onClearKey }: Props) {
             model={model}
             onClose={() => setRagPapers(null)}
           />
+        </div>
+      )}
+      {graphPapers && graphPapers.length >= 2 && (
+        <div className="fixed inset-0 z-40 bg-white">
+          <PaperGraphPanel papers={graphPapers} onClose={() => setGraphPapers(null)} />
         </div>
       )}
     </div>

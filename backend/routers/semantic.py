@@ -9,9 +9,10 @@ from openai import AsyncOpenAI
 from pydantic import BaseModel, Field
 
 from config import DEEPSEEK_BASE_URL, DEEPSEEK_MODEL
-from services.vector_service import semantic_search, find_similar, collection_count
+from services.vector_service import semantic_search, find_similar, collection_count, compute_similarity_graph
 
-logger = logging.getLogger(__name__)
+from logging_config import get_logger
+logger = get_logger(__name__)
 router = APIRouter()
 
 
@@ -41,6 +42,21 @@ class RagRequest(BaseModel):
     papers: list[RagPaper] = Field(min_length=1, max_length=20)
     api_key: str = Field(min_length=1)
     model: str = DEEPSEEK_MODEL
+
+
+class GraphPaper(BaseModel):
+    paper_id: str
+    title: str
+    abstract: Optional[str] = None
+    citations: int = 0
+    source: Optional[str] = None
+    published_date: Optional[str] = None
+    authors: Optional[list[str]] = None
+
+
+class GraphRequest(BaseModel):
+    papers: list[GraphPaper] = Field(min_length=2, max_length=50)
+    threshold: float = Field(default=0.35, ge=0.0, le=1.0)
 
 
 # ── GET /api/semantic/status ──────────────────────────────────────────────────
@@ -128,3 +144,31 @@ async def rag_query(req: RagRequest):
             yield f"\n\n[错误：{e}]"
 
     return StreamingResponse(stream(), media_type="text/plain; charset=utf-8")
+
+
+# ── POST /api/semantic/graph ──────────────────────────────────────────────────
+
+@router.post("/graph")
+async def similarity_graph(req: GraphRequest):
+    """
+    Compute pairwise semantic similarity graph for a set of papers.
+    Returns {nodes, links} for force-directed graph rendering.
+    """
+    papers_dicts = [
+        {
+            "paper_id": p.paper_id,
+            "title": p.title,
+            "abstract": p.abstract,
+            "citations": p.citations,
+            "source": p.source,
+            "published_date": p.published_date,
+            "authors": p.authors or [],
+        }
+        for p in req.papers
+    ]
+    loop = asyncio.get_event_loop()
+    result = await loop.run_in_executor(
+        None,
+        lambda: compute_similarity_graph(papers_dicts, req.threshold),
+    )
+    return result

@@ -11,7 +11,8 @@ from typing import Optional
 import chromadb
 from chromadb.utils.embedding_functions import ONNXMiniLM_L6_V2
 
-logger = logging.getLogger(__name__)
+from logging_config import get_logger
+logger = get_logger(__name__)
 
 CHROMA_DIR = os.path.join(os.path.dirname(__file__), "..", "chroma_db")
 COLLECTION_NAME = "papers"
@@ -159,3 +160,53 @@ def collection_count() -> int:
         return _get_collection().count()
     except Exception:
         return 0
+
+
+def compute_similarity_graph(papers: list[dict], threshold: float = 0.35) -> dict:
+    """
+    Compute pairwise semantic similarity for a list of papers.
+    Returns {nodes, links} suitable for force-graph rendering.
+    Each paper dict: {paper_id, title, abstract?, citations, source, published_date, authors}.
+    """
+    if len(papers) < 2:
+        return {"nodes": [], "links": []}
+
+    ef = ONNXMiniLM_L6_V2()
+    texts = [f"{p.get('title', '')}. {p.get('abstract', '')}".strip() for p in papers]
+
+    try:
+        embeddings = ef(texts)  # list of numpy arrays
+    except Exception as e:
+        logger.warning("Embedding failed for graph: %s", e)
+        return {"nodes": [], "links": []}
+
+    import numpy as np
+    emb = np.array(embeddings, dtype=float)
+    norms = np.linalg.norm(emb, axis=1, keepdims=True)
+    norms[norms == 0] = 1
+    emb_norm = emb / norms
+
+    nodes = []
+    for p in papers:
+        nodes.append({
+            "id": p["paper_id"],
+            "title": p.get("title", ""),
+            "source": p.get("source", ""),
+            "year": (p.get("published_date") or "")[:4],
+            "citations": int(p.get("citations") or 0),
+            "authors": ", ".join((p.get("authors") or [])[:2]),
+        })
+
+    links = []
+    n = len(emb_norm)
+    for i in range(n):
+        for j in range(i + 1, n):
+            sim = float(np.dot(emb_norm[i], emb_norm[j]))
+            if sim >= threshold:
+                links.append({
+                    "source": papers[i]["paper_id"],
+                    "target": papers[j]["paper_id"],
+                    "similarity": round(sim, 3),
+                })
+
+    return {"nodes": nodes, "links": links}
