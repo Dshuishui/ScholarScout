@@ -79,8 +79,8 @@ export function AuthModal({ onClose, defaultTab = 'login' }: Props) {
   // ── 注册成功 → 等待验证 ────────────────────────────────────────────────────
   if (sentEmail) {
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm mx-4 p-8">
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={onClose}>
+        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm mx-4 p-8" onClick={e => e.stopPropagation()}>
           <div className="text-center">
             <div className="w-14 h-14 rounded-full bg-indigo-50 border border-indigo-100 flex items-center justify-center mx-auto mb-4">
               <svg className="w-7 h-7 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -110,6 +110,12 @@ export function AuthModal({ onClose, defaultTab = 'login' }: Props) {
                 {resendLoading ? '发送中…' : '重新发送验证邮件'}
               </button>
               <button
+                onClick={() => { setSentEmail(null); setTab('login'); setError('') }}
+                className="w-full text-sm text-gray-600 hover:text-gray-800 border border-gray-200 hover:border-gray-300 rounded-xl py-2.5 transition-colors"
+              >
+                已验证，去登录 →
+              </button>
+              <button
                 onClick={onClose}
                 className="w-full text-sm text-gray-400 hover:text-gray-600 py-2 transition-colors"
               >
@@ -124,8 +130,8 @@ export function AuthModal({ onClose, defaultTab = 'login' }: Props) {
 
   // ── 登录 / 注册表单 ────────────────────────────────────────────────────────
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm mx-4 p-8">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm mx-4 p-8" onClick={e => e.stopPropagation()}>
         <div className="flex justify-between items-center mb-6">
           <div className="flex gap-4">
             <button

@@ -149,17 +149,19 @@ async def verify_email(token: str, db: AsyncSession = Depends(get_db)):
 async def login(req: LoginRequest, request: Request, db: AsyncSession = Depends(get_db)):
     ip = _get_ip(request)
 
+    # 先检查限流，再查库（防枚举 + 防暴力）
+    failures = _login_failures[ip]
+    now = time.time()
+    _login_failures[ip] = [t for t in failures if now - t < 900]
+    if len(_login_failures[ip]) >= 10:
+        raise HTTPException(status_code=429, detail="登录尝试过于频繁，请 15 分钟后再试")
+
     result = await db.execute(select(User).where(User.email == req.email))
     user = result.scalar_one_or_none()
 
     if not user or not verify_password(req.password, user.password_hash):
-        # 登录失败：记录 IP，超过 10 次/15 分钟触发限流
-        _rate_ok(_login_failures, ip, limit=10, window_sec=900)
+        _login_failures[ip].append(now)
         raise HTTPException(status_code=401, detail="邮箱或密码错误")
-
-    # 检查登录失败频率（先于成功路径）
-    if not _rate_ok(_login_failures, ip, limit=10, window_sec=900):
-        raise HTTPException(status_code=429, detail="登录尝试过于频繁，请 15 分钟后再试")
 
     if not user.is_verified:
         raise HTTPException(
