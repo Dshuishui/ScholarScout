@@ -27,7 +27,8 @@ const SOURCE_COLORS: Record<string, string> = {
 }
 
 const ITEMS_PER_PAGE = 20
-const DOWNLOAD_CONCURRENCY = 3
+const DOWNLOAD_CONCURRENCY = 1   // 顺序下载，防止并发触发 arXiv/Sci-Hub 等源的 IP 限流
+const DOWNLOAD_TIMEOUT_MS = 90_000
 
 type SortOption = 'relevance' | 'citations' | 'date_desc' | 'date_asc'
 type ViewMode = 'list' | 'grouped'
@@ -511,9 +512,16 @@ const addKeyword = () => {
           status: `正在下载：${paper.title.slice(0, 30)}...`,
         }))
 
+        const downloadUrl = paper.pdf_url || paper.url || ''
         try {
-          const downloadUrl = paper.pdf_url || paper.url || ''
-          const resp = await fetch(getDownloadUrl(downloadUrl, paper.doi, paper.paper_id))
+          const ctrl = new AbortController()
+          const timer = setTimeout(() => ctrl.abort(), DOWNLOAD_TIMEOUT_MS)
+          let resp: Response
+          try {
+            resp = await fetch(getDownloadUrl(downloadUrl, paper.doi, paper.paper_id), { signal: ctrl.signal })
+          } finally {
+            clearTimeout(timer)
+          }
           if (resp.ok) {
             zip.file(filename, await resp.arrayBuffer())
           } else {
@@ -521,9 +529,9 @@ const addKeyword = () => {
             try { const j = await resp.json(); reason = j.detail ?? reason } catch { /* ignore */ }
             failed.push({ title: paper.title, authors: paper.authors.join('; '), year, url: downloadUrl, reason })
           }
-        } catch {
-          const downloadUrl = paper.pdf_url || paper.url || ''
-          failed.push({ title: paper.title, authors: paper.authors.join('; '), year, url: downloadUrl, reason: '网络错误' })
+        } catch (err) {
+          const reason = (err instanceof Error && err.name === 'AbortError') ? '下载超时（90s）' : '网络错误'
+          failed.push({ title: paper.title, authors: paper.authors.join('; '), year, url: downloadUrl, reason })
         } finally {
           completed++
           setDownloadProgress(prev => prev && ({ ...prev, current: completed }))
