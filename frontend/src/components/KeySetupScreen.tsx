@@ -260,8 +260,10 @@ export function KeySetupScreen({ onKeySubmit, onGuestEnter }: Props) {
               ))}
             </div>
             <div className="flex items-center gap-5 text-sm text-white/40">
-              <a href="http://118.25.192.117" target="_blank" rel="noopener noreferrer"
-                className="hover:text-white transition-colors">在线体验 →</a>
+              <button
+                onClick={onGuestEnter}
+                className="hover:text-white transition-colors"
+              >在线体验 →</button>
               <span className="text-white/15">|</span>
               <a href="https://github.com/Dshuishui/ScholarScout" target="_blank" rel="noopener noreferrer"
                 className="hover:text-white transition-colors">GitHub 开源</a>
