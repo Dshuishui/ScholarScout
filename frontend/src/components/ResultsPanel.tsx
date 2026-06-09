@@ -191,6 +191,8 @@ export function ResultsPanel({ papers, rejectedPapers = [], isLoading, statusMes
   const [newKw, setNewKw] = useState('')
   const [sortBy, setSortBy] = useState<SortOption>('relevance')
   const [activeTab, setActiveTab] = useState<'filtered' | 'all'>('filtered')
+  const [yearFrom, setYearFrom] = useState<number | null>(null)
+  const [yearTo, setYearTo] = useState<number | null>(null)
   const [viewMode, setViewMode] = useState<ViewMode>('list')
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set())
   const [density, setDensityState] = useState<Density>(() =>
@@ -381,15 +383,42 @@ export function ResultsPanel({ papers, rejectedPapers = [], isLoading, statusMes
     [activeTab, papers, rejectedPapers]
   )
 
+  // 年份范围：结果变化时重置
+  const availableYears = useMemo(() => {
+    const years = activePapers
+      .map(p => parseInt(p.published_date?.slice(0, 4) ?? ''))
+      .filter(y => !isNaN(y) && y > 1900)
+    if (years.length === 0) return null
+    return { min: Math.min(...years), max: Math.max(...years) }
+  }, [activePapers])
+
+  useEffect(() => {
+    if (availableYears) {
+      setYearFrom(availableYears.min)
+      setYearTo(availableYears.max)
+    }
+  }, [availableYears?.min, availableYears?.max]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const yearFilteredPapers = useMemo(() => {
+    if (!yearFrom && !yearTo) return activePapers
+    return activePapers.filter(p => {
+      const y = parseInt(p.published_date?.slice(0, 4) ?? '0')
+      if (isNaN(y)) return true
+      if (yearFrom && y < yearFrom) return false
+      if (yearTo && y > yearTo) return false
+      return true
+    })
+  }, [activePapers, yearFrom, yearTo])
+
   const sortedPapers = useMemo(() => {
-    return [...activePapers].sort((a, b) => {
+    return [...yearFilteredPapers].sort((a, b) => {
       if (sortBy === 'relevance') return (b.relevance_score ?? 0) - (a.relevance_score ?? 0)
       if (sortBy === 'citations') return b.citations - a.citations
       const da = a.published_date ?? ''
       const db = b.published_date ?? ''
       return sortBy === 'date_desc' ? db.localeCompare(da) : da.localeCompare(db)
     })
-  }, [activePapers, sortBy])
+  }, [yearFilteredPapers, sortBy])
 
   const groupedPapers = useMemo(() => {
     if (viewMode !== 'grouped') return null
@@ -892,6 +921,35 @@ const addKeyword = () => {
                 </svg>
               </button>
             </div>
+            {/* 年份过滤 */}
+            {availableYears && (availableYears.max - availableYears.min) >= 1 && (
+              <div className="flex items-center gap-1 text-xs text-gray-500">
+                <input
+                  type="number"
+                  value={yearFrom ?? ''}
+                  min={availableYears.min}
+                  max={yearTo ?? availableYears.max}
+                  onChange={e => setYearFrom(e.target.value ? parseInt(e.target.value) : null)}
+                  className="w-16 border border-gray-200 rounded-lg px-2 py-1.5 text-center bg-white hover:border-gray-300 transition-colors [appearance:textfield]"
+                />
+                <span className="text-gray-300">–</span>
+                <input
+                  type="number"
+                  value={yearTo ?? ''}
+                  min={yearFrom ?? availableYears.min}
+                  max={availableYears.max}
+                  onChange={e => setYearTo(e.target.value ? parseInt(e.target.value) : null)}
+                  className="w-16 border border-gray-200 rounded-lg px-2 py-1.5 text-center bg-white hover:border-gray-300 transition-colors [appearance:textfield]"
+                />
+                {(yearFrom !== availableYears.min || yearTo !== availableYears.max) && (
+                  <button
+                    onClick={() => { setYearFrom(availableYears.min); setYearTo(availableYears.max) }}
+                    className="text-gray-300 hover:text-gray-500 transition-colors"
+                    title="重置年份"
+                  >✕</button>
+                )}
+              </div>
+            )}
             <select
               value={sortBy}
               onChange={e => setSortBy(e.target.value as SortOption)}

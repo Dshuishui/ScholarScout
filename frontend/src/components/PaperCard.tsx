@@ -164,6 +164,18 @@ export function PaperCard({ paper, selected = false, onToggle, isRejected = fals
                 OA
               </span>
             )}
+            {paper.relevance_score != null && !isRejected && (
+              <span
+                className={`text-xs border rounded-full px-2 py-0.5 font-medium tabular-nums ${
+                  paper.relevance_score >= 8 ? 'bg-indigo-50 text-indigo-600 border-indigo-200' :
+                  paper.relevance_score >= 6 ? 'bg-blue-50 text-blue-600 border-blue-200' :
+                  'bg-gray-50 text-gray-500 border-gray-200'
+                }`}
+                title={`AI 相关性评分 ${paper.relevance_score}/10`}
+              >
+                {paper.relevance_score.toFixed(1)}
+              </span>
+            )}
             {isRejected && (
               <span className="text-xs text-orange-500 bg-orange-50 border border-orange-100 rounded-full px-2 py-0.5">
                 AI 认为不相关
