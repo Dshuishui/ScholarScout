@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useAuth } from '../hooks/useAuth'
 
-const NICKNAME_KEY = 'ss_feedback_nickname'
 const REACTIONS_KEY = 'ss_feedback_reactions'
 type EmojiKey = '👍' | '❤️' | '😂' | '🤔'
 const EMOJIS: EmojiKey[] = ['👍', '❤️', '😂', '🤔']
@@ -17,6 +16,7 @@ interface ReplySnippet {
   id: number
   content: string
   recalled: boolean
+  is_author: boolean
 }
 
 interface FeedbackItem {
@@ -25,9 +25,11 @@ interface FeedbackItem {
   recalled: boolean
   location: string | null
   is_author: boolean
+  is_mine: boolean
   category: Category
   created_at: string
   can_recall: boolean
+  reactions: Record<string, number>
   reply_to: ReplySnippet | null
 }
 
@@ -64,7 +66,7 @@ interface FeedbackWidgetProps {
 }
 
 export function FeedbackWidget({ isMobileTabBar = false }: FeedbackWidgetProps) {
-  const { token, isLoggedIn } = useAuth()
+  const { token, isLoggedIn, user } = useAuth()
   const [open, setOpen] = useState(false)
   const [items, setItems] = useState<FeedbackItem[]>([])
   const [text, setText] = useState('')
@@ -74,12 +76,13 @@ export function FeedbackWidget({ isMobileTabBar = false }: FeedbackWidgetProps) 
   const [replyTo, setReplyTo] = useState<FeedbackItem | null>(null)
   const [recalling, setRecalling] = useState<number | null>(null)
   const [activeTab, setActiveTab] = useState<Category>('chat')
-  const [reactions, setReactions] = useState<Record<number, EmojiKey | null>>(() => loadReactions())
-  const [nickname, setNickname] = useState<string>(() => localStorage.getItem(NICKNAME_KEY) ?? '')
-  const [showNicknameInput, setShowNicknameInput] = useState(false)
+  const [myReactions, setMyReactions] = useState<Record<number, EmojiKey | null>>(() => loadReactions())
+  const [serverReactions, setServerReactions] = useState<Record<number, Record<string, number>>>({})
   const feedRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
-  const nicknameRef = useRef<HTMLInputElement>(null)
+
+  // 登录用户用邮箱前缀作为显示名，未登录用户匿名
+  const displayName = isLoggedIn && user?.email ? user.email.split('@')[0] : '用户'
 
   const scrollToBottom = useCallback(() => {
     setTimeout(() => {
@@ -87,12 +90,28 @@ export function FeedbackWidget({ isMobileTabBar = false }: FeedbackWidgetProps) 
     }, 60)
   }, [])
 
+  const scrollToMessage = useCallback((id: number) => {
+    const el = document.getElementById(`msg-${id}`)
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      el.classList.add('ring-2', 'ring-blue-300')
+      setTimeout(() => el.classList.remove('ring-2', 'ring-blue-300'), 1500)
+    }
+  }, [])
+
   const fetchFeedback = useCallback(() => {
     const headers: Record<string, string> = {}
     if (token) headers['Authorization'] = `Bearer ${token}`
     fetch('/api/feedback', { headers })
       .then(r => r.json())
-      .then((data: FeedbackItem[]) => { setItems(data); scrollToBottom() })
+      .then((data: FeedbackItem[]) => {
+        setItems(data)
+        // 同步服务端 reactions
+        const sr: Record<number, Record<string, number>> = {}
+        data.forEach(item => { if (item.reactions) sr[item.id] = item.reactions })
+        setServerReactions(sr)
+        scrollToBottom()
+      })
       .catch(() => {})
   }, [token, scrollToBottom])
 
@@ -105,24 +124,41 @@ export function FeedbackWidget({ isMobileTabBar = false }: FeedbackWidgetProps) 
     return () => clearInterval(interval)
   }, [open, fetchFeedback])
 
-  const handleReaction = (id: number, emoji: EmojiKey) => {
-    setReactions(prev => {
-      const next = { ...prev, [id]: prev[id] === emoji ? null : emoji }
+  const handleReaction = async (item: FeedbackItem, emoji: EmojiKey) => {
+    const prev = myReactions[item.id]
+    const isRemoving = prev === emoji
+
+    // 乐观更新本地选择
+    setMyReactions(cur => {
+      const next = { ...cur, [item.id]: isRemoving ? null : emoji }
       saveReactions(next)
       return next
     })
+
+    // 若切换表情，先撤销旧的
+    if (prev && !isRemoving) {
+      await fetch(`/api/feedback/${item.id}/react`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ emoji: prev, action: 'remove' }),
+      }).catch(() => {})
+    }
+
+    const resp = await fetch(`/api/feedback/${item.id}/react`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ emoji, action: isRemoving ? 'remove' : 'add' }),
+    }).catch(() => null)
+
+    if (resp?.ok) {
+      const data = await resp.json()
+      setServerReactions(cur => ({ ...cur, [item.id]: data.reactions }))
+    }
   }
 
   const handleSubmit = async () => {
     const content = text.trim()
     if (!content || submitting) return
-
-    // 若昵称未设置，先弹出昵称输入
-    if (!nickname && !showNicknameInput) {
-      setShowNicknameInput(true)
-      setTimeout(() => nicknameRef.current?.focus(), 100)
-      return
-    }
 
     const limitErr = checkRateLimit(sendTimes)
     if (limitErr) { setError(limitErr); return }
@@ -142,9 +178,16 @@ export function FeedbackWidget({ isMobileTabBar = false }: FeedbackWidgetProps) 
 
       const result = await r.json() as { ok: boolean; id: number; created_at: string }
       const optimisticItem: FeedbackItem = {
-        id: result.id, content, recalled: false, location: null, is_author: false,
+        id: result.id, content, recalled: false, location: null,
+        is_author: false, is_mine: true,
         category: activeTab, created_at: result.created_at, can_recall: isLoggedIn,
-        reply_to: replyTo ? { id: replyTo.id, content: (replyTo.content ?? '').slice(0, 80), recalled: replyTo.recalled } : null,
+        reactions: {},
+        reply_to: replyTo ? {
+          id: replyTo.id,
+          content: (replyTo.content ?? '').slice(0, 80),
+          recalled: replyTo.recalled,
+          is_author: replyTo.is_author,
+        } : null,
       }
       setItems(prev => [...prev, optimisticItem])
       scrollToBottom()
@@ -178,7 +221,6 @@ export function FeedbackWidget({ isMobileTabBar = false }: FeedbackWidgetProps) 
     finally { setRecalling(null) }
   }
 
-  // 按 category 字段过滤；聊天 tab 兜底显示未分类（旧数据无 category）
   const filteredItems = items.filter(item => {
     if (item.recalled) return activeTab === 'chat'
     if (activeTab === 'chat') return !item.category || item.category === 'chat'
@@ -214,7 +256,7 @@ export function FeedbackWidget({ isMobileTabBar = false }: FeedbackWidgetProps) 
         )}
       </button>
 
-      {/* 留言面板（底部向上滑入）*/}
+      {/* 留言面板 */}
       <div
         className={`fixed right-6 z-50 flex flex-col bg-white rounded-2xl shadow-2xl border border-gray-100 overflow-hidden transition-all duration-300 ease-out ${
           open ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4 pointer-events-none'
@@ -242,7 +284,7 @@ export function FeedbackWidget({ isMobileTabBar = false }: FeedbackWidgetProps) 
             </button>
           </div>
 
-          {/* 3 Tabs */}
+          {/* Tabs */}
           <div className="flex border-t border-gray-100">
             {TABS.map(tab => (
               <button
@@ -267,7 +309,7 @@ export function FeedbackWidget({ isMobileTabBar = false }: FeedbackWidgetProps) 
         </div>
 
         {/* 留言流 */}
-        <div ref={feedRef} className="flex-1 overflow-y-auto px-3 py-3 space-y-2">
+        <div ref={feedRef} className="flex-1 overflow-y-auto px-3 py-3 space-y-3">
           {filteredItems.length === 0 && (
             <div className="flex flex-col items-center justify-center h-full text-gray-300 text-sm gap-2">
               <span className="text-2xl opacity-50">{TABS.find(t => t.key === activeTab)?.icon}</span>
@@ -277,131 +319,123 @@ export function FeedbackWidget({ isMobileTabBar = false }: FeedbackWidgetProps) 
             </div>
           )}
 
-          {filteredItems.map(item => (
-            <div key={item.id} className="group">
-              {/* 引用块 */}
-              {item.reply_to && (
-                <div className="ml-3 mb-1 flex items-start gap-1.5">
-                  <div className="w-0.5 self-stretch bg-gray-200 rounded-full flex-shrink-0" />
-                  <p className="text-[11px] text-gray-400 leading-relaxed line-clamp-2">
-                    {item.reply_to.recalled ? '原留言已撤回' : item.reply_to.content}
-                  </p>
-                </div>
-              )}
+          {filteredItems.map(item => {
+            const isRight = item.is_author || item.is_mine
+            const reactions = serverReactions[item.id] ?? item.reactions ?? {}
 
-              {/* 消息气泡 */}
-              <div className={`rounded-xl px-3.5 py-2.5 transition-colors ${
-                item.is_author
-                  ? 'bg-blue-50 border border-blue-100'
-                  : item.recalled
-                  ? 'bg-gray-50 border border-gray-100 opacity-40'
-                  : 'bg-gray-50 border border-gray-100 hover:bg-white hover:border-gray-200'
-              }`}>
-                {/* 元信息行 */}
-                <div className="flex items-center gap-1.5 mb-1.5 flex-wrap">
-                  {item.is_author ? (
-                    <span className="text-[10px] font-bold text-white bg-blue-500 rounded-full px-1.5 py-0.5 leading-none">作者</span>
-                  ) : (
-                    <span className="text-[10px] font-medium text-gray-400">用户</span>
-                  )}
-                  <span className="text-[10px] text-gray-300">·</span>
-                  <span className="text-[10px] text-gray-400">{formatRelativeTime(item.created_at)}</span>
-                  {/* location 不再显示 */}
-                </div>
-
-                {/* 内容 */}
-                {item.recalled ? (
-                  <p className="text-xs text-gray-300 italic">此条留言已被撤回</p>
-                ) : (
-                  <p className="text-sm text-gray-700 leading-relaxed break-words">{item.content}</p>
-                )}
-
-                {/* Emoji 反应 + 操作按钮 */}
-                {!item.recalled && (
-                  <div className="flex items-center gap-1 mt-2 flex-wrap">
-                    {/* Emoji 反应 */}
-                    {EMOJIS.map(emoji => (
-                      <button
-                        key={emoji}
-                        onClick={() => handleReaction(item.id, emoji)}
-                        className={`text-sm px-1.5 py-0.5 rounded-lg transition-all ${
-                          reactions[item.id] === emoji
-                            ? 'bg-blue-100 ring-1 ring-blue-300 scale-110'
-                            : 'hover:bg-gray-100 opacity-50 hover:opacity-100'
-                        }`}
-                        title={`${emoji} 反应`}
-                      >
-                        {emoji}
-                      </button>
-                    ))}
-                    <div className="flex-1" />
-                    {/* 回复 */}
-                    <button
-                      onClick={() => { setReplyTo(item); textareaRef.current?.focus() }}
-                      className="text-[11px] text-gray-400 hover:text-blue-500 flex items-center gap-1 transition-colors"
-                    >
-                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
-                      </svg>
-                      回复
-                    </button>
-                    {item.can_recall && (
-                      <button
-                        onClick={() => handleRecall(item.id)}
-                        disabled={recalling === item.id}
-                        className="text-[11px] text-gray-300 hover:text-red-400 flex items-center gap-1 transition-colors disabled:opacity-50 ml-1"
-                      >
-                        {recalling === item.id ? '撤回中…' : '撤回'}
-                      </button>
-                    )}
+            return (
+              <div
+                key={item.id}
+                id={`msg-${item.id}`}
+                className={`flex flex-col gap-1 transition-all rounded-xl ${isRight ? 'items-end' : 'items-start'}`}
+              >
+                {/* 回复引用块 */}
+                {item.reply_to && (
+                  <div
+                    className={`flex items-start gap-1.5 max-w-[85%] cursor-pointer group/quote ${isRight ? 'flex-row-reverse' : ''}`}
+                    onClick={() => !item.reply_to!.recalled && scrollToMessage(item.reply_to!.id)}
+                  >
+                    <div className={`w-0.5 self-stretch rounded-full flex-shrink-0 ${item.reply_to.recalled ? 'bg-gray-200' : 'bg-blue-300'}`} />
+                    <div className="min-w-0">
+                      <span className={`text-[10px] font-medium ${item.reply_to.recalled ? 'text-gray-300' : 'text-blue-400 group-hover/quote:text-blue-600'}`}>
+                        ↩ 回复{item.reply_to.is_author ? ' 作者' : ''}
+                      </span>
+                      <p className="text-[11px] text-gray-400 truncate leading-relaxed">
+                        {item.reply_to.recalled ? '原留言已撤回' : item.reply_to.content}
+                      </p>
+                    </div>
                   </div>
                 )}
+
+                {/* 消息气泡 */}
+                <div className={`max-w-[85%] ${isRight ? 'items-end' : 'items-start'} flex flex-col gap-1`}>
+                  {/* 发送者标签 */}
+                  <div className={`flex items-center gap-1.5 px-1 ${isRight ? 'flex-row-reverse' : ''}`}>
+                    {item.is_author ? (
+                      <span className="text-[10px] font-bold text-white bg-blue-500 rounded-full px-1.5 py-0.5 leading-none">作者</span>
+                    ) : item.is_mine ? (
+                      <span className="text-[10px] font-medium text-indigo-500">{displayName}</span>
+                    ) : (
+                      <span className="text-[10px] font-medium text-gray-400">用户</span>
+                    )}
+                    <span className="text-[10px] text-gray-300">{formatRelativeTime(item.created_at)}</span>
+                  </div>
+
+                  {/* 气泡本体 */}
+                  <div className={`rounded-2xl px-3.5 py-2.5 transition-colors ${
+                    item.is_author
+                      ? 'bg-blue-500 text-white rounded-tr-sm'
+                      : item.is_mine
+                      ? 'bg-indigo-100 text-indigo-900 rounded-tr-sm'
+                      : item.recalled
+                      ? 'bg-gray-50 border border-gray-100 opacity-40 rounded-tl-sm'
+                      : 'bg-gray-100 text-gray-800 rounded-tl-sm hover:bg-gray-200/70'
+                  }`}>
+                    {item.recalled ? (
+                      <p className="text-xs italic opacity-60">此条留言已被撤回</p>
+                    ) : (
+                      <p className="text-sm leading-relaxed break-words">{item.content}</p>
+                    )}
+                  </div>
+
+                  {/* Emoji 反应 + 操作 */}
+                  {!item.recalled && (
+                    <div className={`flex items-center gap-1 px-1 flex-wrap ${isRight ? 'flex-row-reverse' : ''}`}>
+                      {EMOJIS.map(emoji => {
+                        const count = reactions[emoji] ?? 0
+                        const selected = myReactions[item.id] === emoji
+                        return (
+                          <button
+                            key={emoji}
+                            onClick={() => handleReaction(item, emoji)}
+                            className={`flex items-center gap-0.5 text-sm px-1.5 py-0.5 rounded-full transition-all border ${
+                              selected
+                                ? 'bg-blue-100 border-blue-300 ring-1 ring-blue-200 scale-110'
+                                : 'border-transparent hover:bg-gray-100 opacity-50 hover:opacity-100'
+                            }`}
+                          >
+                            <span>{emoji}</span>
+                            {count > 0 && <span className="text-[10px] text-gray-500 tabular-nums">{count}</span>}
+                          </button>
+                        )
+                      })}
+                      <div className={`${isRight ? 'mr-auto' : 'ml-auto'}`} />
+                      <button
+                        onClick={() => { setReplyTo(item); textareaRef.current?.focus() }}
+                        className="text-[11px] text-gray-400 hover:text-blue-500 flex items-center gap-1 transition-colors"
+                      >
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
+                        </svg>
+                        回复
+                      </button>
+                      {item.can_recall && (
+                        <button
+                          onClick={() => handleRecall(item.id)}
+                          disabled={recalling === item.id}
+                          className="text-[11px] text-gray-300 hover:text-red-400 flex items-center gap-1 transition-colors disabled:opacity-50 ml-1"
+                        >
+                          {recalling === item.id ? '撤回中…' : '撤回'}
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
-          ))}
+            )
+          })}
         </div>
 
         {/* 输入区 */}
         <div className="flex-shrink-0 border-t border-gray-100 px-4 py-3">
-          {/* 昵称设置（首次发言时） */}
-          {showNicknameInput && (
-            <div className="mb-2 flex items-center gap-2 bg-blue-50 border border-blue-100 rounded-xl px-3 py-2">
-              <span className="text-xs text-blue-600 whitespace-nowrap">昵称：</span>
-              <input
-                ref={nicknameRef}
-                value={nickname}
-                onChange={e => setNickname(e.target.value.slice(0, 20))}
-                onKeyDown={e => {
-                  if (e.key === 'Enter') {
-                    localStorage.setItem(NICKNAME_KEY, nickname || '访客')
-                    setNickname(nickname || '访客')
-                    setShowNicknameInput(false)
-                  }
-                  if (e.key === 'Escape') setShowNicknameInput(false)
-                }}
-                placeholder="起个昵称（可跳过）"
-                className="flex-1 text-xs bg-transparent focus:outline-none text-blue-700 placeholder-blue-300"
-              />
-              <button
-                onClick={() => {
-                  const name = nickname.trim() || '访客'
-                  localStorage.setItem(NICKNAME_KEY, name)
-                  setNickname(name)
-                  setShowNicknameInput(false)
-                  // 继续提交
-                  setTimeout(handleSubmit, 50)
-                }}
-                className="text-xs text-blue-600 font-semibold hover:text-blue-800"
-              >确认发送</button>
-            </div>
-          )}
-
           {/* 引用预览 */}
           {replyTo && (
             <div className="flex items-start gap-2 mb-2 px-3 py-2 bg-blue-50 rounded-xl border border-blue-100">
               <div className="w-0.5 self-stretch bg-blue-300 rounded-full flex-shrink-0" />
               <div className="flex-1 min-w-0">
-                <p className="text-[11px] font-medium text-blue-600 mb-0.5">回复</p>
+                <p className="text-[11px] font-medium text-blue-600 mb-0.5">
+                  ↩ 回复{replyTo.is_author ? ' 作者' : ''}
+                </p>
                 <p className="text-xs text-blue-500 truncate">{replyTo.content?.slice(0, 60)}</p>
               </div>
               <button onClick={() => setReplyTo(null)} className="text-blue-300 hover:text-blue-500 flex-shrink-0">
@@ -429,23 +463,8 @@ export function FeedbackWidget({ isMobileTabBar = false }: FeedbackWidgetProps) 
           <div className="flex items-center justify-between mt-2">
             <div className="flex items-center gap-2">
               <span className="text-xs text-gray-300">{text.length}/200</span>
-              {/* 昵称显示 */}
-              {nickname && (
-                <button
-                  onClick={() => setShowNicknameInput(true)}
-                  className="text-xs text-gray-400 hover:text-blue-500 transition-colors"
-                  title="点击修改昵称"
-                >
-                  as {nickname}
-                </button>
-              )}
-              {!nickname && !showNicknameInput && (
-                <button
-                  onClick={() => { setShowNicknameInput(true); setTimeout(() => nicknameRef.current?.focus(), 100) }}
-                  className="text-xs text-gray-300 hover:text-blue-400 transition-colors"
-                >
-                  + 设置昵称
-                </button>
+              {isLoggedIn && user?.email && (
+                <span className="text-xs text-gray-400">as {displayName}</span>
               )}
               {(error || limitMsg) && (
                 <span className="text-xs text-red-400">{error || limitMsg}</span>

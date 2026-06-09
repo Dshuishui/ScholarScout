@@ -1,7 +1,8 @@
 import asyncio
+import json
 import httpx
 from datetime import datetime
-from fastapi import APIRouter, Depends, Request, HTTPException
+from fastapi import APIRouter, Depends, Request, HTTPException, Body
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -16,6 +17,16 @@ from jose import JWTError
 router = APIRouter()
 
 AUTHOR_EMAIL = "dshuishui168@gmail.com"
+VALID_EMOJIS = {'👍', '❤️', '😂', '🤔'}
+
+
+def _parse_reactions(raw: str | None) -> dict:
+    if not raw:
+        return {}
+    try:
+        return json.loads(raw)
+    except Exception:
+        return {}
 RECALL_WINDOW = 300  # 5 minutes
 optional_bearer = HTTPBearer(auto_error=False)
 
@@ -78,8 +89,10 @@ async def get_feedback(
             "recalled": bool(row.recalled),
             "location": row.location,
             "is_author": bool(row.is_author),
+            "is_mine": current_user_id is not None and row.user_id == current_user_id,
             "category": row.category or 'chat',
             "created_at": row.created_at.isoformat(),
+            "reactions": _parse_reactions(row.reactions_json),
             "can_recall": (
                 current_user_id is not None
                 and row.user_id == current_user_id
@@ -91,6 +104,7 @@ async def get_feedback(
                     "id": reply_map[row.reply_to_id].id,
                     "content": (reply_map[row.reply_to_id].content or "")[:80],
                     "recalled": bool(reply_map[row.reply_to_id].recalled),
+                    "is_author": bool(reply_map[row.reply_to_id].is_author),
                 }
                 if row.reply_to_id and row.reply_to_id in reply_map
                 else None
@@ -188,3 +202,30 @@ async def recall_feedback(
     msg.recalled = 1
     await db.commit()
     return {"recalled": True}
+
+
+class ReactRequest(BaseModel):
+    emoji: str
+    action: str  # "add" | "remove"
+
+
+@router.patch("/{msg_id}/react", status_code=200)
+async def react_feedback(
+    msg_id: int,
+    req: ReactRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    if req.emoji not in VALID_EMOJIS or req.action not in ('add', 'remove'):
+        raise HTTPException(status_code=400, detail="Invalid emoji or action")
+
+    result = await db.execute(select(Feedback).where(Feedback.id == msg_id))
+    msg = result.scalar_one_or_none()
+    if not msg:
+        raise HTTPException(status_code=404, detail="留言不存在")
+
+    reactions = _parse_reactions(msg.reactions_json)
+    count = reactions.get(req.emoji, 0)
+    reactions[req.emoji] = max(0, count + (1 if req.action == 'add' else -1))
+    msg.reactions_json = json.dumps(reactions, ensure_ascii=False)
+    await db.commit()
+    return {"reactions": reactions}

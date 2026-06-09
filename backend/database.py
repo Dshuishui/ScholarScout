@@ -31,6 +31,7 @@ async def init_db():
             # subscriptions 表由 create_all 自动创建，无需手动迁移
             # subscription_queue 表由 create_all 自动创建
             "ALTER TABLE subscriptions ADD COLUMN daily_limit INTEGER DEFAULT 1",
+            "ALTER TABLE feedback ADD COLUMN reactions_json TEXT DEFAULT '{}'",
         ]:
             try:
                 await conn.execute(text(sql))

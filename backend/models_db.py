@@ -44,6 +44,7 @@ class Feedback(Base):
     reply_to_id = Column(Integer, nullable=True)
     recalled = Column(Integer, default=0)
     category = Column(String(20), nullable=True, default='chat')
+    reactions_json = Column(Text, nullable=True, default='{}')
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
