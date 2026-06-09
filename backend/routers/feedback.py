@@ -2,7 +2,7 @@ import asyncio
 import json
 import httpx
 from datetime import datetime
-from fastapi import APIRouter, Depends, Request, HTTPException, Body
+from fastapi import APIRouter, Depends, Request, HTTPException
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -27,6 +27,8 @@ def _parse_reactions(raw: str | None) -> dict:
         return json.loads(raw)
     except Exception:
         return {}
+
+
 RECALL_WINDOW = 300  # 5 minutes
 optional_bearer = HTTPBearer(auto_error=False)
 
