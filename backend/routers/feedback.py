@@ -83,6 +83,15 @@ async def get_feedback(
         for row in r2.scalars():
             reply_map[row.id] = row
 
+    # 批量查询发送者邮箱前缀
+    user_ids = {item.user_id for item in items if item.user_id}
+    user_name_map: dict[int, str] = {}
+    if user_ids:
+        u_result = await db.execute(select(User).where(User.id.in_(user_ids)))
+        for u in u_result.scalars():
+            if u.email:
+                user_name_map[u.id] = u.email.split('@')[0]
+
     now = datetime.utcnow()
     return [
         {
@@ -92,6 +101,7 @@ async def get_feedback(
             "location": row.location,
             "is_author": bool(row.is_author),
             "is_mine": current_user_id is not None and row.user_id == current_user_id,
+            "sender_name": user_name_map.get(row.user_id) if row.user_id else None,
             "category": row.category or 'chat',
             "created_at": row.created_at.isoformat(),
             "reactions": _parse_reactions(row.reactions_json),

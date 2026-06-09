@@ -26,6 +26,7 @@ interface FeedbackItem {
   location: string | null
   is_author: boolean
   is_mine: boolean
+  sender_name: string | null
   category: Category
   created_at: string
   can_recall: boolean
@@ -179,7 +180,7 @@ export function FeedbackWidget({ isMobileTabBar = false }: FeedbackWidgetProps) 
       const result = await r.json() as { ok: boolean; id: number; created_at: string }
       const optimisticItem: FeedbackItem = {
         id: result.id, content, recalled: false, location: null,
-        is_author: false, is_mine: true,
+        is_author: false, is_mine: true, sender_name: displayName,
         category: activeTab, created_at: result.created_at, can_recall: isLoggedIn,
         reactions: {},
         reply_to: replyTo ? {
@@ -355,8 +356,10 @@ export function FeedbackWidget({ isMobileTabBar = false }: FeedbackWidgetProps) 
                       <span className="text-[10px] font-bold text-white bg-blue-500 rounded-full px-1.5 py-0.5 leading-none">作者</span>
                     ) : item.is_mine ? (
                       <span className="text-[10px] font-medium text-indigo-500">{displayName}</span>
+                    ) : item.sender_name ? (
+                      <span className="text-[10px] font-medium text-gray-400">{item.sender_name}</span>
                     ) : (
-                      <span className="text-[10px] font-medium text-gray-400">用户</span>
+                      <span className="text-[10px] font-medium text-gray-300">匿名</span>
                     )}
                     <span className="text-[10px] text-gray-300">{formatRelativeTime(item.created_at)}</span>
                   </div>
