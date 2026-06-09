@@ -74,11 +74,6 @@ export function SubscriptionsPage({ token, onClose, initialExpandId }: Props) {
       .finally(() => setLoading(false))
   }, [token]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // 有 initialExpandId 时，subs 加载完自动拉取队列
-  useEffect(() => {
-    if (initialExpandId && !loading) fetchQueue(initialExpandId)
-  }, [initialExpandId, loading]) // eslint-disable-line react-hooks/exhaustive-deps
-
   const fetchQueue = useCallback(async (subId: number) => {
     setQueueLoading(subId)
     try {
@@ -93,6 +88,11 @@ export function SubscriptionsPage({ token, onClose, initialExpandId }: Props) {
       setQueueLoading(null)
     }
   }, [token])
+
+  // 有 initialExpandId 时，subs 加载完自动拉取队列
+  useEffect(() => {
+    if (initialExpandId && !loading) fetchQueue(initialExpandId)
+  }, [initialExpandId, loading]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const toggleExpand = (subId: number) => {
     if (expandedId === subId) {

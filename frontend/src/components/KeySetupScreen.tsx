@@ -15,9 +15,8 @@ interface Props {
 function useTypewriter(text: string, startDelay: number, speed = 70) {
   const [displayed, setDisplayed] = useState('')
   useEffect(() => {
-    let t: ReturnType<typeof setTimeout>
     let iv: ReturnType<typeof setInterval>
-    t = setTimeout(() => {
+    const t = setTimeout(() => {
       let i = 0
       iv = setInterval(() => { i++; setDisplayed(text.slice(0, i)); if (i >= text.length) clearInterval(iv) }, speed)
     }, startDelay)
@@ -77,7 +76,7 @@ export function KeySetupScreen({ onKeySubmit, onGuestEnter }: Props) {
   const line1 = useTypewriter(LINE1, 400)
   const line2 = useTypewriter(LINE2, L1_END + 180)
 
-  const useSavedKey = (key: string) => {
+  const selectSavedKey = (key: string) => {
     persistKey(key)
     onKeySubmit(key)
   }
@@ -366,7 +365,7 @@ export function KeySetupScreen({ onKeySubmit, onGuestEnter }: Props) {
                         {maskKey(key)}
                       </span>
                       <button
-                        onClick={() => useSavedKey(key)}
+                        onClick={() => selectSavedKey(key)}
                         className="text-xs text-blue-600 hover:text-blue-800 font-medium px-1.5 flex-shrink-0"
                       >
                         使用

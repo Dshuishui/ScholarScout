@@ -61,6 +61,7 @@ interface DownloadProgress {
 }
 
 function sanitizeFilename(title: string): string {
+  // eslint-disable-next-line no-control-regex
   return title.replace(/[<>:"/\\|?*\x00-\x1f]/g, '').trim().slice(0, 80)
 }
 
@@ -245,7 +246,7 @@ export function ResultsPanel({ papers, rejectedPapers = [], isLoading, statusMes
       .then(r => r.json())
       .then((data: { id: number; keywords: string[] }[]) => setSubscriptions(Array.isArray(data) ? data : []))
       .catch(() => {})
-  }, [isLoggedIn, token]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [isLoggedIn, token])
 
   const isSubscribed = confirmedKeywords != null && subscriptions.some(
     s => JSON.stringify([...s.keywords].sort()) === JSON.stringify([...confirmedKeywords].sort())
@@ -477,7 +478,7 @@ const addKeyword = () => {
   const togglePaper = (id: string) => {
     setSelectedIds(prev => {
       const next = new Set(prev)
-      next.has(id) ? next.delete(id) : next.add(id)
+      if (next.has(id)) { next.delete(id) } else { next.add(id) }
       return next
     })
   }
@@ -1122,7 +1123,7 @@ const addKeyword = () => {
             const isCollapsed = collapsedGroups.has(source)
             const toggleCollapse = () => setCollapsedGroups(prev => {
               const next = new Set(prev)
-              next.has(source) ? next.delete(source) : next.add(source)
+              if (next.has(source)) { next.delete(source) } else { next.add(source) }
               return next
             })
             return (

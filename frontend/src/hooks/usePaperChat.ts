@@ -24,7 +24,7 @@ export function usePaperChat(apiKey: string, model: string = 'deepseek-v4-flash'
       for (const key of Object.keys(localStorage)) {
         if (key.startsWith('ss_pdf_')) localStorage.removeItem(key)
       }
-    } catch {}
+    } catch { /* noop: localStorage may be unavailable */ }
   }, [])
 
   // 从后端加载对话记录和 PDF 文本（登录后恢复）
