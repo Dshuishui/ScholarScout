@@ -175,9 +175,9 @@ export function MainLayout({ apiKey, onClearKey }: Props) {
             </button>
           )}
           <button
-            onClick={() => setActivePage(null)}
+            onClick={() => { setActivePage(null); onClearKey() }}
             className="flex items-center gap-2 rounded hover:opacity-80 transition-opacity"
-            title="回到主页"
+            title="回到封面"
           >
             <div
               className="w-6 h-6 rounded-md flex items-center justify-center flex-shrink-0"
