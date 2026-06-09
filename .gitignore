@@ -8,4 +8,5 @@ node_modules/
 frontend/dist/
 docs/promotion.md
 backend/scholarscout.db
+backend/chroma_db/
 context/
