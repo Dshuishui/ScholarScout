@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react'
 import { getSessions, deleteSession } from '../api/client'
-import { useAuth } from '../hooks/useAuth'
 import type { SearchSessionItem } from '../types'
 
 interface Props {
@@ -25,8 +24,7 @@ function timeAgo(iso: string): string {
 }
 
 export function SessionsPage({ token, onClose, onLoad }: Props) {
-  const { sessionExpired } = useAuth()
-  const [sessions, setSessions] = useState<SearchSessionItem[]>([])
+const [sessions, setSessions] = useState<SearchSessionItem[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(false)
   const [expanded, setExpanded] = useState<number | null>(null)
