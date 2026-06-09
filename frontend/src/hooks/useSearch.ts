@@ -30,6 +30,7 @@ export function useSearch(apiKey: string, settings: SearchSettings, model?: stri
   const [statusMessage, setStatusMessage] = useState('')
   const [lastConfirmed, setLastConfirmed] = useState<PendingSearch | null>(null)
   const [sourceStatuses, setSourceStatuses] = useState<Record<string, SourceStatus>>({})
+  const [searchDateRange, setSearchDateRange] = useState<{ from: string | null; to: string | null } | null>(null)
   const [hasSearchError, setHasSearchError] = useState(false)
   const { history, addHistory, removeHistory } = useSearchHistory()
   const { token, decrementFreeSearches } = useAuth()
@@ -62,6 +63,7 @@ export function useSearch(apiKey: string, settings: SearchSettings, model?: stri
           setPapers([])
           setRejectedPapers([])
           setSourceStatuses({})
+          setSearchDateRange({ from: event.date_from ?? null, to: event.date_to ?? null })
           const init: Record<string, SourceStatus> = {}
           event.sources.forEach(s => { init[s] = { status: 'pending', count: 0 } })
           setSourceStatuses(init)
@@ -210,6 +212,7 @@ export function useSearch(apiKey: string, settings: SearchSettings, model?: stri
     isLoading,
     statusMessage,
     sourceStatuses,
+    searchDateRange,
     search,
     confirmedKeywords: lastConfirmed?.keywords ?? null,
     reSearch: lastConfirmed ? reSearch : undefined,

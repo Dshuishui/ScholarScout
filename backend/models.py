@@ -38,6 +38,8 @@ class Paper(BaseModel):
     source: str
     citations: int = 0
     relevance_reason: Optional[str] = None
+    relevance_score: Optional[float] = None
+    tldr: Optional[str] = None
     source_links: list[dict] = []   # [{"source": "arXiv", "url": "..."}]
     venue: Optional[str] = None
     fallback_links: list[dict] = [] # [{"name": "Sci-Hub", "url": "..."}]，无 PDF 时的备用查找入口

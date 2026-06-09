@@ -182,8 +182,16 @@ export function PaperCard({ paper, selected = false, onToggle, isRejected = fals
             )}
           </div>
 
-          {/* P1: Compact mode — always show 1-line relevance reason preview */}
-          {compact && !expanded && paper.relevance_reason && !isRejected && (
+          {/* TLDR — 针对用户问题的一句话核心发现 */}
+          {paper.tldr && !isRejected && (
+            <div className="flex items-start gap-1 mb-2">
+              <span className="text-indigo-400 flex-shrink-0 text-xs mt-0.5 font-bold">TL;DR</span>
+              <p className="text-xs text-indigo-700/80 leading-relaxed">{paper.tldr}</p>
+            </div>
+          )}
+
+          {/* P1: Compact mode — show relevance reason only if no tldr */}
+          {compact && !expanded && paper.relevance_reason && !paper.tldr && !isRejected && (
             <div className="flex items-start gap-1 mb-2">
               <span className="text-blue-400 flex-shrink-0 text-xs mt-0.5">✦</span>
               <p className="text-xs text-blue-600/90 line-clamp-1 leading-relaxed">{paper.relevance_reason}</p>

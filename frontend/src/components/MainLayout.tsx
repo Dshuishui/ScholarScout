@@ -36,7 +36,7 @@ export function MainLayout({ apiKey, onClearKey }: Props) {
   const {
     messages, papers, rejectedPapers, isLoading, statusMessage, sourceStatuses,
     search, confirmedKeywords, reSearch,
-    hasSearchError, history, removeHistory, searchFromHistory,
+    hasSearchError, history, removeHistory, searchFromHistory, searchDateRange,
   } = useSearch(apiKey, settings, model)
 
   const [activePaper, setActivePaper] = useState<Paper | null>(null)
@@ -273,6 +273,7 @@ export function MainLayout({ apiKey, onClearKey }: Props) {
             apiKey={apiKey}
             getMessages={getMessages}
             hasSearchError={hasSearchError}
+            searchDateRange={searchDateRange}
           />
         </div>
       </div>

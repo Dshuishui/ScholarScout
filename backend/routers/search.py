@@ -138,7 +138,11 @@ async def search(
 
             # Notify frontend which sources will be searched
             source_names = get_source_names(request.sources)
-            yield sse("search_start", {"sources": source_names})
+            yield sse("search_start", {
+                "sources": source_names,
+                "date_from": parsed.date_from,
+                "date_to": parsed.date_to,
+            })
 
             # Collect per-source completion events via queue
             source_queue: asyncio.Queue = asyncio.Queue()

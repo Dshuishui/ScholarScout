@@ -48,6 +48,7 @@ interface Props {
   apiKey?: string
   getMessages?: (paperId: string) => ChatMessage[]
   hasSearchError?: boolean
+  searchDateRange?: { from: string | null; to: string | null } | null
 }
 
 interface DownloadProgress {
@@ -181,7 +182,7 @@ function Pagination({ current, total, onChange }: {
   )
 }
 
-export function ResultsPanel({ papers, rejectedPapers = [], isLoading, statusMessage, sourceStatuses = {}, settings, onSettingsChange, onReSearch, confirmedKeywords, onAnalyzePaper, onExampleSearch, apiKey, getMessages, hasSearchError = false }: Props) {
+export function ResultsPanel({ papers, rejectedPapers = [], isLoading, statusMessage, sourceStatuses = {}, settings, onSettingsChange, onReSearch, confirmedKeywords, onAnalyzePaper, onExampleSearch, apiKey, getMessages, hasSearchError = false, searchDateRange }: Props) {
   const [currentPage, setCurrentPage] = useState(1)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [downloadProgress, setDownloadProgress] = useState<DownloadProgress | null>(null)
@@ -381,8 +382,8 @@ export function ResultsPanel({ papers, rejectedPapers = [], isLoading, statusMes
   )
 
   const sortedPapers = useMemo(() => {
-    if (sortBy === 'relevance') return activePapers
     return [...activePapers].sort((a, b) => {
+      if (sortBy === 'relevance') return (b.relevance_score ?? 0) - (a.relevance_score ?? 0)
       if (sortBy === 'citations') return b.citations - a.citations
       const da = a.published_date ?? ''
       const db = b.published_date ?? ''
@@ -706,8 +707,13 @@ const addKeyword = () => {
             )}
           </div>
 
-          {/* 右侧：订阅按钮 + 说明 */}
+          {/* 右侧：日期范围 + 订阅按钮 */}
           <div className="flex-shrink-0 flex flex-col items-end gap-0.5">
+            {searchDateRange && (
+              <span className="text-[11px] text-gray-400 tabular-nums">
+                {searchDateRange.from?.slice(0, 4) ?? '…'}–{searchDateRange.to?.slice(0, 4) ?? String(new Date().getFullYear())} 年
+              </span>
+            )}
             <button
               onClick={isLoggedIn ? handleSubscribe : () => setShowAuthModal(true)}
               disabled={subLoading || isSubscribed}

@@ -10,6 +10,8 @@ export interface Paper {
   source: string
   citations: number
   relevance_reason?: string
+  relevance_score?: number
+  tldr?: string
   source_links?: { source: string; url: string }[]
   venue?: string
   fallback_links?: { name: string; url: string }[]
@@ -59,6 +61,8 @@ export type SearchPdfUpdateEvent = {
 export type SearchStartEvent = {
   type: 'search_start'
   sources: string[]
+  date_from?: string | null
+  date_to?: string | null
 }
 
 export type SourceDoneEvent = {
