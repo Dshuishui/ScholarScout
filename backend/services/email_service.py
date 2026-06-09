@@ -156,6 +156,74 @@ async def send_verification_email(to_email: str, verify_url: str) -> bool:
         return False
 
 
+async def send_reset_password_email(to_email: str, reset_url: str) -> bool:
+    """发送密码重置邮件。"""
+    if not SMTP_USER or not SMTP_PASS:
+        logger.warning("SMTP not configured, skipping reset email to %s", to_email)
+        return False
+
+    html_body = f"""<!DOCTYPE html>
+<html lang="zh-CN">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="font-family:-apple-system,Arial,sans-serif;max-width:600px;margin:0 auto;padding:24px;color:#111827;background:#f9fafb;">
+<div style="background:#fff;border-radius:16px;padding:28px;box-shadow:0 1px 3px rgba(0,0,0,0.08);">
+
+  <div style="margin-bottom:24px;padding-bottom:16px;border-bottom:1px solid #e5e7eb;">
+    <div style="font-size:20px;font-weight:700;color:#4f46e5;">ScholarScout</div>
+    <div style="color:#6b7280;font-size:13px;">AI 学术论文搜索</div>
+  </div>
+
+  <div style="font-size:16px;font-weight:600;color:#111827;margin-bottom:8px;">重置您的密码</div>
+  <p style="font-size:14px;color:#374151;line-height:1.7;margin-bottom:20px;">
+    我们收到了您的密码重置请求。点击下方按钮设置新密码，链接
+    <strong>1 小时</strong>内有效。
+  </p>
+
+  <div style="text-align:center;margin-bottom:24px;">
+    <a href="{reset_url}"
+       style="display:inline-block;background:#4f46e5;color:#fff;font-size:14px;font-weight:600;
+              padding:12px 32px;border-radius:10px;text-decoration:none;">
+      重置密码
+    </a>
+  </div>
+
+  <div style="background:#f3f4f6;border-radius:8px;padding:12px 16px;margin-bottom:20px;">
+    <p style="font-size:12px;color:#6b7280;margin:0;">
+      如果按钮无法点击，请复制以下链接到浏览器：<br>
+      <span style="color:#4f46e5;word-break:break-all;">{reset_url}</span>
+    </p>
+  </div>
+
+  <div style="font-size:12px;color:#9ca3af;border-top:1px solid #e5e7eb;padding-top:16px;">
+    如果您没有申请重置密码，请忽略此邮件，您的账号不会受到影响。
+  </div>
+</div>
+</body>
+</html>"""
+
+    msg = MIMEMultipart("alternative")
+    msg["Subject"] = "重置您的 ScholarScout 密码"
+    msg["From"] = f"{SMTP_FROM_NAME} <{SMTP_USER}>"
+    msg["To"] = to_email
+    msg["Date"] = formatdate(localtime=True)
+    msg.attach(MIMEText(html_body, "html", "utf-8"))
+
+    try:
+        await aiosmtplib.send(
+            msg,
+            hostname=SMTP_HOST,
+            port=SMTP_PORT,
+            use_tls=True,
+            username=SMTP_USER,
+            password=SMTP_PASS,
+        )
+        logger.info("Reset password email sent to %s", to_email)
+        return True
+    except Exception as e:
+        logger.error("Failed to send reset email to %s: %s", to_email, e)
+        return False
+
+
 async def send_feedback_notification(content: str, location: str | None, category: str) -> bool:
     """有新用户留言时通知作者。"""
     NOTIFY_TO = "dyucong@email.ncu.edu.cn"

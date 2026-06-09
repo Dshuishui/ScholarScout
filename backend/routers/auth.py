@@ -11,9 +11,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from database import get_db
-from models_db import User
+from models_db import User, PasswordResetToken
 from services.auth_service import hash_password, verify_password, create_access_token
-from services.email_service import send_verification_email
+from services.email_service import send_verification_email, send_reset_password_email
 from dependencies import get_current_user
 from config import FREE_SEARCHES_QUOTA, APP_BASE_URL, DEEPSEEK_SYSTEM_KEY
 
@@ -24,6 +24,7 @@ router = APIRouter()
 _register_attempts: dict[str, list[float]] = defaultdict(list)  # IP → 注册时间戳
 _login_failures: dict[str, list[float]] = defaultdict(list)     # IP → 登录失败时间戳
 _resend_attempts: dict[str, list[float]] = defaultdict(list)    # email → 重发时间戳
+_reset_attempts: dict[str, list[float]] = defaultdict(list)     # IP → 重置密码请求时间戳
 
 def _rate_ok(store: dict, key: str, limit: int, window_sec: int) -> bool:
     """检查是否在限额内。是则记录并返回 True；否则返回 False。"""
@@ -54,6 +55,13 @@ class LoginRequest(BaseModel):
 
 class ResendRequest(BaseModel):
     email: EmailStr
+
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+class ResetPasswordRequest(BaseModel):
+    token: str = Field(min_length=1, max_length=100)
+    new_password: str = Field(min_length=8, max_length=100)
 
 
 # ── 辅助：生成验证 token ───────────────────────────────────────────────────────
@@ -199,6 +207,64 @@ async def resend_verification(req: ResendRequest, db: AsyncSession = Depends(get
     verify_url = f"{APP_BASE_URL}/?verify={token}"
     await send_verification_email(user.email, verify_url)
     return {"message": "如果该邮箱存在且尚未验证，验证邮件已重新发送"}
+
+
+@router.post("/forgot-password")
+async def forgot_password(
+    req: ForgotPasswordRequest,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    ip = _get_ip(request)
+    if not _rate_ok(_reset_attempts, ip, limit=3, window_sec=3600):
+        raise HTTPException(status_code=429, detail="请求过于频繁，请 1 小时后再试")
+
+    result = await db.execute(select(User).where(User.email == req.email))
+    user = result.scalar_one_or_none()
+
+    # 无论用户存不存在都返回相同文案（防枚举）
+    if not user or not user.is_verified:
+        return {"message": "如果该邮箱已注册，重置链接已发送，请查收"}
+
+    token = secrets.token_urlsafe(32)
+    expires = datetime.utcnow() + timedelta(hours=1)
+    db.add(PasswordResetToken(user_id=user.id, token=token, expires_at=expires))
+    await db.commit()
+
+    reset_url = f"{APP_BASE_URL}/?reset={token}"
+    import asyncio
+    asyncio.create_task(send_reset_password_email(user.email, reset_url))
+    return {"message": "如果该邮箱已注册，重置链接已发送，请查收"}
+
+
+@router.post("/reset-password")
+async def reset_password(req: ResetPasswordRequest, db: AsyncSession = Depends(get_db)):
+    if not req.token or len(req.token) > 100:
+        raise HTTPException(status_code=400, detail="无效的重置链接")
+
+    result = await db.execute(
+        select(PasswordResetToken).where(PasswordResetToken.token == req.token)
+    )
+    record = result.scalar_one_or_none()
+
+    if not record:
+        raise HTTPException(status_code=400, detail="重置链接无效或已使用")
+    if record.used:
+        raise HTTPException(status_code=400, detail="重置链接已使用，请重新申请")
+    if record.expires_at < datetime.utcnow():
+        raise HTTPException(status_code=400, detail="重置链接已过期（有效期 1 小时），请重新申请")
+
+    user_res = await db.execute(select(User).where(User.id == record.user_id))
+    user = user_res.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=400, detail="用户不存在")
+
+    user.password_hash = hash_password(req.new_password)
+    record.used = True
+    await db.commit()
+
+    access_token = create_access_token(user.id)
+    return {"access_token": access_token, "token_type": "bearer", "message": "密码重置成功"}
 
 
 @router.get("/me")

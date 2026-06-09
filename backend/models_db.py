@@ -83,6 +83,17 @@ class SubscriptionQueueItem(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
+class PasswordResetToken(Base):
+    """密码重置令牌：独立表，无需修改 users 表结构。"""
+    __tablename__ = "password_reset_tokens"
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, nullable=False, index=True)
+    token = Column(String(64), unique=True, nullable=False)
+    expires_at = Column(DateTime, nullable=False)
+    used = Column(Boolean, default=False, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
 class SearchSession(Base):
     """搜索快照：保存用户每次搜索的关键词、结果和多论文分析。"""
     __tablename__ = "search_sessions"

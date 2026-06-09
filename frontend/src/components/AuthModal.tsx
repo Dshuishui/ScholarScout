@@ -16,11 +16,16 @@ export function AuthModal({ onClose, defaultTab = 'login' }: Props) {
   const [sentEmail, setSentEmail] = useState<string | null>(null)
   const [resendLoading, setResendLoading] = useState(false)
   const [resendMsg, setResendMsg] = useState('')
+  // 忘记密码流程
+  const [forgotMode, setForgotMode] = useState(false)
+  const [forgotEmail, setForgotEmail] = useState('')
+  const [forgotSent, setForgotSent] = useState(false)
+  const [forgotLoading, setForgotLoading] = useState(false)
 
   const { login, register, resendVerification } = useAuth()
   const inputRef = useRef<HTMLInputElement>(null)
 
-  useEffect(() => { inputRef.current?.focus() }, [tab])
+  useEffect(() => { inputRef.current?.focus() }, [tab, forgotMode])
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -59,6 +64,30 @@ export function AuthModal({ onClose, defaultTab = 'login' }: Props) {
       setError(err instanceof Error ? err.message : '操作失败')
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleForgot = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!forgotEmail.trim() || forgotLoading) return
+    setForgotLoading(true)
+    setError('')
+    try {
+      const r = await fetch('/api/auth/forgot-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: forgotEmail.trim() }),
+      })
+      if (!r.ok) {
+        const data = await r.json()
+        setError(data.detail || '请求失败，请重试')
+        return
+      }
+      setForgotSent(true)
+    } catch {
+      setError('网络错误，请重试')
+    } finally {
+      setForgotLoading(false)
     }
   }
 
@@ -123,6 +152,65 @@ export function AuthModal({ onClose, defaultTab = 'login' }: Props) {
               </button>
             </div>
           </div>
+        </div>
+      </div>
+    )
+  }
+
+  // ── 忘记密码：发送重置邮件 ────────────────────────────────────────────────
+  if (forgotMode) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={onClose}>
+        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm mx-4 p-8" onClick={e => e.stopPropagation()}>
+          {forgotSent ? (
+            <div className="text-center">
+              <div className="w-14 h-14 rounded-full bg-green-50 border border-green-100 flex items-center justify-center mx-auto mb-4">
+                <svg className="w-7 h-7 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8}
+                    d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                </svg>
+              </div>
+              <h3 className="text-base font-semibold text-gray-800 mb-2">重置邮件已发送</h3>
+              <p className="text-sm text-gray-500 leading-relaxed mb-1">如果该邮箱已注册，重置链接已发送至</p>
+              <p className="text-sm font-medium text-indigo-600 mb-4 break-all">{forgotEmail}</p>
+              <p className="text-xs text-gray-400 mb-5">链接 1 小时内有效，请尽快操作。</p>
+              <button
+                onClick={() => { setForgotMode(false); setForgotSent(false); setForgotEmail('') }}
+                className="w-full text-sm text-gray-600 hover:text-gray-800 border border-gray-200 rounded-xl py-2.5 transition-colors"
+              >返回登录</button>
+            </div>
+          ) : (
+            <>
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-sm font-semibold text-gray-800">重置密码</h3>
+                <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none">×</button>
+              </div>
+              <p className="text-xs text-gray-500 mb-4 leading-relaxed">输入注册时使用的邮箱，我们将发送密码重置链接。</p>
+              <form onSubmit={handleForgot} className="flex flex-col gap-4">
+                <input
+                  ref={inputRef}
+                  type="email"
+                  placeholder="注册邮箱"
+                  value={forgotEmail}
+                  onChange={e => { setForgotEmail(e.target.value); setError('') }}
+                  required
+                  className="border border-gray-200 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                {error && <p className="text-red-500 text-xs bg-red-50 rounded-lg px-3 py-2">{error}</p>}
+                <button
+                  type="submit"
+                  disabled={forgotLoading}
+                  className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-lg py-2.5 text-sm font-semibold transition-colors"
+                >
+                  {forgotLoading ? '发送中…' : '发送重置链接'}
+                </button>
+              </form>
+              <button
+                onClick={() => { setForgotMode(false); setError('') }}
+                className="w-full text-center text-xs text-gray-400 hover:text-gray-600 mt-3 transition-colors"
+              >← 返回登录</button>
+            </>
+          )}
         </div>
       </div>
     )
@@ -198,6 +286,15 @@ export function AuthModal({ onClose, defaultTab = 'login' }: Props) {
           >
             {loading ? '请稍候…' : tab === 'login' ? '登录' : '注册'}
           </button>
+          {tab === 'login' && (
+            <button
+              type="button"
+              onClick={() => { setForgotMode(true); setForgotEmail(email); setError('') }}
+              className="text-center text-xs text-gray-400 hover:text-blue-500 transition-colors mt-1"
+            >
+              忘记密码？
+            </button>
+          )}
         </form>
       </div>
     </div>
