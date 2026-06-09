@@ -12,7 +12,7 @@ import { useIsMobile } from '../hooks/useIsMobile'
 import { UserMenu } from './UserMenu'
 import { SavedPage } from '../pages/SavedPage'
 import { HistoryPage } from '../pages/HistoryPage'
-import { SubscriptionsPage } from '../pages/SubscriptionsPage'
+const SubscriptionsPage = lazy(() => import('../pages/SubscriptionsPage').then(m => ({ default: m.SubscriptionsPage })))
 import { FeedbackWidget } from './FeedbackWidget'
 import { RedPandaWidget } from './RedPandaWidget'
 
@@ -29,6 +29,7 @@ export function MainLayout({ apiKey, onClearKey }: Props) {
   const { token, isLoggedIn } = useAuth()
   const isMobile = useIsMobile()
   const [activePage, setActivePage] = useState<'saved' | 'history' | 'subscriptions' | null>(null)
+  const [expandSubId, setExpandSubId] = useState<number | null>(null)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [mobileTab, setMobileTab] = useState<'search' | 'results'>('search')
 
@@ -50,9 +51,13 @@ export function MainLayout({ apiKey, onClearKey }: Props) {
   // 支持子组件通过 custom event 打开页面（如订阅成功后跳转订阅管理）
   useEffect(() => {
     const handler = (e: Event) => {
-      const page = (e as CustomEvent<string>).detail
+      const detail = (e as CustomEvent).detail
+      const page = typeof detail === 'string' ? detail : detail?.page
       if (page === 'subscriptions' || page === 'saved' || page === 'history') {
         setActivePage(page as 'saved' | 'history' | 'subscriptions')
+        if (page === 'subscriptions' && detail?.expandId) {
+          setExpandSubId(detail.expandId)
+        }
       }
     }
     window.addEventListener('navigate:page', handler)
@@ -348,7 +353,9 @@ export function MainLayout({ apiKey, onClearKey }: Props) {
       )}
       {activePage === 'subscriptions' && token && (
         <div className="fixed inset-0 z-40 bg-white">
-          <SubscriptionsPage token={token} onClose={() => setActivePage(null)} />
+          <Suspense fallback={null}>
+            <SubscriptionsPage token={token} onClose={() => { setActivePage(null); setExpandSubId(null) }} initialExpandId={expandSubId ?? undefined} />
+          </Suspense>
         </div>
       )}
     </div>

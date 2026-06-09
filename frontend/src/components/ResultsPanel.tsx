@@ -211,6 +211,7 @@ export function ResultsPanel({ papers, rejectedPapers = [], isLoading, statusMes
   const [subLoading, setSubLoading] = useState(false)
   const [showSubModal, setShowSubModal] = useState(false)
   const [subModalKeywords, setSubModalKeywords] = useState<string[]>([])
+  const [newSubId, setNewSubId] = useState<number | null>(null)
   const [showCompare, setShowCompare] = useState(false)
   const [showAuthModal, setShowAuthModal] = useState(false)
   const [showExportModal, setShowExportModal] = useState(false)
@@ -258,6 +259,7 @@ export function ResultsPanel({ papers, rejectedPapers = [], isLoading, statusMes
         const sub: { id: number; keywords: string[] } = await r.json()
         setSubscriptions(prev => [...prev, sub])
         setSubModalKeywords(confirmedKeywords)
+        setNewSubId(sub.id)
         setShowSubModal(true)
       }
     } finally {
@@ -1303,7 +1305,7 @@ const addKeyword = () => {
               <button
                 onClick={() => {
                   setShowSubModal(false)
-                  window.dispatchEvent(new CustomEvent('navigate:page', { detail: 'subscriptions' }))
+                  window.dispatchEvent(new CustomEvent('navigate:page', { detail: { page: 'subscriptions', expandId: newSubId } }))
                 }}
                 className="flex-1 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl py-2 transition-colors"
               >

@@ -17,11 +17,15 @@ interface QueueItem {
   paper_id: string | null
   planned_date: string   // YYYY-MM-DD
   sent_at: string | null
+  source: string | null
+  year: string | null
+  citations: number | null
 }
 
 interface Props {
   token: string
   onClose: () => void
+  initialExpandId?: number
 }
 
 function formatDate(iso: string | null) {
@@ -45,7 +49,7 @@ function tomorrow() {
   return d.toLocaleDateString('zh-CN', { month: 'long', day: 'numeric' })
 }
 
-export function SubscriptionsPage({ token, onClose }: Props) {
+export function SubscriptionsPage({ token, onClose, initialExpandId }: Props) {
   const { sessionExpired } = useAuth()
   const [subs, setSubs] = useState<Subscription[]>([])
   const [loading, setLoading] = useState(true)
@@ -53,7 +57,7 @@ export function SubscriptionsPage({ token, onClose }: Props) {
   const [deletingId, setDeletingId] = useState<number | null>(null)
 
   // 队列展开状态
-  const [expandedId, setExpandedId] = useState<number | null>(null)
+  const [expandedId, setExpandedId] = useState<number | null>(initialExpandId ?? null)
   const [queues, setQueues] = useState<Record<number, QueueItem[]>>({})
   const [queueLoading, setQueueLoading] = useState<number | null>(null)
   const [refreshingId, setRefreshingId] = useState<number | null>(null)
@@ -69,6 +73,11 @@ export function SubscriptionsPage({ token, onClose }: Props) {
       .catch(() => {})
       .finally(() => setLoading(false))
   }, [token]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // 有 initialExpandId 时，subs 加载完自动拉取队列
+  useEffect(() => {
+    if (initialExpandId && !loading) fetchQueue(initialExpandId)
+  }, [initialExpandId, loading]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const fetchQueue = useCallback(async (subId: number) => {
     setQueueLoading(subId)
@@ -444,21 +453,36 @@ export function SubscriptionsPage({ token, onClose }: Props) {
                                   {formatPlannedDate(item.planned_date)}
                                 </span>
 
-                                {/* 标题 */}
-                                <span className={`flex-1 leading-relaxed line-clamp-2 ${
-                                  isSent ? 'text-gray-500' : 'text-gray-700'
-                                }`}>
-                                  {item.paper_url ? (
-                                    <a
-                                      href={item.paper_url}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="hover:text-indigo-600 hover:underline"
-                                    >
-                                      {item.paper_title}
-                                    </a>
-                                  ) : item.paper_title}
-                                </span>
+                                {/* 标题 + meta */}
+                                <div className="flex-1 min-w-0">
+                                  <div className={`leading-relaxed line-clamp-2 ${isSent ? 'text-gray-500' : 'text-gray-700'}`}>
+                                    {item.paper_url ? (
+                                      <a
+                                        href={item.paper_url}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="hover:text-indigo-600 hover:underline"
+                                      >
+                                        {item.paper_title}
+                                      </a>
+                                    ) : item.paper_title}
+                                  </div>
+                                  {(item.source || item.year || item.citations != null) && (
+                                    <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                                      {item.source && (
+                                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-500 font-medium">
+                                          {item.source}
+                                        </span>
+                                      )}
+                                      {item.year && (
+                                        <span className="text-[10px] text-gray-400">{item.year}</span>
+                                      )}
+                                      {item.citations != null && item.citations > 0 && (
+                                        <span className="text-[10px] text-gray-400">引用 {item.citations}</span>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
                               </div>
                             )
                           })}
