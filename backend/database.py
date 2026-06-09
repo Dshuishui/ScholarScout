@@ -1,6 +1,7 @@
+import os
+import asyncio
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker, DeclarativeBase
-from sqlalchemy import text
 
 DATABASE_URL = "sqlite+aiosqlite:///./scholarscout.db"
 engine = create_async_engine(DATABASE_URL, echo=False)
@@ -11,32 +12,29 @@ class Base(DeclarativeBase):
     pass
 
 
-async def init_db():
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-        # 为已存在的 feedback 表补充新列（SQLite 不支持 IF NOT EXISTS，用 try/except）
-        for sql in [
-            "ALTER TABLE feedback ADD COLUMN location TEXT",
-            "ALTER TABLE feedback ADD COLUMN is_author INTEGER DEFAULT 0",
-            "ALTER TABLE feedback ADD COLUMN user_id INTEGER",
-            "ALTER TABLE feedback ADD COLUMN reply_to_id INTEGER",
-            "ALTER TABLE feedback ADD COLUMN recalled INTEGER DEFAULT 0",
-            "ALTER TABLE paper_chats ADD COLUMN pdf_text TEXT",
-            "ALTER TABLE feedback ADD COLUMN category VARCHAR(20) DEFAULT 'chat'",
-            # 邮箱验证 & 免费搜索额度（老用户默认已验证 is_verified=1，free_searches=0）
-            "ALTER TABLE users ADD COLUMN is_verified INTEGER DEFAULT 1",
-            "ALTER TABLE users ADD COLUMN verify_token VARCHAR(64)",
-            "ALTER TABLE users ADD COLUMN verify_token_expires DATETIME",
-            "ALTER TABLE users ADD COLUMN free_searches INTEGER DEFAULT 0",
-            # subscriptions 表由 create_all 自动创建，无需手动迁移
-            # subscription_queue 表由 create_all 自动创建
-            "ALTER TABLE subscriptions ADD COLUMN daily_limit INTEGER DEFAULT 1",
-            "ALTER TABLE feedback ADD COLUMN reactions_json TEXT DEFAULT '{}'",
-        ]:
-            try:
-                await conn.execute(text(sql))
-            except Exception:
-                pass
+def _run_alembic() -> None:
+    """Sync: stamp existing DB if untracked, then run upgrade head."""
+    from sqlalchemy import create_engine, inspect
+    from alembic.config import Config
+    from alembic import command
+
+    sync_url = DATABASE_URL.replace("+aiosqlite", "")
+    sync_engine = create_engine(sync_url)
+    tables = inspect(sync_engine).get_table_names()
+    sync_engine.dispose()
+
+    ini_path = os.path.join(os.path.dirname(__file__), "alembic.ini")
+    alembic_cfg = Config(ini_path)
+
+    if tables and "alembic_version" not in tables:
+        # Existing DB deployed before Alembic was introduced — stamp as current.
+        command.stamp(alembic_cfg, "head")
+    else:
+        command.upgrade(alembic_cfg, "head")
+
+
+async def init_db() -> None:
+    await asyncio.to_thread(_run_alembic)
 
 
 async def get_db():
