@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import { saveSessionAnalysis } from '../api/client'
 import type { Paper } from '../types'
 
 type Mode = 'compare' | 'review' | 'trend'
@@ -11,24 +12,31 @@ const MODES: { key: Mode; label: string; desc: string; icon: string }[] = [
   { key: 'trend',   label: '研究趋势', desc: '时间线演进与未来方向预测',  icon: 'M13 7h8m0 0v8m0-8l-8 8-4-4-6 6' },
 ]
 
+const GB_REF_INSTRUCTION = `
+
+【引用规范（必须遵守）】行文中引用具体论文时使用 [序号] 格式（如"某方法[1]表现出..."），文末集中列出参考文献，格式遵循 GB/T 7714-2015：
+[1] 作者. 标题[J/OL]. 期刊/来源, 年份.
+[2] ...
+参考文献的序号与上方【论文 N】的 N 对应。`
+
 function buildMessages(papers: Paper[], mode: Mode) {
   const paperCtx = papers.map((p, i) => {
     const parts = [
       `【论文 ${i + 1}】`,
       `标题：${p.title}`,
     ]
-    if (p.authors.length > 0) parts.push(`作者：${p.authors.slice(0, 3).join('、')}${p.authors.length > 3 ? ' 等' : ''}`)
+    if (p.authors.length > 0) parts.push(`作者：${p.authors.slice(0, 3).join(', ')}${p.authors.length > 3 ? ' 等' : ''}`)
     if (p.published_date) parts.push(`年份：${p.published_date.slice(0, 4)}`)
     if (p.venue) parts.push(`来源：${p.venue}`)
-    if (p.abstract) parts.push(`摘要：${p.abstract.slice(0, 500)}`)
+    if (p.abstract) parts.push(`摘要：${p.abstract}`)
     if (p.relevance_reason) parts.push(`AI摘要：${p.relevance_reason}`)
     return parts.join('\n')
   }).join('\n\n')
 
   const systemPrompts: Record<Mode, string> = {
-    compare: `你是学术研究助手。请对以下 ${papers.length} 篇论文进行系统性对比分析，必须包含以下部分：\n1. **总览表格**（论文名、年份、核心方法、主要贡献）\n2. **方法与技术路线对比**\n3. **创新点与贡献对比**\n4. **实验设置与结果对比**（如有）\n5. **优缺点与局限性**\n6. **相互关系与传承**\n\n请用中文，Markdown 格式，结构清晰，包含表格。`,
-    review:  `你是学术写作助手。请基于以下 ${papers.length} 篇论文撰写一段专业的文献综述，需涵盖：研究背景与问题、各论文的核心贡献及相互关联、领域现状总结。写作风格：学术正式，第三人称，可直接用于论文 Related Work 章节。请用中文，Markdown 格式，600-900 字。`,
-    trend:   `你是学术研究助手。请分析以下论文所属领域的研究趋势，需包含：\n1. **技术演进路线**（按时间梳理关键突破）\n2. **研究热点变化**\n3. **各论文的里程碑意义**\n4. **未来研究方向预测**\n\n请用中文，Markdown 格式，结合论文时间线分析。`,
+    compare: `你是学术研究助手。请对以下 ${papers.length} 篇论文进行系统性对比分析，必须包含以下部分：\n1. **总览表格**（编号、论文名、年份、核心方法、主要贡献）\n2. **方法与技术路线对比**\n3. **创新点与贡献对比**\n4. **实验设置与结果对比**（如有）\n5. **优缺点与局限性**\n6. **相互关系与传承**${GB_REF_INSTRUCTION}\n\n请用中文，Markdown 格式，结构清晰，包含表格。`,
+    review:  `你是学术写作助手。请基于以下 ${papers.length} 篇论文撰写一段专业的文献综述，需涵盖：研究背景与问题、各论文的核心贡献及相互关联、领域现状总结。写作风格：学术正式，第三人称，可直接用于论文 Related Work 章节。${GB_REF_INSTRUCTION}\n\n请用中文，Markdown 格式，600-900 字，文末附完整参考文献列表。`,
+    trend:   `你是学术研究助手。请分析以下论文所属领域的研究趋势，需包含：\n1. **技术演进路线**（按时间梳理关键突破）\n2. **研究热点变化**\n3. **各论文的里程碑意义**\n4. **未来研究方向预测**${GB_REF_INSTRUCTION}\n\n请用中文，Markdown 格式，结合论文时间线分析。`,
   }
 
   return [
@@ -41,27 +49,28 @@ interface Props {
   papers: Paper[]
   apiKey: string
   onClose: () => void
+  token?: string
+  sessionId?: number | null
 }
 
-export function ComparePanel({ papers, apiKey, onClose }: Props) {
+export function ComparePanel({ papers, apiKey, onClose, token, sessionId }: Props) {
   const [mode, setMode] = useState<Mode>('compare')
-  // 各模式独立缓存，切换模式不丢失结果
   const cacheRef = useRef<Partial<Record<Mode, string>>>({})
   const [content, setContent] = useState('')
   const [isStreaming, setIsStreaming] = useState(false)
   const [hasGenerated, setHasGenerated] = useState(false)
   const [copied, setCopied] = useState(false)
+  const [savedModes, setSavedModes] = useState<Set<string>>(new Set())
+  const [saving, setSaving] = useState(false)
   const abortRef = useRef<AbortController | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
 
-  // 自动滚动
   useEffect(() => {
     if (isStreaming && scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight
     }
   }, [content, isStreaming])
 
-  // Esc 关闭
   useEffect(() => {
     const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
     window.addEventListener('keydown', handler)
@@ -70,7 +79,6 @@ export function ComparePanel({ papers, apiKey, onClose }: Props) {
 
   const generate = useCallback(async (forceRegen = false) => {
     if (!apiKey) return
-    // 有缓存且不强制重新生成，直接显示缓存
     if (!forceRegen && cacheRef.current[mode]) {
       setContent(cacheRef.current[mode]!)
       setHasGenerated(true)
@@ -89,7 +97,7 @@ export function ComparePanel({ papers, apiKey, onClose }: Props) {
         signal: controller.signal,
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
         body: JSON.stringify({
-          model: 'deepseek-v4-flash',
+          model: 'deepseek-reasoner',
           stream: true,
           messages: buildMessages(papers, mode),
         }),
@@ -109,13 +117,13 @@ export function ComparePanel({ papers, apiKey, onClose }: Props) {
           const data = line.slice(6).trim()
           if (data === '[DONE]') continue
           try {
+            // 只取 content，忽略 reasoning_content（思考链）
             const delta = JSON.parse(data).choices?.[0]?.delta?.content ?? ''
             accumulated += delta
             setContent(accumulated)
           } catch { /* skip */ }
         }
       }
-      // 写入缓存
       cacheRef.current[mode] = accumulated
     } catch (err) {
       if ((err as Error).name !== 'AbortError') {
@@ -136,16 +144,24 @@ export function ComparePanel({ papers, apiKey, onClose }: Props) {
     })
   }
 
+  const handleSaveAnalysis = async () => {
+    if (!token || !sessionId || !content || saving) return
+    setSaving(true)
+    const ok = await saveSessionAnalysis(token, sessionId, mode, content)
+    if (ok) setSavedModes(prev => new Set([...prev, mode]))
+    setSaving(false)
+  }
+
+  const isSaved = savedModes.has(mode)
+
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
-      {/* Backdrop */}
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
 
-      {/* Panel */}
       <div className="relative w-full max-w-3xl max-h-[90vh] flex flex-col rounded-2xl overflow-hidden shadow-2xl"
            style={{ background: '#fff' }}>
 
-        {/* ── Header ── */}
+        {/* Header */}
         <div
           className="flex-shrink-0 flex items-center justify-between px-5 py-3"
           style={{
@@ -164,6 +180,7 @@ export function ComparePanel({ papers, apiKey, onClose }: Props) {
             </div>
             <span className="text-sm font-bold text-white tracking-tight">AI 多论文分析</span>
             <span className="text-xs text-indigo-300/60 ml-1">已选 {papers.length} 篇</span>
+            <span className="text-[10px] text-indigo-400/50 border border-indigo-500/20 rounded px-1.5 py-0.5">DeepSeek R1</span>
           </div>
           <button onClick={onClose} className="text-indigo-300/60 hover:text-indigo-200 p-1 rounded hover:bg-white/5 transition-colors">
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -172,7 +189,7 @@ export function ComparePanel({ papers, apiKey, onClose }: Props) {
           </button>
         </div>
 
-        {/* ── Selected papers chips ── */}
+        {/* Selected papers chips */}
         <div className="flex-shrink-0 px-5 py-2.5 bg-gray-50 border-b border-gray-100 flex items-center gap-2 flex-wrap">
           {papers.map((p, i) => (
             <span key={p.paper_id} className="inline-flex items-center gap-1.5 text-xs bg-white border border-gray-200 rounded-lg px-2.5 py-1 text-gray-600 max-w-[200px]">
@@ -183,7 +200,7 @@ export function ComparePanel({ papers, apiKey, onClose }: Props) {
           ))}
         </div>
 
-        {/* ── Mode selector ── */}
+        {/* Mode selector */}
         <div className="flex-shrink-0 px-5 pt-4 pb-3 flex gap-3">
           {MODES.map(m => (
             <button
@@ -191,7 +208,6 @@ export function ComparePanel({ papers, apiKey, onClose }: Props) {
               onClick={() => {
                 if (m.key !== mode) {
                   setMode(m.key)
-                  // 切换 mode 时加载缓存（若无缓存则清空，等待用户点击生成）
                   const cached = cacheRef.current[m.key]
                   setContent(cached ?? '')
                   setHasGenerated(!!cached)
@@ -215,7 +231,7 @@ export function ComparePanel({ papers, apiKey, onClose }: Props) {
           ))}
         </div>
 
-        {/* ── Content area ── */}
+        {/* Content area */}
         <div ref={scrollRef} className="flex-1 overflow-y-auto px-5 pb-4 min-h-0">
           {!hasGenerated ? (
             <div className="flex flex-col items-center justify-center h-48 text-center gap-3">
@@ -227,7 +243,7 @@ export function ComparePanel({ papers, apiKey, onClose }: Props) {
               <div>
                 <p className="text-sm font-medium text-gray-600">选择分析模式，点击「生成」开始</p>
                 <p className="text-xs text-gray-400 mt-1">
-                  AI 将基于 {papers.length} 篇论文的标题、摘要和元数据进行分析
+                  使用 DeepSeek R1 深度推理，基于 {papers.length} 篇论文的完整摘要分析
                 </p>
               </div>
             </div>
@@ -243,10 +259,10 @@ export function ComparePanel({ papers, apiKey, onClose }: Props) {
           )}
         </div>
 
-        {/* ── Action bar ── */}
+        {/* Action bar */}
         <div className="flex-shrink-0 px-5 py-3 border-t border-gray-100 bg-white flex items-center justify-between gap-3">
           <div className="text-xs text-gray-400">
-            {isStreaming ? '生成中…' : hasGenerated && content ? `${content.length} 字符` : ''}
+            {isStreaming ? '深度推理中，请稍候…' : hasGenerated && content ? `${content.length} 字符` : ''}
           </div>
           <div className="flex items-center gap-2">
             {content && !isStreaming && (
@@ -257,9 +273,25 @@ export function ComparePanel({ papers, apiKey, onClose }: Props) {
                 >
                   {copied
                     ? <><svg className="w-3.5 h-3.5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7"/></svg>已复制</>
-                    : <><svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>复制结果</>
+                    : <><svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>复制</>
                   }
                 </button>
+                {token && sessionId && (
+                  <button
+                    onClick={handleSaveAnalysis}
+                    disabled={saving || isSaved}
+                    className={`flex items-center gap-1.5 text-xs border rounded-lg px-3 py-1.5 transition-all ${
+                      isSaved
+                        ? 'border-green-200 text-green-600 bg-green-50 cursor-default'
+                        : 'text-gray-500 hover:text-gray-700 border-gray-200 hover:border-gray-300 bg-white hover:bg-gray-50'
+                    } disabled:opacity-60`}
+                  >
+                    {isSaved
+                      ? <><svg className="w-3.5 h-3.5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7"/></svg>已保存</>
+                      : <><svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"/></svg>保存到快照</>
+                    }
+                  </button>
+                )}
                 <button
                   onClick={() => generate(true)}
                   className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-700 border border-gray-200 hover:border-gray-300 bg-white hover:bg-gray-50 rounded-lg px-3 py-1.5 transition-all"

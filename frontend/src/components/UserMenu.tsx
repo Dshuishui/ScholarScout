@@ -3,7 +3,7 @@ import { useAuth } from '../hooks/useAuth'
 import { AuthModal } from './AuthModal'
 
 interface Props {
-  onNavigate: (page: 'saved' | 'history' | 'subscriptions' | null) => void
+  onNavigate: (page: 'saved' | 'history' | 'subscriptions' | 'sessions' | null) => void
 }
 
 export function UserMenu({ onNavigate }: Props) {
@@ -65,6 +65,15 @@ export function UserMenu({ onNavigate }: Props) {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
             </svg>
             收藏夹
+          </button>
+          <button
+            onClick={() => { onNavigate('sessions'); setOpen(false) }}
+            className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50 transition-colors flex items-center gap-2.5"
+          >
+            <svg className="w-3.5 h-3.5 text-indigo-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
+            </svg>
+            搜索快照
           </button>
           <button
             onClick={() => { onNavigate('history'); setOpen(false) }}

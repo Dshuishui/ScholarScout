@@ -1,4 +1,4 @@
-import type { SearchEvent, ParseResult } from '../types'
+import type { SearchEvent, ParseResult, Paper, SearchSessionItem } from '../types'
 
 const API_BASE = '/api'
 
@@ -85,4 +85,61 @@ export function getDownloadUrl(pdfUrl: string, doi?: string | null, paperId?: st
   if (doi) params.set('doi', doi)
   if (paperId) params.set('paper_id', paperId)
   return `${API_BASE}/download?${params}`
+}
+
+// ── 搜索快照 API ────────────────────────────────────────────────────────────
+
+export async function getSessions(token: string): Promise<SearchSessionItem[]> {
+  const r = await fetch(`${API_BASE}/user/sessions`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (!r.ok) return []
+  return r.json()
+}
+
+export async function createSession(
+  token: string,
+  data: { query: string | null; keywords: string[]; papers: Paper[] },
+): Promise<{ id: number } | null> {
+  try {
+    const r = await fetch(`${API_BASE}/user/sessions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify(data),
+    })
+    if (!r.ok) return null
+    return r.json()
+  } catch {
+    return null
+  }
+}
+
+export async function saveSessionAnalysis(
+  token: string,
+  sessionId: number,
+  mode: string,
+  content: string,
+): Promise<boolean> {
+  try {
+    const r = await fetch(`${API_BASE}/user/sessions/${sessionId}/analysis`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ mode, content }),
+    })
+    return r.ok
+  } catch {
+    return false
+  }
+}
+
+export async function deleteSession(token: string, sessionId: number): Promise<boolean> {
+  try {
+    const r = await fetch(`${API_BASE}/user/sessions/${sessionId}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${token}` },
+    })
+    return r.ok
+  } catch {
+    return false
+  }
 }

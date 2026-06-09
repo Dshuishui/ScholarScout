@@ -81,3 +81,15 @@ class SubscriptionQueueItem(Base):
     planned_date = Column(String(10), nullable=False)  # YYYY-MM-DD
     sent_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class SearchSession(Base):
+    """搜索快照：保存用户每次搜索的关键词、结果和多论文分析。"""
+    __tablename__ = "search_sessions"
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, nullable=False, index=True)
+    query = Column(Text, nullable=True)            # 原始用户输入
+    keywords_json = Column(Text, nullable=False)   # JSON 数组
+    papers_json = Column(Text, nullable=False)     # JSON 数组（AI 筛选后的论文）
+    analysis_json = Column(Text, nullable=True)    # JSON 对象 {mode: content}
+    created_at = Column(DateTime, default=datetime.utcnow)

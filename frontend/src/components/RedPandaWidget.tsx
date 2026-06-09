@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 
 const BUBBLES = [
   '你好！我是小熊猫 🐾',
@@ -12,11 +12,29 @@ const BUBBLES = [
 ]
 
 const SLOW_SEARCH_BUBBLE = '搜索有点慢，耐心等一下 🐾\n后面作者有空会改进滴！'
+const PANDA_W = 52
+const PANDA_H = 65
+const POS_KEY = 'scholarscout_panda_pos'
+
+function getDefaultPos() {
+  const w = typeof window !== 'undefined' ? window.innerWidth : 1200
+  const h = typeof window !== 'undefined' ? window.innerHeight : 800
+  return { x: w - PANDA_W - 80, y: h - PANDA_H - 80 }
+}
 
 export function RedPandaWidget({ isSearching = false }: { isSearching?: boolean }) {
+  const [pos, setPos] = useState<{ x: number; y: number }>(() => {
+    try {
+      const saved = localStorage.getItem(POS_KEY)
+      return saved ? JSON.parse(saved) : getDefaultPos()
+    } catch { return getDefaultPos() }
+  })
   const [bubble, setBubble] = useState<string | null>(null)
   const [bouncing, setBouncing] = useState(false)
   const [bubbleIdx, setBubbleIdx] = useState(0)
+  const isDragging = useRef(false)
+  const dragOffset = useRef({ x: 0, y: 0 })
+  const hasMoved = useRef(false)
 
   const showBubble = useCallback(() => {
     setBubble(BUBBLES[bubbleIdx % BUBBLES.length])
@@ -26,13 +44,11 @@ export function RedPandaWidget({ isSearching = false }: { isSearching?: boolean 
     setTimeout(() => setBubble(null), 4000)
   }, [bubbleIdx])
 
-  // 随机自动冒泡
   useEffect(() => {
     const t = setTimeout(showBubble, 8000 + Math.random() * 12000)
     return () => clearTimeout(t)
   }, [bubbleIdx]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // 搜索超过 8 秒自动吐槽
   useEffect(() => {
     if (!isSearching) return
     const t = setTimeout(() => {
@@ -42,19 +58,93 @@ export function RedPandaWidget({ isSearching = false }: { isSearching?: boolean 
     return () => clearTimeout(t)
   }, [isSearching])
 
-  return (
-    <div className="fixed top-0 left-1/2 -translate-x-1/2 z-40 flex flex-col items-center select-none">
-      {/* 小熊猫从顶部探出，脚踩在导航栏上 */}
+  // 鼠标拖拽
+  useEffect(() => {
+    const onMouseMove = (e: MouseEvent) => {
+      if (!isDragging.current) return
+      hasMoved.current = true
+      const x = Math.max(0, Math.min(window.innerWidth - PANDA_W, e.clientX - dragOffset.current.x))
+      const y = Math.max(0, Math.min(window.innerHeight - PANDA_H, e.clientY - dragOffset.current.y))
+      setPos({ x, y })
+    }
+    const onMouseUp = () => {
+      if (!isDragging.current) return
+      isDragging.current = false
+      setPos(prev => {
+        localStorage.setItem(POS_KEY, JSON.stringify(prev))
+        return prev
+      })
+    }
+    window.addEventListener('mousemove', onMouseMove)
+    window.addEventListener('mouseup', onMouseUp)
+    return () => {
+      window.removeEventListener('mousemove', onMouseMove)
+      window.removeEventListener('mouseup', onMouseUp)
+    }
+  }, [])
 
-      {/* 气泡：固定宽度，居中显示在熊猫下方 */}
+  // 触摸拖拽
+  useEffect(() => {
+    const onTouchMove = (e: TouchEvent) => {
+      if (!isDragging.current) return
+      hasMoved.current = true
+      const touch = e.touches[0]
+      const x = Math.max(0, Math.min(window.innerWidth - PANDA_W, touch.clientX - dragOffset.current.x))
+      const y = Math.max(0, Math.min(window.innerHeight - PANDA_H, touch.clientY - dragOffset.current.y))
+      setPos({ x, y })
+      e.preventDefault()
+    }
+    const onTouchEnd = () => {
+      if (!isDragging.current) return
+      isDragging.current = false
+      setPos(prev => {
+        localStorage.setItem(POS_KEY, JSON.stringify(prev))
+        return prev
+      })
+    }
+    window.addEventListener('touchmove', onTouchMove, { passive: false })
+    window.addEventListener('touchend', onTouchEnd)
+    return () => {
+      window.removeEventListener('touchmove', onTouchMove)
+      window.removeEventListener('touchend', onTouchEnd)
+    }
+  }, [])
+
+  const handleMouseDown = (e: React.MouseEvent) => {
+    isDragging.current = true
+    hasMoved.current = false
+    dragOffset.current = { x: e.clientX - pos.x, y: e.clientY - pos.y }
+    e.preventDefault()
+  }
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    const touch = e.touches[0]
+    isDragging.current = true
+    hasMoved.current = false
+    dragOffset.current = { x: touch.clientX - pos.x, y: touch.clientY - pos.y }
+  }
+
+  const handleClick = () => {
+    if (!hasMoved.current) showBubble()
+  }
+
+  // 气泡位置：在熊猫左侧或右侧，避免超出屏幕
+  const bubbleLeft = pos.x > window.innerWidth / 2
+  const bubbleStyle: React.CSSProperties = bubbleLeft
+    ? { right: PANDA_W + 8, bottom: 0 }
+    : { left: PANDA_W + 8, bottom: 0 }
+
+  return (
+    <div
+      style={{ position: 'fixed', left: pos.x, top: pos.y, zIndex: 40, userSelect: 'none' }}
+    >
       {bubble && (
         <div
           style={{
             position: 'absolute',
-            top: '8px',
-            left: 'calc(50% + 32px)',
             width: '200px',
             animation: 'fadeInUp 0.2s ease',
+            ...bubbleStyle,
           }}
           className="bg-white border border-gray-200 rounded-2xl rounded-tl-sm px-3 py-2 shadow-lg text-xs text-gray-700 leading-relaxed whitespace-pre-line"
         >
@@ -62,63 +152,40 @@ export function RedPandaWidget({ isSearching = false }: { isSearching?: boolean 
         </div>
       )}
 
-      {/* 小熊猫 SVG */}
       <div
-        onClick={showBubble}
-        className="cursor-pointer"
+        onMouseDown={handleMouseDown}
+        onTouchStart={handleTouchStart}
+        onClick={handleClick}
         style={{
+          cursor: 'grab',
           animation: bouncing
             ? 'pandaBounce 0.4s ease'
             : 'pandaIdle 3s ease-in-out infinite',
         }}
-        title="点我！"
+        title="点我！可拖动到任意位置"
       >
-        <svg width="52" height="65" viewBox="0 0 72 90" fill="none" xmlns="http://www.w3.org/2000/svg">
-          {/* 尾巴（在身体后面） */}
+        <svg width={PANDA_W} height={PANDA_H} viewBox="0 0 72 90" fill="none" xmlns="http://www.w3.org/2000/svg">
           <ellipse cx="60" cy="72" rx="10" ry="7" fill="#C1440E" transform="rotate(-30 60 72)" />
           <ellipse cx="62" cy="70" rx="6" ry="4" fill="#3D1A00" transform="rotate(-30 62 70)" />
           <ellipse cx="64" cy="68" rx="4" ry="3" fill="#C1440E" transform="rotate(-30 64 68)" />
-
-          {/* 身体 */}
           <ellipse cx="36" cy="68" rx="20" ry="17" fill="#C1440E" />
-          {/* 肚子 */}
           <ellipse cx="36" cy="70" rx="11" ry="10" fill="#F5DEB3" />
-
-          {/* 前爪 */}
           <ellipse cx="20" cy="80" rx="8" ry="5" fill="#8B2500" />
           <ellipse cx="52" cy="80" rx="8" ry="5" fill="#8B2500" />
-
-          {/* 头 */}
           <circle cx="36" cy="36" r="22" fill="#C1440E" />
-
-          {/* 耳朵 */}
           <ellipse cx="17" cy="19" rx="8" ry="9" fill="#C1440E" transform="rotate(-20 17 19)" />
           <ellipse cx="55" cy="19" rx="8" ry="9" fill="#C1440E" transform="rotate(20 55 19)" />
-          {/* 耳朵内 */}
           <ellipse cx="17" cy="19" rx="4" ry="5" fill="#F5DEB3" opacity="0.7" transform="rotate(-20 17 19)" />
           <ellipse cx="55" cy="19" rx="4" ry="5" fill="#F5DEB3" opacity="0.7" transform="rotate(20 55 19)" />
-
-          {/* 脸部白色花纹（熊猫特征） */}
           <ellipse cx="36" cy="40" rx="15" ry="13" fill="#F5DEB3" />
-
-          {/* 眼下泪纹（小熊猫特征） */}
           <ellipse cx="26" cy="36" rx="5" ry="6" fill="#F5F5F5" />
           <ellipse cx="46" cy="36" rx="5" ry="6" fill="#F5F5F5" />
-
-          {/* 眼睛 */}
           <circle cx="26" cy="35" r="5" fill="#1A1A1A" />
           <circle cx="46" cy="35" r="5" fill="#1A1A1A" />
-          {/* 眼睛高光 */}
           <circle cx="27.5" cy="33" r="1.8" fill="white" />
           <circle cx="47.5" cy="33" r="1.8" fill="white" />
-
-          {/* 鼻子 */}
           <ellipse cx="36" cy="42" rx="3.5" ry="2.5" fill="#4A1A1A" />
-
-          {/* 嘴 */}
           <path d="M32 46 Q36 50 40 46" stroke="#4A1A1A" strokeWidth="1.5" fill="none" strokeLinecap="round" />
-
-          {/* 胡须 */}
           <line x1="15" y1="42" x2="26" y2="43" stroke="#888" strokeWidth="0.8" strokeLinecap="round" />
           <line x1="15" y1="45" x2="26" y2="45" stroke="#888" strokeWidth="0.8" strokeLinecap="round" />
           <line x1="46" y1="43" x2="57" y2="42" stroke="#888" strokeWidth="0.8" strokeLinecap="round" />

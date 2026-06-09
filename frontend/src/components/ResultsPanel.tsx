@@ -49,6 +49,7 @@ interface Props {
   getMessages?: (paperId: string) => ChatMessage[]
   hasSearchError?: boolean
   searchDateRange?: { from: string | null; to: string | null } | null
+  sessionId?: number | null
 }
 
 interface DownloadProgress {
@@ -182,7 +183,7 @@ function Pagination({ current, total, onChange }: {
   )
 }
 
-export function ResultsPanel({ papers, rejectedPapers = [], isLoading, statusMessage, sourceStatuses = {}, settings, onSettingsChange, onReSearch, confirmedKeywords, onAnalyzePaper, onExampleSearch, apiKey, getMessages, hasSearchError = false, searchDateRange }: Props) {
+export function ResultsPanel({ papers, rejectedPapers = [], isLoading, statusMessage, sourceStatuses = {}, settings, onSettingsChange, onReSearch, confirmedKeywords, onAnalyzePaper, onExampleSearch, apiKey, getMessages, hasSearchError = false, searchDateRange, sessionId }: Props) {
   const [currentPage, setCurrentPage] = useState(1)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [downloadProgress, setDownloadProgress] = useState<DownloadProgress | null>(null)
@@ -1195,6 +1196,8 @@ const addKeyword = () => {
             papers={papers.filter(p => selectedIds.has(p.paper_id))}
             apiKey={apiKey}
             onClose={() => setShowCompare(false)}
+            token={token ?? undefined}
+            sessionId={sessionId}
           />
         </Suspense>
       )}

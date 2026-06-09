@@ -12,6 +12,7 @@ import { useIsMobile } from '../hooks/useIsMobile'
 import { UserMenu } from './UserMenu'
 import { SavedPage } from '../pages/SavedPage'
 import { HistoryPage } from '../pages/HistoryPage'
+import { SessionsPage } from '../pages/SessionsPage'
 const SubscriptionsPage = lazy(() => import('../pages/SubscriptionsPage').then(m => ({ default: m.SubscriptionsPage })))
 import { FeedbackWidget } from './FeedbackWidget'
 import { RedPandaWidget } from './RedPandaWidget'
@@ -28,7 +29,7 @@ export function MainLayout({ apiKey, onClearKey }: Props) {
   const { model } = useModel()
   const { token, isLoggedIn } = useAuth()
   const isMobile = useIsMobile()
-  const [activePage, setActivePage] = useState<'saved' | 'history' | 'subscriptions' | null>(null)
+  const [activePage, setActivePage] = useState<'saved' | 'history' | 'subscriptions' | 'sessions' | null>(null)
   const [expandSubId, setExpandSubId] = useState<number | null>(null)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [mobileTab, setMobileTab] = useState<'search' | 'results'>('search')
@@ -37,6 +38,7 @@ export function MainLayout({ apiKey, onClearKey }: Props) {
     messages, papers, rejectedPapers, isLoading, statusMessage, sourceStatuses,
     search, confirmedKeywords, reSearch,
     hasSearchError, history, removeHistory, searchFromHistory, searchDateRange,
+    currentSessionId, loadSession,
   } = useSearch(apiKey, settings, model)
 
   const [activePaper, setActivePaper] = useState<Paper | null>(null)
@@ -53,8 +55,8 @@ export function MainLayout({ apiKey, onClearKey }: Props) {
     const handler = (e: Event) => {
       const detail = (e as CustomEvent).detail
       const page = typeof detail === 'string' ? detail : detail?.page
-      if (page === 'subscriptions' || page === 'saved' || page === 'history') {
-        setActivePage(page as 'saved' | 'history' | 'subscriptions')
+      if (page === 'subscriptions' || page === 'saved' || page === 'history' || page === 'sessions') {
+        setActivePage(page as 'saved' | 'history' | 'subscriptions' | 'sessions')
         if (page === 'subscriptions' && detail?.expandId) {
           setExpandSubId(detail.expandId)
         }
@@ -274,6 +276,7 @@ export function MainLayout({ apiKey, onClearKey }: Props) {
             getMessages={getMessages}
             hasSearchError={hasSearchError}
             searchDateRange={searchDateRange}
+            sessionId={currentSessionId}
           />
         </div>
       </div>
@@ -350,6 +353,15 @@ export function MainLayout({ apiKey, onClearKey }: Props) {
       {activePage === 'history' && token && (
         <div className="fixed inset-0 z-40 bg-white">
           <HistoryPage token={token} onClose={() => setActivePage(null)} onOpenChat={handleAnalyzePaper} />
+        </div>
+      )}
+      {activePage === 'sessions' && token && (
+        <div className="fixed inset-0 z-40 bg-white">
+          <SessionsPage
+            token={token}
+            onClose={() => setActivePage(null)}
+            onLoad={session => { loadSession(session); setActivePage(null) }}
+          />
         </div>
       )}
       {activePage === 'subscriptions' && token && (

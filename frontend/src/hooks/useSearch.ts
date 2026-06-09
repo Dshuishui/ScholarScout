@@ -1,6 +1,6 @@
 import { useState } from 'react'
-import { parseQuery, searchPapers } from '../api/client'
-import type { Message, Paper } from '../types'
+import { parseQuery, searchPapers, createSession } from '../api/client'
+import type { Message, Paper, SearchSessionItem } from '../types'
 import type { SearchSettings } from './useSettings'
 import { useSearchHistory } from './useSearchHistory'
 import { useAuth } from './useAuth'
@@ -32,6 +32,7 @@ export function useSearch(apiKey: string, settings: SearchSettings, model?: stri
   const [sourceStatuses, setSourceStatuses] = useState<Record<string, SourceStatus>>({})
   const [searchDateRange, setSearchDateRange] = useState<{ from: string | null; to: string | null } | null>(null)
   const [hasSearchError, setHasSearchError] = useState(false)
+  const [currentSessionId, setCurrentSessionId] = useState<number | null>(null)
   const { history, addHistory, removeHistory } = useSearchHistory()
   const { token, decrementFreeSearches } = useAuth()
   // 试用模式：apiKey 为空 + 有登录 token
@@ -63,6 +64,7 @@ export function useSearch(apiKey: string, settings: SearchSettings, model?: stri
           setPapers([])
           setRejectedPapers([])
           setSourceStatuses({})
+          setCurrentSessionId(null)
           setSearchDateRange({ from: event.date_from ?? null, to: event.date_to ?? null })
           const init: Record<string, SourceStatus> = {}
           event.sources.forEach(s => { init[s] = { status: 'pending', count: 0 } })
@@ -83,6 +85,14 @@ export function useSearch(apiKey: string, settings: SearchSettings, model?: stri
           // 试用模式：本地乐观扣减免费次数（后端已原子扣减）
           if (isTrial) decrementFreeSearches()
           updateAssistant(assistantId, { content: event.message, isLoading: false, papers: event.papers })
+          // 登录用户自动保存搜索快照
+          if (token && event.papers.length > 0) {
+            createSession(token, {
+              query: pending.query,
+              keywords: pending.keywords,
+              papers: event.papers,
+            }).then(res => { if (res?.id) setCurrentSessionId(res.id) })
+          }
         } else if (event.type === 'pdf_finding') {
           setStatusMessage(event.message)
         } else if (event.type === 'pdf_update') {
@@ -184,6 +194,35 @@ export function useSearch(apiKey: string, settings: SearchSettings, model?: stri
     await runSearchStream(assistantId, newConfirmed, keywords)
   }
 
+  const loadSession = (session: SearchSessionItem) => {
+    const assistantId = Date.now().toString()
+    const userMsgId = (Date.now() - 1).toString()
+    setPapers(session.papers)
+    setRejectedPapers([])
+    setCurrentSessionId(session.id)
+    setSearchDateRange(null)
+    setSourceStatuses({})
+    setHasSearchError(false)
+    setLastConfirmed({
+      assistantId,
+      keywords: session.keywords,
+      date_from: null,
+      date_to: null,
+      query: session.query ?? session.keywords.join(' '),
+      history: [],
+    })
+    setMessages(prev => [
+      ...prev,
+      { id: userMsgId, role: 'user', content: `加载快照：${session.keywords.join('、')}` },
+      {
+        id: assistantId,
+        role: 'assistant',
+        content: `已加载 ${session.papers.length} 篇论文（快照 ${new Date(session.created_at).toLocaleDateString('zh-CN')}）`,
+        isLoading: false,
+      },
+    ])
+  }
+
   const searchFromHistory = async (keywords: string[]) => {
     const assistantId = Date.now().toString()
     const userMsgId = (Date.now() - 1).toString()
@@ -220,5 +259,7 @@ export function useSearch(apiKey: string, settings: SearchSettings, model?: stri
     history,
     removeHistory,
     searchFromHistory,
+    currentSessionId,
+    loadSession,
   }
 }
