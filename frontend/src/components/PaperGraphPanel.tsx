@@ -55,6 +55,7 @@ export function PaperGraphPanel({ papers, onClose }: Props) {
   const [selected, setSelected] = useState<GraphNode | null>(null)
   const [error, setError] = useState('')
   const containerRef = useRef<HTMLDivElement>(null)
+  const graphRef = useRef<{ d3ReheatSimulation: () => void } | null>(null)
   const [dimensions, setDimensions] = useState({ width: 600, height: 500 })
   const [expandingId, setExpandingId] = useState<string | null>(null)
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set())
@@ -128,6 +129,8 @@ export function PaperGraphPanel({ papers, onClose }: Props) {
           links: [...prev.links, ...newLinks],
         }
       })
+      // reheat after React flushes the new graphData so new nodes scatter properly
+      setTimeout(() => graphRef.current?.d3ReheatSimulation(), 50)
     } catch (e) {
       console.warn('Citation expand failed:', e)
     } finally {
@@ -251,6 +254,7 @@ export function PaperGraphPanel({ papers, onClose }: Props) {
           )}
           {!loading && graphData && (
             <ForceGraph2D
+              ref={graphRef as never}
               width={dimensions.width}
               height={dimensions.height}
               graphData={graphData}

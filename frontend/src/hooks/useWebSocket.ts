@@ -8,6 +8,8 @@ export interface WsMessage {
 
 export type WsStatus = 'connecting' | 'connected' | 'disconnected'
 
+const MAX_RETRIES = 10
+
 export function useWebSocket() {
   const { token } = useAuth()
   const [lastMessage, setLastMessage] = useState<WsMessage | null>(null)
@@ -15,10 +17,12 @@ export function useWebSocket() {
   const wsRef = useRef<WebSocket | null>(null)
   const retryTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const retryDelay = useRef(1000)
+  const retryCount = useRef(0)
   const pingTimer = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const connect = useCallback(() => {
     if (wsRef.current?.readyState === WebSocket.OPEN) return
+    if (retryCount.current >= MAX_RETRIES) return
 
     const proto = window.location.protocol === 'https:' ? 'wss' : 'ws'
     const params = new URLSearchParams()
@@ -32,6 +36,7 @@ export function useWebSocket() {
     ws.onopen = () => {
       setStatus('connected')
       retryDelay.current = 1000
+      retryCount.current = 0
     }
 
     ws.onmessage = (e: MessageEvent) => {
@@ -45,6 +50,8 @@ export function useWebSocket() {
 
     ws.onclose = () => {
       setStatus('disconnected')
+      retryCount.current += 1
+      if (retryCount.current >= MAX_RETRIES) return
       retryTimer.current = setTimeout(() => {
         retryDelay.current = Math.min(retryDelay.current * 2, 30_000)
         connect()
