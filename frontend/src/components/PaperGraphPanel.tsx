@@ -57,7 +57,7 @@ export function PaperGraphPanel({ papers, onClose }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
   const [dimensions, setDimensions] = useState({ width: 600, height: 500 })
   const [expandingId, setExpandingId] = useState<string | null>(null)
-  const expandedRef = useRef<Set<string>>(new Set())
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set())
 
   useEffect(() => {
     const update = () => {
@@ -109,13 +109,12 @@ export function PaperGraphPanel({ papers, onClose }: Props) {
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const expandCitations = useCallback(async (nodeId: string) => {
-    if (expandedRef.current.has(nodeId)) return
     setExpandingId(nodeId)
     try {
       const r = await fetch(`/api/semantic/citations/${encodeURIComponent(nodeId)}?limit=20`)
       if (!r.ok) throw new Error(await r.text())
       const data: GraphData = await r.json()
-      expandedRef.current.add(nodeId)
+      setExpandedIds(prev => new Set([...prev, nodeId]))
       setGraphData(prev => {
         if (!prev) return prev
         const existingIds = new Set(prev.nodes.map(n => n.id))
@@ -130,7 +129,6 @@ export function PaperGraphPanel({ papers, onClose }: Props) {
         }
       })
     } catch (e) {
-      // silently ignore — SS may not have this paper
       console.warn('Citation expand failed:', e)
     } finally {
       setExpandingId(null)
@@ -310,7 +308,7 @@ export function PaperGraphPanel({ papers, onClose }: Props) {
               {/* Expand citation graph button */}
               <button
                 onClick={() => expandCitations(selected.id)}
-                disabled={expandingId === selected.id || expandedRef.current.has(selected.id)}
+                disabled={expandingId === selected.id || expandedIds.has(selected.id)}
                 className="mt-2.5 w-full text-[11px] flex items-center justify-center gap-1.5 px-2 py-1.5 rounded border border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
                 {expandingId === selected.id ? (
@@ -323,7 +321,7 @@ export function PaperGraphPanel({ papers, onClose }: Props) {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                   </svg>
                 )}
-                {expandedRef.current.has(selected.id) ? '已扩展引用图' : '扩展引用图'}
+                {expandedIds.has(selected.id) ? '已扩展引用图' : '扩展引用图'}
               </button>
               {/* 相邻连接 */}
               {graphData && (() => {
