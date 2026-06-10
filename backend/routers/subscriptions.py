@@ -42,6 +42,7 @@ class QueueItemOut(BaseModel):
     source: str | None = None
     year: str | None = None
     citations: int | None = None
+    abstract: str | None = None
 
 
 def _to_out(sub: Subscription) -> SubscriptionOut:
@@ -63,9 +64,11 @@ def _queue_item_to_out(item: SubscriptionQueueItem) -> QueueItemOut:
         source = data.get("source") or None
         year = (data.get("published_date") or "")[:4] or None
         citations = data.get("citations") or None
+        raw_abstract = data.get("abstract") or None
+        abstract = raw_abstract[:300] + "…" if raw_abstract and len(raw_abstract) > 300 else raw_abstract
     except Exception:
         title = "(解析错误)"
-        url = source = year = citations = None
+        url = source = year = citations = abstract = None
     return QueueItemOut(
         id=item.id,
         paper_title=title,
@@ -76,6 +79,7 @@ def _queue_item_to_out(item: SubscriptionQueueItem) -> QueueItemOut:
         source=source,
         year=year,
         citations=citations,
+        abstract=abstract,
     )
 
 

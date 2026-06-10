@@ -20,6 +20,7 @@ interface QueueItem {
   source: string | null
   year: string | null
   citations: number | null
+  abstract: string | null
 }
 
 interface Props {
@@ -41,6 +42,76 @@ function formatPlannedDate(dateStr: string): string {
   if (dateStr === tomorrow) return '明天'
   const d = new Date(dateStr + 'T00:00:00')
   return d.toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric' })
+}
+
+function QueueItemRow({ item, isSent, isToday, formatPlannedDate: fmt }: {
+  item: QueueItem
+  isSent: boolean
+  isToday: boolean
+  today: string
+  formatPlannedDate: (s: string) => string
+}) {
+  const [showAbstract, setShowAbstract] = useState(false)
+  return (
+    <div className={`px-2.5 py-2 rounded-lg text-xs transition-colors ${
+      isSent ? 'bg-green-50/80' : isToday ? 'bg-indigo-50 border border-indigo-100' : 'bg-white/80 border border-gray-100'
+    }`}>
+      <div className="flex items-start gap-2.5">
+        {/* 状态图标 */}
+        <div className="flex-shrink-0 mt-0.5">
+          {isSent ? (
+            <svg className="w-3.5 h-3.5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+            </svg>
+          ) : isToday ? (
+            <svg className="w-3.5 h-3.5 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+            </svg>
+          ) : (
+            <svg className="w-3.5 h-3.5 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+            </svg>
+          )}
+        </div>
+        {/* 日期 */}
+        <span className={`flex-shrink-0 w-12 font-medium ${isSent ? 'text-green-600' : isToday ? 'text-indigo-600' : 'text-gray-400'}`}>
+          {fmt(item.planned_date)}
+        </span>
+        {/* 标题 + meta */}
+        <div className="flex-1 min-w-0">
+          <div className={`leading-relaxed line-clamp-2 ${isSent ? 'text-gray-500' : 'text-gray-700'}`}>
+            {item.paper_url ? (
+              <a href={item.paper_url} target="_blank" rel="noopener noreferrer" className="hover:text-indigo-600 hover:underline">
+                {item.paper_title}
+              </a>
+            ) : item.paper_title}
+          </div>
+          <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+            {item.source && (
+              <span className="text-[10px] px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-500 font-medium">{item.source}</span>
+            )}
+            {item.year && <span className="text-[10px] text-gray-400">{item.year}</span>}
+            {item.citations != null && item.citations > 0 && (
+              <span className="text-[10px] text-gray-400">引用 {item.citations}</span>
+            )}
+            {item.abstract && (
+              <button
+                onClick={() => setShowAbstract(v => !v)}
+                className="text-[10px] text-indigo-400 hover:text-indigo-600 transition-colors"
+              >
+                {showAbstract ? '收起摘要' : '查看摘要'}
+              </button>
+            )}
+          </div>
+          {showAbstract && item.abstract && (
+            <p className="mt-1.5 text-[11px] text-gray-500 leading-relaxed border-l-2 border-indigo-100 pl-2">
+              {item.abstract}
+            </p>
+          )}
+        </div>
+      </div>
+    </div>
+  )
 }
 
 function tomorrow() {
@@ -426,71 +497,14 @@ export function SubscriptionsPage({ token, onClose, initialExpandId }: Props) {
                             const isSent = !!item.sent_at
                             const isToday = item.planned_date === today
                             return (
-                              <div
+                              <QueueItemRow
                                 key={item.id}
-                                className={`flex items-start gap-2.5 px-2.5 py-2 rounded-lg text-xs transition-colors ${
-                                  isSent
-                                    ? 'bg-green-50/80'
-                                    : isToday
-                                    ? 'bg-indigo-50 border border-indigo-100'
-                                    : 'bg-white/80 border border-gray-100'
-                                }`}
-                              >
-                                {/* 状态图标 */}
-                                <div className="flex-shrink-0 mt-0.5">
-                                  {isSent ? (
-                                    <svg className="w-3.5 h-3.5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
-                                    </svg>
-                                  ) : isToday ? (
-                                    <svg className="w-3.5 h-3.5 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                                    </svg>
-                                  ) : (
-                                    <svg className="w-3.5 h-3.5 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                                    </svg>
-                                  )}
-                                </div>
-
-                                {/* 日期 */}
-                                <span className={`flex-shrink-0 w-12 font-medium ${
-                                  isSent ? 'text-green-600' : isToday ? 'text-indigo-600' : 'text-gray-400'
-                                }`}>
-                                  {formatPlannedDate(item.planned_date)}
-                                </span>
-
-                                {/* 标题 + meta */}
-                                <div className="flex-1 min-w-0">
-                                  <div className={`leading-relaxed line-clamp-2 ${isSent ? 'text-gray-500' : 'text-gray-700'}`}>
-                                    {item.paper_url ? (
-                                      <a
-                                        href={item.paper_url}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="hover:text-indigo-600 hover:underline"
-                                      >
-                                        {item.paper_title}
-                                      </a>
-                                    ) : item.paper_title}
-                                  </div>
-                                  {(item.source || item.year || item.citations != null) && (
-                                    <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-                                      {item.source && (
-                                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-500 font-medium">
-                                          {item.source}
-                                        </span>
-                                      )}
-                                      {item.year && (
-                                        <span className="text-[10px] text-gray-400">{item.year}</span>
-                                      )}
-                                      {item.citations != null && item.citations > 0 && (
-                                        <span className="text-[10px] text-gray-400">引用 {item.citations}</span>
-                                      )}
-                                    </div>
-                                  )}
-                                </div>
-                              </div>
+                                item={item}
+                                isSent={isSent}
+                                isToday={isToday}
+                                today={today}
+                                formatPlannedDate={formatPlannedDate}
+                              />
                             )
                           })}
                         </div>
