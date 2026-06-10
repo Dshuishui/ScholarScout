@@ -3,7 +3,8 @@ import asyncio
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException
+import httpx
+from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from openai import AsyncOpenAI
 from pydantic import BaseModel, Field
@@ -172,3 +173,66 @@ async def similarity_graph(req: GraphRequest):
         lambda: compute_similarity_graph(papers_dicts, req.threshold),
     )
     return result
+
+
+# ── GET /api/semantic/citations/{paper_id} ────────────────────────────────────
+
+_SS_BASE = "https://api.semanticscholar.org/graph/v1/paper"
+_SS_FIELDS = "paperId,title,authors,year,citationCount,venue"
+
+
+def _paper_to_node(item: dict, role: str) -> dict:
+    return {
+        "id": item.get("paperId", ""),
+        "title": item.get("title") or "(no title)",
+        "source": "Semantic Scholar",
+        "year": str(item.get("year") or ""),
+        "citations": item.get("citationCount") or 0,
+        "authors": ", ".join(a.get("name", "") for a in (item.get("authors") or [])[:3]),
+        "role": role,  # 'reference' | 'citing'
+    }
+
+
+@router.get("/citations/{paper_id}")
+async def get_citation_graph(
+    paper_id: str,
+    limit: int = Query(default=20, ge=1, le=50),
+):
+    """
+    Fetch references and citations for a Semantic Scholar paper.
+    Returns {nodes, links} where links have type='cites'.
+    """
+    fields = _SS_FIELDS
+    async with httpx.AsyncClient(timeout=15) as client:
+        ref_resp, cit_resp = await asyncio.gather(
+            client.get(f"{_SS_BASE}/{paper_id}/references", params={"fields": fields, "limit": limit}),
+            client.get(f"{_SS_BASE}/{paper_id}/citations",  params={"fields": fields, "limit": limit}),
+            return_exceptions=True,
+        )
+
+    nodes: dict[str, dict] = {}
+    links: list[dict] = []
+
+    def add_node(item: dict, role: str):
+        pid = item.get("paperId") or ""
+        if pid and pid not in nodes:
+            nodes[pid] = _paper_to_node(item, role)
+
+    if isinstance(ref_resp, httpx.Response) and ref_resp.status_code == 200:
+        for entry in ref_resp.json().get("data", []):
+            paper = entry.get("citedPaper") or {}
+            if paper.get("paperId"):
+                add_node(paper, "reference")
+                links.append({"source": paper_id, "target": paper["paperId"], "similarity": 0.8, "type": "cites"})
+
+    if isinstance(cit_resp, httpx.Response) and cit_resp.status_code == 200:
+        for entry in cit_resp.json().get("data", []):
+            paper = entry.get("citingPaper") or {}
+            if paper.get("paperId"):
+                add_node(paper, "citing")
+                links.append({"source": paper["paperId"], "target": paper_id, "similarity": 0.8, "type": "cites"})
+
+    if not nodes and not links:
+        raise HTTPException(status_code=404, detail="未找到引用数据（论文可能不在 Semantic Scholar 中）")
+
+    return {"nodes": list(nodes.values()), "links": links}

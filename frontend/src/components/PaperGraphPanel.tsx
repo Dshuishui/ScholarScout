@@ -9,6 +9,7 @@ interface GraphNode {
   year: string
   citations: number
   authors: string
+  role?: 'reference' | 'citing' | 'expanded'
   x?: number
   y?: number
 }
@@ -17,6 +18,7 @@ interface GraphLink {
   source: string
   target: string
   similarity: number
+  type?: 'semantic' | 'cites'
 }
 
 interface GraphData {
@@ -54,6 +56,8 @@ export function PaperGraphPanel({ papers, onClose }: Props) {
   const [error, setError] = useState('')
   const containerRef = useRef<HTMLDivElement>(null)
   const [dimensions, setDimensions] = useState({ width: 600, height: 500 })
+  const [expandingId, setExpandingId] = useState<string | null>(null)
+  const expandedRef = useRef<Set<string>>(new Set())
 
   useEffect(() => {
     const update = () => {
@@ -104,6 +108,35 @@ export function PaperGraphPanel({ papers, onClose }: Props) {
     fetchGraph(threshold)
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
+  const expandCitations = useCallback(async (nodeId: string) => {
+    if (expandedRef.current.has(nodeId)) return
+    setExpandingId(nodeId)
+    try {
+      const r = await fetch(`/api/semantic/citations/${encodeURIComponent(nodeId)}?limit=20`)
+      if (!r.ok) throw new Error(await r.text())
+      const data: GraphData = await r.json()
+      expandedRef.current.add(nodeId)
+      setGraphData(prev => {
+        if (!prev) return prev
+        const existingIds = new Set(prev.nodes.map(n => n.id))
+        const newNodes = data.nodes
+          .filter(n => !existingIds.has(n.id))
+          .map(n => ({ ...n, role: n.role ?? 'expanded' as const }))
+        const existingLinkKeys = new Set(prev.links.map(l => `${l.source}|${l.target}`))
+        const newLinks = data.links.filter(l => !existingLinkKeys.has(`${l.source}|${l.target}`))
+        return {
+          nodes: [...prev.nodes, ...newNodes],
+          links: [...prev.links, ...newLinks],
+        }
+      })
+    } catch (e) {
+      // silently ignore — SS may not have this paper
+      console.warn('Citation expand failed:', e)
+    } finally {
+      setExpandingId(null)
+    }
+  }, [])
+
   const nodeCanvasObject = useCallback((node: GraphNode, ctx: CanvasRenderingContext2D, globalScale: number) => {
     const r = Math.max(4, Math.min(12, 4 + Math.log1p(node.citations || 0) * 1.5))
     const color = sourceColor(node.source)
@@ -134,6 +167,7 @@ export function PaperGraphPanel({ papers, onClose }: Props) {
   }, [selected])
 
   const linkColor = useCallback((link: GraphLink) => {
+    if (link.type === 'cites') return '#f59e0b80'
     const sim = link.similarity
     const alpha = Math.round((sim - 0.3) * 2 * 255).toString(16).padStart(2, '0')
     return `#6366f1${alpha}`
@@ -248,7 +282,8 @@ export function PaperGraphPanel({ papers, onClose }: Props) {
           <div className="p-3 border-b border-gray-50">
             <p className="text-xs text-gray-400 leading-relaxed">
               节点大小 = 引用量<br />
-              连线粗细 = 相似度<br />
+              <span className="inline-block w-3 h-0.5 bg-indigo-400 align-middle mr-1" /> 紫色边 = 语义相似<br />
+              <span className="inline-block w-3 h-0.5 bg-amber-400 align-middle mr-1" /> 橙色边 = 引用关系<br />
               点击节点查看详情<br />
               滚轮缩放，拖动平移
             </p>
@@ -272,6 +307,24 @@ export function PaperGraphPanel({ papers, onClose }: Props) {
                   <span className="text-[10px] text-gray-400">引用 {selected.citations}</span>
                 )}
               </div>
+              {/* Expand citation graph button */}
+              <button
+                onClick={() => expandCitations(selected.id)}
+                disabled={expandingId === selected.id || expandedRef.current.has(selected.id)}
+                className="mt-2.5 w-full text-[11px] flex items-center justify-center gap-1.5 px-2 py-1.5 rounded border border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                {expandingId === selected.id ? (
+                  <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+                  </svg>
+                ) : (
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                )}
+                {expandedRef.current.has(selected.id) ? '已扩展引用图' : '扩展引用图'}
+              </button>
               {/* 相邻连接 */}
               {graphData && (() => {
                 const neighbors = graphData.links
