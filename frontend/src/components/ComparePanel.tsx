@@ -4,12 +4,13 @@ import remarkGfm from 'remark-gfm'
 import { saveSessionAnalysis } from '../api/client'
 import type { Paper } from '../types'
 
-type Mode = 'compare' | 'review' | 'trend'
+type Mode = 'compare' | 'review' | 'trend' | 'extract'
 
 const MODES: { key: Mode; label: string; desc: string; icon: string }[] = [
   { key: 'compare', label: '对比分析', desc: '方法、贡献、局限性横向对比', icon: 'M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z' },
   { key: 'review',  label: '文献综述', desc: '生成综述段落，可直接引用',  icon: 'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z' },
   { key: 'trend',   label: '研究趋势', desc: '时间线演进与未来方向预测',  icon: 'M13 7h8m0 0v8m0-8l-8 8-4-4-6 6' },
+  { key: 'extract', label: '结构化提取', desc: '方法/数据集/指标/局限性表格', icon: 'M3 10h18M3 14h18M10 3v18' },
 ]
 
 const GB_REF_INSTRUCTION = `
@@ -37,6 +38,7 @@ function buildMessages(papers: Paper[], mode: Mode) {
     compare: `你是学术研究助手。请对以下 ${papers.length} 篇论文进行系统性对比分析，必须包含以下部分：\n1. **总览表格**（编号、论文名、年份、核心方法、主要贡献）\n2. **方法与技术路线对比**\n3. **创新点与贡献对比**\n4. **实验设置与结果对比**（如有）\n5. **优缺点与局限性**\n6. **相互关系与传承**${GB_REF_INSTRUCTION}\n\n请用中文，Markdown 格式，结构清晰，包含表格。`,
     review:  `你是学术写作助手。请基于以下 ${papers.length} 篇论文撰写一段专业的文献综述，需涵盖：研究背景与问题、各论文的核心贡献及相互关联、领域现状总结。写作风格：学术正式，第三人称，可直接用于论文 Related Work 章节。${GB_REF_INSTRUCTION}\n\n请用中文，Markdown 格式，600-900 字，文末附完整参考文献列表。`,
     trend:   `你是学术研究助手。请分析以下论文所属领域的研究趋势，需包含：\n1. **技术演进路线**（按时间梳理关键突破）\n2. **研究热点变化**\n3. **各论文的里程碑意义**\n4. **未来研究方向预测**${GB_REF_INSTRUCTION}\n\n请用中文，Markdown 格式，结合论文时间线分析。`,
+    extract: `你是学术信息提取助手。请对以下每篇论文提取结构化字段，严格按照以下 Markdown 表格格式输出，每篇论文一行，字段若摘要中未提及填"—"：\n\n| 编号 | 标题（简短） | 年份 | 研究方法 | 数据集 | 核心指标与结果 | 主要贡献 | 局限性 |\n|------|------------|------|---------|--------|--------------|---------|-------|\n| [1] | ... | ... | ... | ... | ... | ... | ... |\n\n表格之后，针对字段差异最显著的维度（方法、数据集、指标）各写 1-2 句横向小结。请用中文，保持表格对齐。`,
   }
 
   return [
@@ -200,8 +202,26 @@ export function ComparePanel({ papers, apiKey, onClose, token, sessionId }: Prop
           ))}
         </div>
 
+        {/* Abstract-only notice */}
+        {(() => {
+          const withAbstract = papers.filter(p => p.abstract).length
+          const withoutAbstract = papers.length - withAbstract
+          return (
+            <div className="flex-shrink-0 px-5 py-2 bg-amber-50 border-b border-amber-100 flex items-center gap-2">
+              <svg className="w-3.5 h-3.5 text-amber-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <span className="text-[11px] text-amber-700">
+                当前分析<strong>仅基于摘要</strong>
+                {withoutAbstract > 0 && <>，其中 {withoutAbstract} 篇无摘要将影响分析质量</>}
+                。上传论文 PDF 后可在单篇对话中获得全文分析；多论文全文分析即将支持。
+              </span>
+            </div>
+          )
+        })()}
+
         {/* Mode selector */}
-        <div className="flex-shrink-0 px-5 pt-4 pb-3 flex gap-3">
+        <div className="flex-shrink-0 px-5 pt-4 pb-3 grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3">
           {MODES.map(m => (
             <button
               key={m.key}
