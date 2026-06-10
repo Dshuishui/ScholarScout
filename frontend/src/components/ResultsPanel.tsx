@@ -1060,7 +1060,7 @@ const addKeyword = () => {
         )}
 
         {/* 空状态：示例查询可点击 */}
-        {!isLoading && papers.length === 0 && rejectedPapers.length === 0 && !hasSearchError && !statusMessage && (
+        {!isLoading && papers.length === 0 && rejectedPapers.length === 0 && !hasSearchError && !statusMessage && confirmedKeywords == null && (
           <div className="flex flex-col items-center justify-center h-full min-h-[360px] text-center gap-5 px-8">
             <div className="w-16 h-16 rounded-2xl bg-white border border-gray-200 shadow-sm flex items-center justify-center">
               <svg className="w-8 h-8 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1094,6 +1094,40 @@ const addKeyword = () => {
           </div>
         )}
 
+
+        {/* 搜索后全源零结果 */}
+        {!isLoading && papers.length === 0 && rejectedPapers.length === 0 && !hasSearchError && !statusMessage && confirmedKeywords != null && confirmedKeywords.length > 0 && (
+          <div className="flex flex-col items-center justify-center min-h-[280px] text-center gap-4 px-8">
+            <div className="w-14 h-14 rounded-2xl bg-gray-100 border border-gray-200 flex items-center justify-center">
+              <svg className="w-7 h-7 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-gray-700 mb-1">未找到相关论文</p>
+              <p className="text-xs text-gray-400 leading-relaxed">
+                关键词 <span className="font-medium text-gray-600">"{confirmedKeywords.join(' · ')}"</span> 在 10 个数据源中均无结果<br />
+                尝试换用更宽泛的词语，或去掉年份限制
+              </p>
+            </div>
+            <div className="flex flex-col gap-2 w-full max-w-xs">
+              <p className="text-xs text-gray-400 mb-1">换个方向试试 ↓</p>
+              {[
+                '找关于大模型幻觉问题的论文',
+                'transformer 在计算机视觉的应用',
+                'deep learning 医学图像分析综述',
+              ].map(example => (
+                <button
+                  key={example}
+                  onClick={() => onExampleSearch?.(example)}
+                  className="text-sm text-gray-500 hover:text-blue-600 bg-white hover:bg-blue-50 border border-gray-200 hover:border-blue-200 rounded-lg px-3 py-2.5 text-left transition-all"
+                >
+                  "{example}"
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* AI 筛选后 0 篇引导 */}
         {!isLoading && activeTab === 'filtered' && papers.length === 0 && rejectedPapers.length > 0 && (

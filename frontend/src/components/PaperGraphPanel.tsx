@@ -139,15 +139,27 @@ export function PaperGraphPanel({ papers, onClose }: Props) {
     const r = Math.max(4, Math.min(12, 4 + Math.log1p(node.citations || 0) * 1.5))
     const color = sourceColor(node.source)
     const isSelected = selected?.id === node.id
+    const isExpanded = node.role === 'reference' || node.role === 'citing' || node.role === 'expanded'
 
     ctx.beginPath()
     ctx.arc(node.x!, node.y!, r, 0, 2 * Math.PI)
-    ctx.fillStyle = color
+    ctx.fillStyle = isExpanded ? color + '70' : color
     ctx.fill()
+
+    if (isExpanded) {
+      ctx.beginPath()
+      ctx.arc(node.x!, node.y!, r, 0, 2 * Math.PI)
+      ctx.setLineDash([2, 2])
+      ctx.strokeStyle = color
+      ctx.lineWidth = 1
+      ctx.stroke()
+      ctx.setLineDash([])
+    }
 
     if (isSelected) {
       ctx.beginPath()
       ctx.arc(node.x!, node.y!, r + 3, 0, 2 * Math.PI)
+      ctx.setLineDash([])
       ctx.strokeStyle = color
       ctx.lineWidth = 2
       ctx.stroke()
@@ -280,6 +292,8 @@ export function PaperGraphPanel({ papers, onClose }: Props) {
           <div className="p-3 border-b border-gray-50">
             <p className="text-xs text-gray-400 leading-relaxed">
               节点大小 = 引用量<br />
+              实心节点 = 原始论文<br />
+              半透明虚线 = 引用扩展<br />
               <span className="inline-block w-3 h-0.5 bg-indigo-400 align-middle mr-1" /> 紫色边 = 语义相似<br />
               <span className="inline-block w-3 h-0.5 bg-amber-400 align-middle mr-1" /> 橙色边 = 引用关系<br />
               点击节点查看详情<br />
@@ -306,23 +320,34 @@ export function PaperGraphPanel({ papers, onClose }: Props) {
                 )}
               </div>
               {/* Expand citation graph button */}
-              <button
-                onClick={() => expandCitations(selected.id)}
-                disabled={expandingId === selected.id || expandedIds.has(selected.id)}
-                className="mt-2.5 w-full text-[11px] flex items-center justify-center gap-1.5 px-2 py-1.5 rounded border border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-              >
-                {expandingId === selected.id ? (
-                  <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
-                  </svg>
-                ) : (
-                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                  </svg>
-                )}
-                {expandedIds.has(selected.id) ? '已扩展引用图' : '扩展引用图'}
-              </button>
+              {(() => {
+                const canExpand = selected.source === 'Semantic Scholar'
+                const isExpanded = expandedIds.has(selected.id)
+                const isExpanding = expandingId === selected.id
+                const title = !canExpand
+                  ? '仅 Semantic Scholar 来源的论文支持扩展引用图'
+                  : isExpanded ? '引用图已扩展' : '从 Semantic Scholar 拉取参考文献和引用该论文的论文'
+                return (
+                  <button
+                    onClick={() => expandCitations(selected.id)}
+                    disabled={!canExpand || isExpanding || isExpanded}
+                    title={title}
+                    className="mt-2.5 w-full text-[11px] flex items-center justify-center gap-1.5 px-2 py-1.5 rounded border border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                  >
+                    {isExpanding ? (
+                      <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+                      </svg>
+                    ) : (
+                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                      </svg>
+                    )}
+                    {!canExpand ? '不支持扩展（非 SS 来源）' : isExpanded ? '已扩展引用图' : '扩展引用图'}
+                  </button>
+                )
+              })()}
               {/* 相邻连接 */}
               {graphData && (() => {
                 const neighbors = graphData.links
