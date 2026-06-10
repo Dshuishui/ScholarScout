@@ -59,6 +59,8 @@ export function PaperGraphPanel({ papers, onClose }: Props) {
   const [dimensions, setDimensions] = useState({ width: 600, height: 500 })
   const [expandingId, setExpandingId] = useState<string | null>(null)
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set())
+  const [hoveredNode, setHoveredNode] = useState<GraphNode | null>(null)
+  const [mousePos, setMousePos] = useState({ x: 0, y: 0 })
 
   useEffect(() => {
     const update = () => {
@@ -229,7 +231,29 @@ export function PaperGraphPanel({ papers, onClose }: Props) {
       {/* 图谱区 + 侧边信息面板 */}
       <div className="flex-1 flex overflow-hidden">
         {/* 图谱 canvas */}
-        <div ref={containerRef} className="flex-1 bg-gray-50 relative">
+        <div
+          ref={containerRef}
+          className="flex-1 bg-gray-50 relative"
+          onMouseMove={e => {
+            const rect = containerRef.current?.getBoundingClientRect()
+            if (rect) setMousePos({ x: e.clientX - rect.left, y: e.clientY - rect.top })
+          }}
+        >
+          {/* Hover tooltip */}
+          {hoveredNode && selected?.id !== hoveredNode.id && (
+            <div
+              className="absolute z-20 pointer-events-none bg-white border border-gray-200 rounded-lg shadow-lg px-2.5 py-2 text-xs max-w-[220px]"
+              style={{ left: mousePos.x + 14, top: Math.max(0, mousePos.y - 10) }}
+            >
+              <p className="font-medium text-gray-800 line-clamp-2 leading-snug">{hoveredNode.title}</p>
+              <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                {hoveredNode.year && <span className="text-gray-400">{hoveredNode.year}</span>}
+                {hoveredNode.citations > 0 && <span className="text-gray-400">引用 {hoveredNode.citations}</span>}
+                <span className="text-[10px]" style={{ color: sourceColor(hoveredNode.source) }}>{hoveredNode.source}</span>
+              </div>
+            </div>
+          )}
+
           {loading && (
             <div className="absolute inset-0 flex items-center justify-center bg-white/60 z-10">
               <div className="text-sm text-gray-500 flex items-center gap-2">
@@ -258,6 +282,7 @@ export function PaperGraphPanel({ papers, onClose }: Props) {
               width={dimensions.width}
               height={dimensions.height}
               graphData={graphData}
+              onNodeHover={node => setHoveredNode(node as GraphNode | null)}
               nodeCanvasObject={nodeCanvasObject as never}
               nodeCanvasObjectMode={() => 'replace'}
               linkColor={linkColor as never}

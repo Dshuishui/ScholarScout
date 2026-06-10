@@ -48,7 +48,6 @@ function QueueItemRow({ item, isSent, isToday, formatPlannedDate: fmt }: {
   item: QueueItem
   isSent: boolean
   isToday: boolean
-  today: string
   formatPlannedDate: (s: string) => string
 }) {
   const [showAbstract, setShowAbstract] = useState(false)
@@ -502,7 +501,6 @@ export function SubscriptionsPage({ token, onClose, initialExpandId }: Props) {
                                 item={item}
                                 isSent={isSent}
                                 isToday={isToday}
-                                today={today}
                                 formatPlannedDate={formatPlannedDate}
                               />
                             )

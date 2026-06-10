@@ -1,5 +1,6 @@
 """Tests for /api/semantic/* endpoints."""
 from unittest.mock import AsyncMock, MagicMock, patch
+from typing import AsyncIterator
 
 import httpx
 import pytest
@@ -201,3 +202,120 @@ async def test_citation_graph_limit_out_of_range(client):
 
     r = await client.get("/api/semantic/citations/p1?limit=51")
     assert r.status_code == 422
+
+
+# ── POST /api/semantic/rag ────────────────────────────────────────────────────
+
+_RAG_PAPERS = [
+    {"paper_id": "p1", "title": "Attention Is All You Need",
+     "abstract": "We propose the Transformer architecture.", "authors": ["Vaswani et al."],
+     "published_date": "2017-01-01", "source": "arXiv"},
+    {"paper_id": "p2", "title": "BERT",
+     "abstract": "Bidirectional pre-training for NLP.", "authors": ["Devlin et al."],
+     "published_date": "2018-01-01", "source": "arXiv"},
+]
+
+
+async def _make_rag_stream(*tokens: str):
+    """Build an async iterator of mock OpenAI streaming chunks."""
+    async def _gen() -> AsyncIterator:
+        for tok in tokens:
+            chunk = MagicMock()
+            chunk.choices = [MagicMock()]
+            chunk.choices[0].delta.content = tok
+            yield chunk
+    return _gen()
+
+
+def _patch_openai(stream):
+    mock_client = AsyncMock()
+    mock_client.chat.completions.create = AsyncMock(return_value=stream)
+    mock_cls = MagicMock(return_value=mock_client)
+    return patch("routers.semantic.AsyncOpenAI", mock_cls)
+
+
+async def test_rag_streams_text_response(client):
+    stream = await _make_rag_stream("根据", "论文", "[1]", "，Transformer", "效果好。")
+    with _patch_openai(stream):
+        r = await client.post("/api/semantic/rag", json={
+            "question": "这些论文的主要贡献是什么？",
+            "papers": _RAG_PAPERS,
+            "api_key": "test-key",
+        })
+    assert r.status_code == 200
+    assert "根据" in r.text
+    assert "[1]" in r.text
+
+
+async def test_rag_response_is_plain_text(client):
+    stream = await _make_rag_stream("hello")
+    with _patch_openai(stream):
+        r = await client.post("/api/semantic/rag", json={
+            "question": "test",
+            "papers": _RAG_PAPERS,
+            "api_key": "sk-test",
+        })
+    assert "text/plain" in r.headers["content-type"]
+
+
+async def test_rag_empty_question_rejected(client):
+    r = await client.post("/api/semantic/rag", json={
+        "question": "",
+        "papers": _RAG_PAPERS,
+        "api_key": "sk-test",
+    })
+    assert r.status_code == 422
+
+
+async def test_rag_missing_api_key_rejected(client):
+    r = await client.post("/api/semantic/rag", json={
+        "question": "What is this about?",
+        "papers": _RAG_PAPERS,
+        "api_key": "",
+    })
+    assert r.status_code == 422
+
+
+async def test_rag_requires_at_least_one_paper(client):
+    r = await client.post("/api/semantic/rag", json={
+        "question": "test",
+        "papers": [],
+        "api_key": "sk-test",
+    })
+    assert r.status_code == 422
+
+
+async def test_rag_handles_openai_error_gracefully(client):
+    mock_client = AsyncMock()
+    mock_client.chat.completions.create = AsyncMock(side_effect=Exception("API quota exceeded"))
+    with patch("routers.semantic.AsyncOpenAI", MagicMock(return_value=mock_client)):
+        r = await client.post("/api/semantic/rag", json={
+            "question": "test",
+            "papers": _RAG_PAPERS,
+            "api_key": "sk-test",
+        })
+    assert r.status_code == 200
+    assert "错误" in r.text
+
+
+async def test_rag_includes_paper_context_in_prompt(client):
+    """Verify abstracts are passed through — mock captures the messages."""
+    captured: list = []
+
+    async def _fake_create(**kwargs):
+        captured.append(kwargs.get("messages", []))
+        return await _make_rag_stream("ok")
+
+    mock_client = AsyncMock()
+    mock_client.chat.completions.create = _fake_create
+    with patch("routers.semantic.AsyncOpenAI", MagicMock(return_value=mock_client)):
+        await client.post("/api/semantic/rag", json={
+            "question": "contributions?",
+            "papers": _RAG_PAPERS,
+            "api_key": "sk-test",
+        })
+
+    assert captured
+    user_msg = next(m["content"] for m in captured[0] if m["role"] == "user")
+    assert "Attention Is All You Need" in user_msg
+    assert "BERT" in user_msg

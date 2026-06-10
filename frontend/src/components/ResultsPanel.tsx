@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, lazy, Suspense } from 'react'
+import { useState, useEffect, useMemo, useRef, lazy, Suspense } from 'react'
 import { useAuth } from '../hooks/useAuth'
 import { AuthModal } from './AuthModal'
 import JSZip from 'jszip'
@@ -189,6 +189,8 @@ function Pagination({ current, total, onChange }: {
 
 export function ResultsPanel({ papers, rejectedPapers = [], isLoading, statusMessage, sourceStatuses = {}, settings, onSettingsChange, onReSearch, confirmedKeywords, onAnalyzePaper, onExampleSearch, apiKey, getMessages, hasSearchError = false, searchDateRange, sessionId, onOpenRag, onOpenGraph }: Props) {
   const [currentPage, setCurrentPage] = useState(1)
+  const [showBackToTop, setShowBackToTop] = useState(false)
+  const listScrollRef = useRef<HTMLDivElement>(null)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [downloadProgress, setDownloadProgress] = useState<DownloadProgress | null>(null)
   const [appliedSettings, setAppliedSettings] = useState(settings)
@@ -1012,7 +1014,11 @@ const addKeyword = () => {
       )}
 
       {/* 论文列表 */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-3">
+      <div
+        ref={listScrollRef}
+        className="flex-1 overflow-y-auto p-4 space-y-3 relative"
+        onScroll={e => setShowBackToTop((e.target as HTMLDivElement).scrollTop > 400)}
+      >
         {/* 搜索中：来源进度网格 + 骨架屏 */}
         {isLoading && papers.length === 0 && (
           <div className="space-y-3">
@@ -1256,8 +1262,21 @@ const addKeyword = () => {
                 />
               </div>
             ))}
-            <Pagination current={currentPage} total={totalPages} onChange={p => { setCurrentPage(p) }} />
+            <Pagination current={currentPage} total={totalPages} onChange={p => { setCurrentPage(p); listScrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' }) }} />
           </>
+        )}
+
+        {/* 回到顶部 */}
+        {showBackToTop && (
+          <button
+            onClick={() => listScrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' })}
+            className="sticky bottom-4 left-full mr-2 w-8 h-8 rounded-full bg-white border border-gray-200 shadow-md flex items-center justify-center text-gray-400 hover:text-indigo-600 hover:border-indigo-200 transition-all z-10"
+            title="回到顶部"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 10l7-7m0 0l7 7m-7-7v18" />
+            </svg>
+          </button>
         )}
       </div>
 
