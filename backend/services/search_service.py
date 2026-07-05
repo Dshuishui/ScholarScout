@@ -179,7 +179,7 @@ async def _search_pubmed(parsed: ParsedQuery, limit: int) -> list[Paper]:
     try:
         search_params: dict = {
             "db": "pubmed",
-            "term": " ".join(parsed.keywords),
+            "term": " OR ".join(parsed.keywords),
             "retmax": limit,
             "retmode": "json",
             "sort": "date",
@@ -373,7 +373,7 @@ async def _search_inspire(parsed: ParsedQuery, limit: int) -> list[Paper]:
 async def _search_europepmc(parsed: ParsedQuery, limit: int) -> list[Paper]:
     """Europe PMC：生命科学 / 生化 / 医学，无需 Key，同时收录 bioRxiv/medRxiv 预印本"""
     try:
-        kw = " ".join(parsed.keywords)
+        kw = "(" + " OR ".join(parsed.keywords) + ")"
         query = kw
         if parsed.date_from:
             query += f" AND FIRST_PDATE:[{parsed.date_from[:4]} TO *]"
@@ -427,7 +427,7 @@ async def _search_nasa_ads(parsed: ParsedQuery, limit: int) -> list[Paper]:
     if not NASA_ADS_API_KEY:
         return []
     try:
-        kw = " ".join(parsed.keywords)
+        kw = "(" + " OR ".join(parsed.keywords) + ")"
         query = kw
         if parsed.date_from:
             query += f" pubdate:[{parsed.date_from[:4]} TO 9999]"
