@@ -115,7 +115,7 @@ export function PaperCard({ paper, selected = false, onToggle, isRejected = fals
         <div className="flex-1 min-w-0">
           {/* Title + copy */}
           <div className="flex items-start gap-1.5 mb-1.5">
-            <h3 className="text-base font-bold text-gray-900 leading-snug line-clamp-2 flex-1">
+            <h3 className="text-base font-bold text-gray-900 leading-snug line-clamp-2 flex-1" title={paper.title}>
               {paper.title}
             </h3>
             <button
