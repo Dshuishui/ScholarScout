@@ -45,9 +45,13 @@ interface Props {
 export function PaperCard({ paper, selected = false, onToggle, isRejected = false, onAnalyze, compact = false, isSaved = false, onSave, hasChat = false }: Props) {
   const [copied, setCopied] = useState(false)
   const [expanded, setExpanded] = useState(false)
+  const [abstractExpanded, setAbstractExpanded] = useState(false)
   const { isLoggedIn } = useAuth()
   const showAbstract = !compact || expanded
   const hasExpandable = compact && (!!paper.abstract || !!paper.relevance_reason)
+  // compact 模式点开即视为看全文；standard 模式长摘要默认截断 3 行，提供独立展开
+  const isLongAbstract = (paper.abstract?.length ?? 0) > 180
+  const clampAbstract = !compact && !abstractExpanded && isLongAbstract
   const year = paper.published_date?.slice(0, 4) ?? '—'
 
   const copyTitle = () => {
@@ -233,9 +237,19 @@ export function PaperCard({ paper, selected = false, onToggle, isRejected = fals
 
           {/* Abstract */}
           {showAbstract && paper.abstract && (
-            <p className="text-sm text-gray-600 leading-relaxed line-clamp-3 mb-3">
-              {paper.abstract}
-            </p>
+            <div className="mb-3">
+              <p className={`text-sm text-gray-600 leading-relaxed ${clampAbstract ? 'line-clamp-3' : ''}`}>
+                {paper.abstract}
+              </p>
+              {!compact && isLongAbstract && (
+                <button
+                  onClick={() => setAbstractExpanded(v => !v)}
+                  className="mt-1 text-xs text-blue-500 hover:text-blue-700 font-medium transition-colors"
+                >
+                  {abstractExpanded ? '收起摘要' : '展开全文'}
+                </button>
+              )}
+            </div>
           )}
 
           {/* AI relevance reason (full) */}
