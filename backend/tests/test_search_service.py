@@ -30,6 +30,15 @@ def test_normalize_title_is_case_insensitive():
 def test_normalize_title_collapses_whitespace():
     assert _normalize_title("deep  learning") == _normalize_title("deep learning")
 
+def test_normalize_title_non_ascii_not_empty():
+    # 纯非拉丁标题不能归一化为空串，否则 deduplicate 会整篇丢弃
+    assert _normalize_title("深度学习综述") != ""
+    assert _normalize_title("αβγ衰变") != ""
+
+def test_normalize_title_non_ascii_stable():
+    # 相同非 ASCII 标题归一化结果一致（大小写/空白无关）
+    assert _normalize_title("深度学习  综述") == _normalize_title("深度学习 综述")
+
 
 # ── deduplicate ───────────────────────────────────────────────────────────────
 
@@ -54,6 +63,23 @@ def test_deduplicate_title_ignores_trailing_punct():
         make_paper("2", "Paper A"),
     ]
     assert len(deduplicate(papers)) == 1
+
+def test_deduplicate_keeps_non_ascii_titled_paper():
+    # 回归：中文标题论文曾因归一化空 key 被静默丢弃
+    papers = [
+        make_paper("1", "深度学习在医学图像分割中的应用"),
+        make_paper("2", "Deep Learning for Medical Imaging"),
+    ]
+    assert len(deduplicate(papers)) == 2
+
+def test_deduplicate_merges_identical_non_ascii_titles():
+    papers = [
+        make_paper("1", "深度学习综述", source="PubMed", citations=5),
+        make_paper("2", "深度学习综述", source="CrossRef", citations=10),
+    ]
+    result = deduplicate(papers)
+    assert len(result) == 1
+    assert result[0].citations == 10
 
 def test_deduplicate_keeps_all_unique():
     papers = [make_paper(str(i), f"Paper {i}") for i in range(3)]

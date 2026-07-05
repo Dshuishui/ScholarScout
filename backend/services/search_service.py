@@ -764,10 +764,18 @@ def _sanitize_paper(p: Paper) -> Paper:
 
 
 def _normalize_title(title: str) -> str:
-    """标题规范化：Unicode 归一化 → ASCII → 小写 → 去首尾标点 → 压缩空白。"""
+    """标题规范化：Unicode 归一化 → ASCII → 小写 → 去首尾标点 → 压缩空白。
+
+    对纯非拉丁标题（中文、希腊字母等），ASCII 归一化会得到空串。此时回退到
+    NFKC 归一化后的原始标题，避免 deduplicate 因空 key 而整篇丢弃论文。
+    """
     t = unicodedata.normalize("NFKD", title).encode("ascii", "ignore").decode("ascii")
     t = t.lower().rstrip(".,;:!?。，；：！？").strip()
-    return re.sub(r"\s+", " ", t)
+    t = re.sub(r"\s+", " ", t)
+    if t:
+        return t
+    fallback = unicodedata.normalize("NFKC", title).lower().rstrip(".,;:!?。，；：！？").strip()
+    return re.sub(r"\s+", " ", fallback)
 
 
 def _merge(existing: Paper, newcomer: Paper) -> Paper:
