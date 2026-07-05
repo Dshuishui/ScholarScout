@@ -16,7 +16,8 @@ import { HistoryPage } from '../pages/HistoryPage'
 import { SessionsPage } from '../pages/SessionsPage'
 import { SemanticSearchPanel } from './SemanticSearchPanel'
 import { RagChatPanel } from './RagChatPanel'
-import { PaperGraphPanel } from './PaperGraphPanel'
+// react-force-graph-2d 体积较大，仅在打开关系图谱时才加载，避免拖慢首屏
+const PaperGraphPanel = lazy(() => import('./PaperGraphPanel').then(m => ({ default: m.PaperGraphPanel })))
 const SubscriptionsPage = lazy(() => import('../pages/SubscriptionsPage').then(m => ({ default: m.SubscriptionsPage })))
 import { FeedbackWidget } from './FeedbackWidget'
 import { RedPandaWidget } from './RedPandaWidget'
@@ -437,7 +438,9 @@ export function MainLayout({ apiKey, onClearKey }: Props) {
       )}
       {graphPapers && graphPapers.length >= 2 && (
         <div className="fixed inset-0 z-40 bg-white">
-          <PaperGraphPanel papers={graphPapers} onClose={() => setGraphPapers(null)} />
+          <Suspense fallback={<div className="flex items-center justify-center h-full text-sm text-gray-400">加载关系图谱…</div>}>
+            <PaperGraphPanel papers={graphPapers} onClose={() => setGraphPapers(null)} />
+          </Suspense>
         </div>
       )}
     </div>
