@@ -324,3 +324,15 @@ async def test_openalex_semantic_failure_keeps_keyword_results(monkeypatch, stub
     monkeypatch.setattr(s, "OPENALEX_API_KEY", "k")
     monkeypatch.setattr(s, "_openalex_request", fake_request)
     assert [p.paper_id for p in await s._search_openalex(ParsedQuery(keywords=["raft"]), 10)] == ["W1"]
+
+
+async def test_semantic_scholar_sends_api_key_header(monkeypatch, stub_httpx):
+    from services import search_service as s
+    seen = {}
+    async def fake_get(client, url, **kwargs):
+        seen.update(kwargs.get("headers") or {})
+        raise RuntimeError("stop")
+    monkeypatch.setattr(s, "_get_with_retry", fake_get)
+    monkeypatch.setattr(s, "SEMANTIC_SCHOLAR_HEADERS", {"x-api-key": "k"})
+    await s._search_semantic_scholar(ParsedQuery(keywords=["raft"]), 5)
+    assert seen == {"x-api-key": "k"}

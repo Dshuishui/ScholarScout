@@ -9,7 +9,7 @@ from fastapi.responses import StreamingResponse
 from openai import AsyncOpenAI
 from pydantic import BaseModel, Field
 
-from config import DEEPSEEK_BASE_URL, DEEPSEEK_MODEL
+from config import DEEPSEEK_BASE_URL, DEEPSEEK_MODEL, SEMANTIC_SCHOLAR_HEADERS
 from services.vector_service import semantic_search, find_similar, collection_count, compute_similarity_graph
 
 from logging_config import get_logger
@@ -205,8 +205,10 @@ async def get_citation_graph(
     fields = _SS_FIELDS
     async with httpx.AsyncClient(timeout=15) as client:
         ref_resp, cit_resp = await asyncio.gather(
-            client.get(f"{_SS_BASE}/{paper_id}/references", params={"fields": fields, "limit": limit}),
-            client.get(f"{_SS_BASE}/{paper_id}/citations",  params={"fields": fields, "limit": limit}),
+            client.get(f"{_SS_BASE}/{paper_id}/references", params={"fields": fields, "limit": limit},
+                       headers=SEMANTIC_SCHOLAR_HEADERS),
+            client.get(f"{_SS_BASE}/{paper_id}/citations",  params={"fields": fields, "limit": limit},
+                       headers=SEMANTIC_SCHOLAR_HEADERS),
             return_exceptions=True,
         )
 

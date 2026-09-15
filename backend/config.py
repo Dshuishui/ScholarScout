@@ -15,6 +15,9 @@ SERPAPI_KEY = os.environ.get("SERPAPI_KEY", "")
 # OpenAlex 2026 年起生产环境需要 key（免费，每天 1 美元额度）；无 key 时每天只有 0.1 美元。
 # 配置后同时启用 OpenAlex 语义检索
 OPENALEX_API_KEY = os.environ.get("OPENALEX_API_KEY", "")
+# Semantic Scholar 无 key 时和全世界共用一个限流池，几乎一直 429；免费申请的 key 有独立额度
+SEMANTIC_SCHOLAR_API_KEY = os.environ.get("SEMANTIC_SCHOLAR_API_KEY", "")
+SEMANTIC_SCHOLAR_HEADERS = {"x-api-key": SEMANTIC_SCHOLAR_API_KEY} if SEMANTIC_SCHOLAR_API_KEY else {}
 POLITE_EMAIL = "sasakinakamura9@gmail.com"  # 用于 CrossRef / OpenAlex / Unpaywall 礼貌池标识
 SEARCH_LIMIT_PER_SOURCE = 50
 VALIDATED_LIMIT = 50

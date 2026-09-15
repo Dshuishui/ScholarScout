@@ -7,6 +7,8 @@ import re
 import httpx
 from urllib.parse import urlparse
 
+from config import SEMANTIC_SCHOLAR_HEADERS
+
 logger = logging.getLogger(__name__)
 
 MAX_FILE_SIZE = 50 * 1024 * 1024  # 50 MB
@@ -142,6 +144,7 @@ async def _via_semantic_scholar(doi: str) -> bytes | None:
             r = await client.get(
                 f"https://api.semanticscholar.org/graph/v1/paper/DOI:{doi}",
                 params={"fields": "openAccessPdf"},
+                headers=SEMANTIC_SCHOLAR_HEADERS,
             )
             if r.status_code == 200:
                 oa = r.json().get("openAccessPdf") or {}

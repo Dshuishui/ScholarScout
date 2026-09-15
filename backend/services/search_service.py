@@ -6,7 +6,9 @@ import xml.etree.ElementTree as ET
 import feedparser
 import httpx
 from models import Paper, ParsedQuery
-from config import CORE_API_KEY, NASA_ADS_API_KEY, SERPAPI_KEY, OPENALEX_API_KEY, POLITE_EMAIL
+from config import (
+    CORE_API_KEY, NASA_ADS_API_KEY, SERPAPI_KEY, OPENALEX_API_KEY, SEMANTIC_SCHOLAR_HEADERS, POLITE_EMAIL,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -92,6 +94,7 @@ async def _search_semantic_scholar(parsed: ParsedQuery, limit: int) -> list[Pape
                 client,
                 "https://api.semanticscholar.org/graph/v1/paper/search",
                 params=params,
+                headers=SEMANTIC_SCHOLAR_HEADERS,
             )
             resp.raise_for_status()
             data = resp.json()
