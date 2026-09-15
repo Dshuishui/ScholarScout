@@ -3,6 +3,7 @@ import { DEEPSEEK_MODELS, DEFAULT_MODEL } from '../hooks/useModel'
 import { FeedbackWidget } from './FeedbackWidget'
 import { RedPandaWidget } from './RedPandaWidget'
 import { AuthModal } from './AuthModal'
+import { LegalModal } from './LegalModal'
 import { useAuth } from '../hooks/useAuth'
 
 const MODEL_STORAGE_KEY = 'scholarscout_model'
@@ -57,6 +58,7 @@ const persistKey = (key: string) => {
 const maskKey = (key: string) => `sk-···${key.slice(-4)}`
 
 export function KeySetupScreen({ onKeySubmit, onGuestEnter }: Props) {
+  const [showLegal, setShowLegal] = useState(false)
   const [input, setInput] = useState('')
   const [error, setError] = useState('')
   const [isValidating, setIsValidating] = useState(false)
@@ -266,6 +268,8 @@ export function KeySetupScreen({ onKeySubmit, onGuestEnter }: Props) {
               <span className="text-white/15">|</span>
               <a href="https://github.com/Dshuishui/ScholarScout" target="_blank" rel="noopener noreferrer"
                 className="hover:text-white transition-colors">GitHub 开源</a>
+              <span className="text-white/15">|</span>
+              <button onClick={() => setShowLegal(true)} className="hover:text-white transition-colors">隐私政策 · 条款</button>
             </div>
           </div>
         </div>
@@ -489,6 +493,7 @@ export function KeySetupScreen({ onKeySubmit, onGuestEnter }: Props) {
           onClose={() => setShowAuthModal(false)}
         />
       )}
+      {showLegal && <LegalModal onClose={() => setShowLegal(false)} />}
       <RedPandaWidget />
       <FeedbackWidget />
     </>

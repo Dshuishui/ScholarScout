@@ -6,12 +6,12 @@
 
 [![Python](https://img.shields.io/badge/Python-3.11+-blue?logo=python&logoColor=white)](https://www.python.org)
 [![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=white)](https://react.dev)
-[![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.141-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
 [![CI](https://github.com/Dshuishui/ScholarScout/actions/workflows/ci.yml/badge.svg)](https://github.com/Dshuishui/ScholarScout/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/License-MIT-green)](LICENSE)
 [![uv](https://img.shields.io/badge/package_manager-uv-8A2BE2?logo=python)](https://github.com/astral-sh/uv)
 
-ScholarScout is a full-stack academic paper search platform. Describe what you're looking for in plain language; the backend concurrently queries 10 academic databases, runs LLM-based relevance validation, and streams results back via SSE. Paper abstracts are asynchronously embedded into a local vector store, enabling semantic retrieval, multi-paper RAG Q&A, and similarity graph visualisation.
+ScholarScout is a full-stack academic paper search platform. Describe what you're looking for in plain language; the backend concurrently queries up to 10 academic databases (7 work without any API key) with hybrid keyword + semantic retrieval, runs LLM-based relevance validation, and streams results back via SSE. Paper abstracts are asynchronously embedded into a local vector store, enabling semantic retrieval, multi-paper RAG Q&A, and similarity graph visualisation.
 
 **Live demo**: [http://118.25.192.117](http://118.25.192.117)
 
@@ -36,7 +36,11 @@ ScholarScout is a full-stack academic paper search platform. Describe what you'r
 ### Search & Discovery
 - **Natural language queries**: "Find papers on LLM hallucination after 2023" — no Boolean syntax needed
 - **Editable keyword chips**: AI extracts keywords before searching; edit or remove them, then re-search at any time
-- **10-source concurrent search**: arXiv, Semantic Scholar, OpenAlex, PubMed, Europe PMC, INSPIRE-HEP, CORE, NASA ADS, CrossRef, Google Scholar — all in parallel
+- **10-source concurrent search**: arXiv, Semantic Scholar, OpenAlex, PubMed, Europe PMC, INSPIRE-HEP, CrossRef work without keys; CORE, NASA ADS and Google Scholar (via SerpAPI) are enabled when their keys are configured
+- **Hybrid retrieval**: OpenAlex keyword search (boolean OR over the extracted synonyms) fused with OpenAlex semantic search via Reciprocal Rank Fusion (semantic search is enabled with `OPENALEX_API_KEY`)
+- **Domain-aware source routing**: the LLM tags the query's fields, so a pure CS query skips PubMed / Europe PMC and a non-physics query skips INSPIRE-HEP / NASA ADS
+- **Citation-aware ranking**: LLM relevance score plus a capped citation bonus, so seminal papers win ties
+- **No hidden year window**: results are only date-filtered when the query asks for it
 - **Smart deduplication**: DOI exact match + normalised title comparison; duplicates are merged, preserving the best fields (PDF, abstract, citations)
 - **AI relevance filtering**: LLM second-pass validation; toggle between "AI filtered" and "all results"
 
@@ -66,7 +70,8 @@ ScholarScout is a full-stack academic paper search platform. Describe what you'r
 
 ### Subscriptions & Daily Push
 - **Keyword subscriptions**: Subscribe after any search; the system immediately builds a push queue in the background
-- **Daily email**: Delivers one curated paper to your inbox at 08:00 CST; AI filtering ensures relevance
+- **Daily email**: Delivers one curated paper to your inbox at 08:00 Beijing time; AI filtering ensures relevance
+- **One-click unsubscribe**: Every email has a login-free unsubscribe link plus `List-Unsubscribe` / `List-Unsubscribe-Post` headers
 - **Auto-replenishment**: Queue is refilled automatically when fewer than 5 papers remain; manual refresh also available
 - **Queue visibility**: Subscription management page shows the full queue (✅ sent with date / 📅 scheduled with date)
 
@@ -74,11 +79,20 @@ ScholarScout is a full-stack academic paper search platform. Describe what you'r
 - **Email registration + verification**: JWT authentication; registration and login endpoints are rate-limited
 - **Atomic free-quota deduction**: `WHERE free_searches > 0` row-level lock prevents concurrent over-spend
 - **Saved papers / reading history / search sessions**: Synced across devices after login
+- **Account self-service**: change password (signs out every other device), export all personal data as JSON, delete account
+- **Privacy policy & terms**: shown at registration and from the account menu
 
 ### Real-time WebSocket Push
 - Persistent WebSocket connection between frontend and backend; optional JWT auth; ping/pong keepalive
 - Background events (vector index done, subscription queue ready) pushed as toast notifications
 - Connection status indicator (green/amber/grey dot); exponential-backoff auto-reconnect
+
+### Reliability & Security
+- **Source health monitoring**: every source call is recorded; an hourly check emails the admin when a previously healthy source starts returning nothing, when all sources return nothing, or when subscriptions stop delivering (at most one email per issue per day). Live stats at `/api/health`
+- **Retrieval regression benchmark**: `backend/eval/retrieval_benchmark.py` checks whether 16 landmark papers across CS / biomedicine / physics reach the candidate pool, without calling the LLM
+- **Hardened PDF proxy**: DNS-resolved SSRF checks on every redirect hop, 50 MB cap, bounded download concurrency
+- **Abuse limits**: rate limits keyed on the real client IP (`X-Real-IP` set by nginx), per-user caps on trial LLM calls and subscription work
+- **Token revocation**: `users.token_version` is embedded in every JWT and bumped on password change / reset
 
 ---
 
@@ -125,6 +139,14 @@ ScholarScout is a full-stack academic paper search platform. Describe what you'r
 9. **structlog dual-mode rendering**: `LOG_FORMAT=console` → coloured key=value for development; `json` → structured JSON lines for Loki/Datadog in production. One `get_logger()` call everywhere; renderer selected at startup.
 
 10. **WebSocket exponential backoff**: `useWebSocket` hook doubles the retry delay on each `onclose` (capped at 30 s) and resets to 1 s on successful reconnect. A 25 s ping interval prevents Nginx idle-timeout disconnection.
+
+11. **Per-engine query syntax**: OpenAlex, PubMed, Europe PMC, NASA ADS and INSPIRE treat space-separated terms as AND, so the LLM's synonym list is joined with OR there. CrossRef scores bag-of-words and ignores OR, so it keeps the plain joined string. Verified against the benchmark (recall 10/16 → 15/16).
+
+12. **RRF with k = 10, not 60**: with k = 60 a paper ranked #50 in both lists (2/110) outscores one ranked #1 in only one list (1/61), so truncating the fused list would drop exactly the semantic-only hits hybrid search is meant to add.
+
+13. **Alembic must not own logging**: `alembic/env.py` skips `fileConfig()` when migrations run from the app. Otherwise it resets the root level to WARNING and disables every existing logger, which silently hides all application warnings in production.
+
+14. **Revocable JWTs without a session table**: tokens carry `ver`; the dependency compares it with `users.token_version`. Legacy tokens without `ver` count as version 0, so introducing revocation didn't sign anyone out.
 
 ---
 
@@ -185,9 +207,16 @@ Copy `backend/.env.example` to `backend/.env`. All variables have sensible defau
 | `LOG_LEVEL` | `INFO` | `DEBUG` / `WARNING` |
 | `CORE_API_KEY` | _(empty)_ | Free: [core.ac.uk](https://core.ac.uk/services/api) |
 | `NASA_ADS_API_KEY` | _(empty)_ | Free: [ads.harvard.edu](https://ui.adsabs.harvard.edu/user/settings/token) |
+| `OPENALEX_API_KEY` | _(empty)_ | **Strongly recommended.** Free at [openalex.org/settings/api](https://openalex.org/settings/api); without it the budget is ~$0.10/day. Also enables semantic search |
+| `SEMANTIC_SCHOLAR_API_KEY` | _(empty)_ | **Strongly recommended.** Free [application](https://www.semanticscholar.org/product/api#api-key-form); the keyless pool is usually rate-limited |
+| `SERPAPI_KEY` | _(empty)_ | Google Scholar via [SerpAPI](https://serpapi.com) (250 free searches/month) |
 | `JWT_SECRET` | `dev-only-secret-change-me-in-production` | **Must be changed in production** |
 | `DEEPSEEK_SYSTEM_KEY` | _(empty)_ | Server-side key for free-trial searches |
+| `DEEPSEEK_API_KEY` | _(empty)_ | Server-side key for subscription relevance filtering |
 | `SMTP_HOST / SMTP_USER / SMTP_PASS` | _(empty)_ | Email delivery configuration |
+| `ADMIN_EMAIL` | _(maintainer address)_ | Receives feedback notifications and health alerts |
+| `APP_BASE_URL` | `http://118.25.192.117` | Public URL used in emails and as the default CORS origin |
+| `CORS_ORIGINS` | `APP_BASE_URL` | Comma-separated extra origins allowed to call the API |
 
 ---
 
@@ -196,15 +225,15 @@ Copy `backend/.env.example` to `backend/.env`. All variables have sensible defau
 | Source | Coverage | Key required |
 |--------|---------|--------------|
 | **arXiv** | CS / Physics / Math / Economics, latest preprints | No |
-| **Semantic Scholar** | General, strong semantic search | No (key raises rate limit) |
-| **OpenAlex** | General, 200M+ papers, OA-friendly | No |
+| **Semantic Scholar** | General, strong semantic search | No, but a free key is strongly recommended (keyless calls are usually rate-limited) |
+| **OpenAlex** | General, 200M+ papers, OA-friendly, keyword + semantic search | No, but a free key is strongly recommended (keyless budget ~$0.10/day) |
 | **PubMed** | Medicine / Biology / Life sciences | No |
 | **Europe PMC** | Life sciences / Medicine, incl. bioRxiv / medRxiv | No |
 | **INSPIRE-HEP** | High energy physics / Particle physics (CERN) | No |
 | **CrossRef** | General, 150M+ metadata records, incl. humanities | No |
 | **CORE** | 170M+ open-access full texts | Yes (free) |
 | **NASA ADS** | Astronomy / Astrophysics / Earth sciences | Yes (free) |
-| **Google Scholar** | General, broadest coverage | Yes (free quota) |
+| **Google Scholar** | General, broadest coverage | Yes — SerpAPI key (250 free searches/month) |
 
 **Unpaywall** automatically supplements DOI-bearing papers with legal open-access PDF links (no key required).
 
@@ -220,7 +249,7 @@ bash deploy/setup.sh    # first deployment
 bash deploy/deploy.sh   # subsequent updates
 ```
 
-**Requirements**: Ubuntu 22.04+, 4 CPU cores / 4 GB RAM, outbound internet access.
+**Requirements**: Ubuntu 22.04+, 4 CPU cores / 4 GB RAM, outbound internet access. `deploy/nginx.conf` includes the `/ws` WebSocket route and per-route upload limits; `deploy.sh` installs it on every deploy.
 
 ---
 
@@ -242,12 +271,15 @@ bash deploy/deploy.sh   # subsequent updates
 - PDF full-text chat with cloud persistence
 - Email registration / JWT auth / atomic free-quota deduction
 - Mobile-responsive layout
+- Hybrid retrieval, domain routing, citation-aware ranking, retrieval regression benchmark
+- Source health monitoring with admin email alerts
+- Account self-service (change password, data export, account deletion), privacy policy & terms
 
 **Planned**
 
+- HTTPS and automated database backups
+- Local arXiv metadata index (OAI-PMH harvest) to avoid API rate limits — see `docs/backlog.md`
 - Additional model support (Claude, GPT-4o)
-- User statistics dashboard
-- Chinese academic database integration
 
 ---
 

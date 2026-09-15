@@ -1,3 +1,4 @@
+import json
 import secrets
 import time
 from collections import defaultdict
@@ -5,13 +6,17 @@ from datetime import datetime, timedelta
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, EmailStr, Field
-from sqlalchemy import update as sa_update
+from sqlalchemy import delete as sa_delete, update as sa_update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from database import get_db
-from models_db import User, PasswordResetToken
+from models_db import (
+    User, PasswordResetToken, SavedPaper, ReadingHistory, PaperChat, SearchSession,
+    Subscription, SubscriptionQueueItem, Feedback,
+)
 from services.auth_service import hash_password, verify_password, create_access_token
 from services.email_service import send_verification_email, send_reset_password_email
 from dependencies import get_current_user
@@ -267,3 +272,107 @@ async def me(user: User = Depends(get_current_user)):
         "email": user.email,
         "free_searches": user.free_searches,
     }
+
+
+# ── 账号自助：修改密码 / 导出数据 / 注销账号 ─────────────────────────────────
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str = Field(min_length=1, max_length=100)
+    new_password: str = Field(min_length=8, max_length=100)
+
+
+class DeleteAccountRequest(BaseModel):
+    password: str = Field(min_length=1, max_length=100)
+
+
+def _check_password_attempt(user: User, password: str) -> None:
+    """已登录状态下校验密码：按用户限流，防止拿到登录凭证的人暴力猜密码。"""
+    key = f"user:{user.id}"
+    now = time.time()
+    _login_failures[key] = [t for t in _login_failures[key] if now - t < 900]
+    if len(_login_failures[key]) >= 5:
+        raise HTTPException(status_code=429, detail="密码错误次数过多，请 15 分钟后再试")
+    if not verify_password(password, user.password_hash):
+        _login_failures[key].append(now)
+        raise HTTPException(status_code=400, detail="当前密码不正确")
+
+
+@router.post("/change-password")
+async def change_password(
+    req: ChangePasswordRequest,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    _check_password_attempt(user, req.current_password)
+    user.password_hash = hash_password(req.new_password)
+    # 其他设备上的登录随之失效；当前设备用返回的新凭证继续保持登录
+    user.token_version = (user.token_version or 0) + 1
+    await db.commit()
+    return {
+        "access_token": create_access_token(user.id, user.token_version),
+        "token_type": "bearer",
+        "message": "密码已修改，其他设备需要重新登录",
+    }
+
+
+def _loads(raw: str | None):
+    try:
+        return json.loads(raw) if raw else None
+    except (TypeError, ValueError):
+        return raw
+
+
+@router.get("/export")
+async def export_my_data(user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    """导出当前账号在服务器上保存的全部个人数据（JSON）。"""
+    async def rows(model):
+        return (await db.execute(select(model).where(model.user_id == user.id))).scalars().all()
+
+    subs = await rows(Subscription)
+    sub_ids = [s.id for s in subs]
+    queue = (await db.execute(
+        select(SubscriptionQueueItem).where(SubscriptionQueueItem.subscription_id.in_(sub_ids))
+    )).scalars().all() if sub_ids else []
+
+    iso = lambda d: d.isoformat() if d else None  # noqa: E731
+    data = {
+        "exported_at": datetime.utcnow().isoformat() + "Z",
+        "account": {"email": user.email, "created_at": iso(user.created_at),
+                    "is_verified": bool(user.is_verified), "free_searches": user.free_searches},
+        "saved_papers": [{"paper": _loads(r.paper_json), "saved_at": iso(r.saved_at)} for r in await rows(SavedPaper)],
+        "reading_history": [{"paper": _loads(r.paper_json), "viewed_at": iso(r.viewed_at)} for r in await rows(ReadingHistory)],
+        "paper_chats": [{"paper": _loads(r.paper_json), "messages": _loads(r.messages_json),
+                         "pdf_text": r.pdf_text, "updated_at": iso(r.updated_at)} for r in await rows(PaperChat)],
+        "search_sessions": [{"query": r.query, "keywords": _loads(r.keywords_json), "papers": _loads(r.papers_json),
+                             "analysis": _loads(r.analysis_json), "created_at": iso(r.created_at)}
+                            for r in await rows(SearchSession)],
+        "subscriptions": [{"keywords": _loads(s.keywords_json), "active": bool(s.active), "created_at": iso(s.created_at),
+                           "pushed_papers": [{"paper": _loads(q.paper_json), "planned_date": q.planned_date,
+                                              "sent_at": iso(q.sent_at)}
+                                             for q in queue if q.subscription_id == s.id]}
+                          for s in subs],
+        "feedback": [{"content": r.content, "category": r.category, "created_at": iso(r.created_at),
+                      "recalled": bool(r.recalled)} for r in await rows(Feedback)],
+    }
+    return JSONResponse(data, headers={"Content-Disposition": 'attachment; filename="scholarscout-my-data.json"'})
+
+
+@router.delete("/account")
+async def delete_account(
+    req: DeleteAccountRequest,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """注销账号：删除账号及其收藏、阅读历史、AI 对话、搜索快照、订阅和推送记录。
+    留言板上的留言保留内容但解除与账号的关联（显示为匿名），避免别人的回复失去上下文。"""
+    _check_password_attempt(user, req.password)
+    uid = user.id
+    sub_ids = (await db.execute(select(Subscription.id).where(Subscription.user_id == uid))).scalars().all()
+    if sub_ids:
+        await db.execute(sa_delete(SubscriptionQueueItem).where(SubscriptionQueueItem.subscription_id.in_(sub_ids)))
+    for model in (Subscription, SavedPaper, ReadingHistory, PaperChat, SearchSession, PasswordResetToken):
+        await db.execute(sa_delete(model).where(model.user_id == uid))
+    await db.execute(sa_update(Feedback).where(Feedback.user_id == uid).values(user_id=None, is_author=0))
+    await db.execute(sa_delete(User).where(User.id == uid))
+    await db.commit()
+    return {"deleted": True, "message": "账号及相关数据已删除"}

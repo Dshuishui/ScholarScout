@@ -26,6 +26,7 @@ from services.download_service import fetch_pdf_with_fallback
 from services.pdf_finder_service import find_pdfs_with_kimi, generate_fallback_links
 from services.cache_service import get_cached_search, cache_search
 from services.rate_limit import rate_ok
+from services.health_monitor import source_stats
 from config import (
     CORE_API_KEY, NASA_ADS_API_KEY, SERPAPI_KEY, KIMI_API_KEY,
     DEEPSEEK_BASE_URL, DEEPSEEK_MODEL, DEEPSEEK_SYSTEM_KEY,
@@ -324,6 +325,8 @@ async def health():
             "nasa_ads": bool(NASA_ADS_API_KEY),
             "google_scholar_serpapi": bool(SERPAPI_KEY),
         },
+        # 最近 6 小时各源实际返回情况：calls_6h 次调用里 nonzero_6h 次有结果（进程内统计，重启清零）
+        "source_activity": source_stats(),
     }
 
 

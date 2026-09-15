@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { useAuth } from '../hooks/useAuth'
+import { LegalModal, type LegalTab } from './LegalModal'
 
 interface Props {
   onClose: () => void
@@ -21,6 +22,7 @@ export function AuthModal({ onClose, defaultTab = 'login' }: Props) {
   const [forgotEmail, setForgotEmail] = useState('')
   const [forgotSent, setForgotSent] = useState(false)
   const [forgotLoading, setForgotLoading] = useState(false)
+  const [legalTab, setLegalTab] = useState<LegalTab | null>(null)
 
   const { login, register, resendVerification } = useAuth()
   const inputRef = useRef<HTMLInputElement>(null)
@@ -286,6 +288,14 @@ export function AuthModal({ onClose, defaultTab = 'login' }: Props) {
           >
             {loading ? '请稍候…' : tab === 'login' ? '登录' : '注册'}
           </button>
+          {tab === 'register' && (
+            <p className="text-center text-[11px] text-gray-400 leading-relaxed -mt-1">
+              注册即表示你同意
+              <button type="button" onClick={() => setLegalTab('terms')} className="text-blue-500 hover:underline mx-0.5">服务条款</button>
+              和
+              <button type="button" onClick={() => setLegalTab('privacy')} className="text-blue-500 hover:underline mx-0.5">隐私政策</button>
+            </p>
+          )}
           {tab === 'login' && (
             <button
               type="button"
@@ -297,6 +307,7 @@ export function AuthModal({ onClose, defaultTab = 'login' }: Props) {
           )}
         </form>
       </div>
+      {legalTab && <LegalModal defaultTab={legalTab} onClose={() => setLegalTab(null)} />}
     </div>
   )
 }

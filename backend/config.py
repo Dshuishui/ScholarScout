@@ -30,6 +30,8 @@ DEEPSEEK_API_KEY = _os.environ.get("DEEPSEEK_API_KEY", "")
 # 新用户邮箱验证后赠送的免费搜索额度（系统 Key 代付）
 DEEPSEEK_SYSTEM_KEY = _os.environ.get("DEEPSEEK_SYSTEM_KEY", "")
 FREE_SEARCHES_QUOTA = int(_os.environ.get("FREE_SEARCHES_QUOTA", "3"))
+# 站长邮箱：接收新留言通知和运维告警（数据源失效、订阅停推）
+ADMIN_EMAIL = _os.environ.get("ADMIN_EMAIL", "dyucong@email.ncu.edu.cn")
 # 前端地址（邮件验证链接用）
 APP_BASE_URL = _os.environ.get("APP_BASE_URL", "http://118.25.192.117")
 # 允许跨域调用 API 的来源。前端经 nginx 同源访问，本身不需要跨域；

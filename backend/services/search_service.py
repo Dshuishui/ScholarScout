@@ -6,6 +6,7 @@ import xml.etree.ElementTree as ET
 import feedparser
 import httpx
 from models import Paper, ParsedQuery
+from services.health_monitor import record_source_result
 from config import (
     CORE_API_KEY, NASA_ADS_API_KEY, SERPAPI_KEY, OPENALEX_API_KEY, SEMANTIC_SCHOLAR_HEADERS, POLITE_EMAIL,
 )
@@ -895,6 +896,7 @@ async def search_all_sources(
 
     async def run_source(name: str, fn) -> list[Paper]:
         papers = await fn(parsed, limit_per_source)
+        record_source_result(name, len(papers))
         if on_source_done:
             await on_source_done(name, len(papers))
         return papers

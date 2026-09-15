@@ -5,6 +5,7 @@ from datetime import datetime, timedelta, timezone, date
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
+from apscheduler.triggers.interval import IntervalTrigger
 from sqlalchemy import select, func
 
 from database import AsyncSessionLocal
@@ -258,5 +259,12 @@ def setup_scheduler() -> AsyncIOScheduler:
         id="daily_subscriptions",
         replace_existing=True,
         misfire_grace_time=3600,
+    )
+    from services.health_monitor import run_health_check
+    scheduler.add_job(
+        run_health_check,
+        trigger=IntervalTrigger(hours=1),
+        id="health_check",
+        replace_existing=True,
     )
     return scheduler

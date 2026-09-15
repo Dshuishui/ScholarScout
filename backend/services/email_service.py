@@ -8,7 +8,7 @@ from datetime import date
 
 import aiosmtplib
 
-from config import SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM_NAME, FREE_SEARCHES_QUOTA
+from config import SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM_NAME, FREE_SEARCHES_QUOTA, ADMIN_EMAIL, APP_BASE_URL
 from models import Paper
 
 logger = logging.getLogger(__name__)
@@ -248,7 +248,6 @@ async def send_reset_password_email(to_email: str, reset_url: str) -> bool:
 
 async def send_feedback_notification(content: str, location: str | None, category: str) -> bool:
     """有新用户留言时通知作者。"""
-    NOTIFY_TO = "dyucong@email.ncu.edu.cn"
     if not SMTP_USER or not SMTP_PASS:
         return False
 
@@ -275,7 +274,7 @@ async def send_feedback_notification(content: str, location: str | None, categor
     msg = MIMEMultipart("alternative")
     msg["Subject"] = subject
     msg["From"] = f"{SMTP_FROM_NAME} <{SMTP_USER}>"
-    msg["To"] = NOTIFY_TO
+    msg["To"] = ADMIN_EMAIL
     msg["Date"] = formatdate(localtime=True)
     msg.attach(MIMEText(html_body, "html", "utf-8"))
 
@@ -388,4 +387,35 @@ async def send_subscription_email(
         return True
     except Exception as e:
         logger.error("Failed to send email to %s: %s", to_email, e)
+        return False
+
+
+async def send_admin_alert(message: str) -> bool:
+    """给站长发运维告警（数据源失效、订阅停推等）。"""
+    if not SMTP_USER or not SMTP_PASS:
+        logger.warning("SMTP not configured, skipping admin alert: %s", message)
+        return False
+    html_body = f"""<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="UTF-8"></head>
+<body style="font-family:-apple-system,Arial,sans-serif;max-width:560px;margin:0 auto;padding:24px;color:#111827;">
+<div style="border:1px solid #fecaca;background:#fef2f2;border-radius:12px;padding:20px;">
+  <div style="font-size:16px;font-weight:700;color:#b91c1c;margin-bottom:10px;">ScholarScout 运维告警</div>
+  <div style="font-size:14px;line-height:1.7;">{_esc(message)}</div>
+  <div style="font-size:12px;color:#6b7280;margin-top:14px;">
+    同一问题每天最多提醒一次。查看各数据源状态：{_esc(APP_BASE_URL)}/api/health
+  </div>
+</div></body></html>"""
+    msg = MIMEMultipart("alternative")
+    msg["Subject"] = f"[ScholarScout 告警] {message[:40]}"
+    msg["From"] = f"{SMTP_FROM_NAME} <{SMTP_USER}>"
+    msg["To"] = ADMIN_EMAIL
+    msg["Date"] = formatdate(localtime=True)
+    msg.attach(MIMEText(html_body, "html", "utf-8"))
+    try:
+        await aiosmtplib.send(msg, hostname=SMTP_HOST, port=SMTP_PORT, use_tls=True,
+                              username=SMTP_USER, password=SMTP_PASS)
+        logger.info("Admin alert sent: %s", message)
+        return True
+    except Exception as e:
+        logger.error("Failed to send admin alert: %s", e)
         return False

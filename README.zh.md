@@ -6,12 +6,12 @@
 
 [![Python](https://img.shields.io/badge/Python-3.11+-blue?logo=python&logoColor=white)](https://www.python.org)
 [![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=white)](https://react.dev)
-[![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.141-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
 [![CI](https://github.com/Dshuishui/ScholarScout/actions/workflows/ci.yml/badge.svg)](https://github.com/Dshuishui/ScholarScout/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/License-MIT-green)](LICENSE)
 [![uv](https://img.shields.io/badge/package_manager-uv-8A2BE2?logo=python)](https://github.com/astral-sh/uv)
 
-ScholarScout 是一个全栈学术论文搜索平台。前端用自然语言输入需求，后端并发查询 10 个学术数据库、经 LLM 二次验证后返回结果，并将论文摘要异步向量化入库，支持语义检索、多文献 RAG 问答和相似度关系图谱。
+ScholarScout 是一个全栈学术论文搜索平台。前端用自然语言输入需求，后端用关键词加语义的混合检索并发查询最多 10 个学术数据库（其中 7 个无需任何 Key），经 LLM 二次验证后返回结果，并将论文摘要异步向量化入库，支持语义检索、多文献 RAG 问答和相似度关系图谱。
 
 **在线体验**：[http://118.25.192.117](http://118.25.192.117)
 
@@ -36,7 +36,11 @@ ScholarScout 是一个全栈学术论文搜索平台。前端用自然语言输�
 ### 搜索与发现
 - **自然语言搜索**：输入"找 2023 年后关于大模型幻觉问题的论文"，AI 自动提取关键词、时间范围，无需手动拼 Boolean 查询
 - **关键词可视化确认**：AI 提取结果先展示供用户确认，可增删后再搜索，结果页随时调整并重新搜索
-- **10 源并发搜索**：同时检索 arXiv、Semantic Scholar、OpenAlex、PubMed、Europe PMC、INSPIRE-HEP、CORE、NASA ADS、CrossRef、Google Scholar
+- **10 源并发搜索**：arXiv、Semantic Scholar、OpenAlex、PubMed、Europe PMC、INSPIRE-HEP、CrossRef 无需 Key；CORE、NASA ADS、Google Scholar（经 SerpAPI）配置 Key 后启用
+- **混合检索**：OpenAlex 关键词检索（提取出的同义词用布尔 OR 连接）与 OpenAlex 语义检索用 RRF 融合（配置 `OPENALEX_API_KEY` 后启用语义检索）
+- **按领域选源**：大模型判断需求所属学科，纯计算机问题不查 PubMed / Europe PMC，非物理天文问题不查 INSPIRE-HEP / NASA ADS
+- **引用量参与排序**：大模型相关性评分加上封顶的引用量加分，同分时奠基论文排在前面
+- **不偷偷限定年份**：描述里提到时间才按时间过滤
 - **智能去重合并**：DOI 精确匹配 + 标题规范化双重判断，重复论文合并最优字段（PDF、摘要、引用数）
 - **AI 相关性验证**：搜索结果经 LLM 二次过滤，可切换"AI 筛选后 / 全部结果"对比查看
 
@@ -66,7 +70,8 @@ ScholarScout 是一个全栈学术论文搜索平台。前端用自然语言输�
 
 ### 订阅与每日推送
 - **关键词订阅**：搜索完成后一键订阅，系统立即在后台建立推送队列
-- **每日推送**：每天 08:00 CST 从队列取出当天论文发送邮件，AI 过滤确保相关性
+- **每日推送**：每天北京时间 08:00 从队列取出当天论文发送邮件，AI 过滤确保相关性
+- **一键退订**：每封邮件都带免登录退订链接，并设置 `List-Unsubscribe` / `List-Unsubscribe-Post` 邮件头
 - **队列自动补充**：剩余不足 5 篇时自动后台补搜；也可手动刷新
 - **推送进度可查**：订阅管理页展示完整队列（✅ 已发 / 📅 待发 + 计划日期）
 
@@ -74,11 +79,20 @@ ScholarScout 是一个全栈学术论文搜索平台。前端用自然语言输�
 - **邮箱注册 + 验证**：JWT 认证，注册/登录接口限流防暴力
 - **免费试用**：验证邮箱后原子扣减免费额度（`WHERE free_searches > 0` 防并发超额）
 - **收藏夹 / 阅读历史 / 搜索会话**：登录后全端同步
+- **账号自助**：修改密码（其他设备自动退出登录）、导出全部个人数据（JSON）、注销账号
+- **隐私政策与服务条款**：注册时提示，账号菜单中随时查看
 
 ### 实时推送（WebSocket）
 - 前端与后端保持持久 WebSocket 连接，支持可选 JWT 认证和 ping/pong 保活
 - 向量索引完成、订阅队列就绪等后台事件实时推送 toast 通知
 - 连接状态指示（绿/黄/灰小圆点），指数退避自动重连
+
+### 可靠性与安全
+- **数据源健康监控**：记录每次数据源调用；每小时检查一次，原本正常的源开始全部返回 0 篇、所有源都没结果、订阅停止推送时给站长发邮件（同一问题每天最多一封）；`/api/health` 可查看实时状态
+- **检索回归测试**：`backend/eval/retrieval_benchmark.py` 检查计算机、生物医学、物理等领域的 16 篇经典论文能否进入候选池，不调用大模型
+- **加固的 PDF 代理**：每次跳转都先做 DNS 解析级别的 SSRF 检查，50 MB 上限，限制并发下载数
+- **防滥用**：按真实客户端 IP（nginx 设置的 `X-Real-IP`）限流，按用户限制试用额度的大模型调用和订阅任务
+- **登录凭证可撤销**：JWT 中带 `users.token_version`，修改或重置密码时版本号加 1
 
 ---
 
@@ -125,6 +139,14 @@ ScholarScout 是一个全栈学术论文搜索平台。前端用自然语言输�
 9. **structlog 双模式渲染**：`LOG_FORMAT=console`（开发，彩色 key=value）/ `json`（生产，JSON 行适合 Loki/Datadog），同一 `get_logger()` 调用，运行时按环境切换，不改代码。
 
 10. **前端 WS 指数退避重连**：`useWebSocket` hook 在 `onclose` 时 `setTimeout(connect, delay)`，每次失败后 `delay = min(delay * 2, 30000)`，连接恢复后重置为 1s；ping/pong 25s 一次保活，防止 Nginx 60s 空闲超时断开。
+
+11. **按搜索引擎适配查询语法**：OpenAlex、PubMed、Europe PMC、NASA ADS、INSPIRE 会把空格分隔的词当成 AND，大模型给出的同义词在这些源里用 OR 连接；CrossRef 按词袋打分、不认 OR，保持拼成一句。用回归测试验证：召回从 10/16 提升到 15/16。
+
+12. **RRF 的 k 取 10 而不是 60**：k=60 时"两路都排第 50"（2/110）会压过"只在一路排第 1"（1/61），截断融合结果时恰好丢掉混合检索想补上的语义独有结果。
+
+13. **不让 Alembic 接管日志**：应用内运行迁移时 `alembic/env.py` 跳过 `fileConfig()`，否则它会把根日志级别改成 WARNING 并禁用所有已有 logger，线上的业务警告会被静默吞掉。
+
+14. **不建会话表也能撤销 JWT**：凭证里带 `ver`，校验时与 `users.token_version` 比较；没有 `ver` 的旧凭证视为版本 0，上线撤销功能时不会踢掉任何人。
 
 ---
 
@@ -186,9 +208,16 @@ npm run dev
 | `LOG_LEVEL` | `INFO` | `DEBUG` / `WARNING` |
 | `CORE_API_KEY` | _(空)_ | [core.ac.uk](https://core.ac.uk/services/api) 免费申请 |
 | `NASA_ADS_API_KEY` | _(空)_ | [ads.harvard.edu](https://ui.adsabs.harvard.edu/user/settings/token) 免费申请 |
+| `OPENALEX_API_KEY` | _(空)_ | **强烈建议配置**。在 [openalex.org/settings/api](https://openalex.org/settings/api) 免费获取；不配置时每天额度约 0.1 美元。配置后同时启用语义检索 |
+| `SEMANTIC_SCHOLAR_API_KEY` | _(空)_ | **强烈建议配置**。[免费申请](https://www.semanticscholar.org/product/api#api-key-form)；无 Key 时共用限流池，基本一直 429 |
+| `SERPAPI_KEY` | _(空)_ | 通过 [SerpAPI](https://serpapi.com) 搜索 Google Scholar（免费 250 次/月） |
 | `JWT_SECRET` | `dev-only-secret-change-me-in-production` | **生产必须替换** |
 | `DEEPSEEK_SYSTEM_KEY` | _(空)_ | 免费试用功能所需的系统 Key |
+| `DEEPSEEK_API_KEY` | _(空)_ | 订阅推送 AI 筛选用的服务端 Key |
 | `SMTP_HOST / SMTP_USER / SMTP_PASS` | _(空)_ | 邮件推送配置（QQ 邮箱授权码） |
+| `ADMIN_EMAIL` | _(维护者邮箱)_ | 接收新留言通知和运维告警 |
+| `APP_BASE_URL` | `http://118.25.192.117` | 邮件链接中的网站地址，也是默认允许的跨域来源 |
+| `CORS_ORIGINS` | `APP_BASE_URL` | 额外允许跨域调用 API 的来源，逗号分隔 |
 
 ---
 
@@ -197,15 +226,15 @@ npm run dev
 | 数据源 | 擅长领域 | 需要 Key |
 |--------|---------|---------|
 | **arXiv** | CS / 物理 / 数学 / 经济，最新预印本 | 否 |
-| **Semantic Scholar** | 综合，语义搜索能力强 | 否（有 Key 可提升限速） |
-| **OpenAlex** | 综合，2 亿+ 论文，开放获取友好 | 否 |
+| **Semantic Scholar** | 综合，语义搜索能力强 | 否，但强烈建议申请免费 Key（无 Key 时基本被限流） |
+| **OpenAlex** | 综合，2 亿+ 论文，开放获取友好，支持关键词和语义检索 | 否，但强烈建议申请免费 Key（无 Key 每天额度约 0.1 美元） |
 | **PubMed** | 医学 / 生物 / 生命科学 | 否 |
 | **Europe PMC** | 生命科学 / 医学，含 bioRxiv / medRxiv | 否 |
 | **INSPIRE-HEP** | 高能物理 / 粒子物理（CERN 运营） | 否 |
 | **CrossRef** | 综合，1.5 亿+ 文献元数据，覆盖人文 / 工程 | 否 |
 | **CORE** | 1.7 亿+ 开放获取全文 | 是（免费） |
 | **NASA ADS** | 天文 / 天体物理 / 地球科学 | 是（免费） |
-| **Google Scholar** | 综合，覆盖面最广 | 是（免费额度） |
+| **Google Scholar** | 综合，覆盖面最广 | 是，需 SerpAPI Key（免费 250 次/月） |
 
 搜索后通过 **Unpaywall** 自动为有 DOI 的论文补全合法开放获取 PDF（无需 Key）。
 
@@ -223,7 +252,7 @@ bash deploy/setup.sh    # 首次部署
 bash deploy/deploy.sh   # 后续更新
 ```
 
-**环境要求**：Ubuntu 22.04+，4 核 4 GB 内存以上，需可访问境外网络。
+**环境要求**：Ubuntu 22.04+，4 核 4 GB 内存以上，可访问外网。`deploy/nginx.conf` 已包含 `/ws` WebSocket 转发和按接口设置的上传大小限制，每次运行 `deploy.sh` 都会自动安装。
 
 ---
 
@@ -245,12 +274,15 @@ bash deploy/deploy.sh   # 后续更新
 - PDF 全文对话（云端持久化）
 - 邮箱注册 / JWT 认证 / 免费额度原子扣减
 - 移动端响应式
+- 混合检索、按领域选源、引用量参与排序、检索回归测试
+- 数据源健康监控与站长邮件告警
+- 账号自助（修改密码、导出数据、注销账号）、隐私政策与服务条款
 
 **近期计划**
 
+- HTTPS 与数据库自动备份
+- arXiv 本地元数据库（OAI-PMH 收割），绕开 API 限流，详见 `docs/backlog.md`
 - 更多模型支持（Claude、GPT-4o）
-- 用户搜索统计主页
-- 中文论文数据源接入
 
 ---
 
