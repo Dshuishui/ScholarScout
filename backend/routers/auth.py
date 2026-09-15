@@ -135,7 +135,7 @@ async def verify_email(token: str, db: AsyncSession = Depends(get_db)):
     )
     await db.commit()
 
-    access_token = create_access_token(user.id)
+    access_token = create_access_token(user.id, user.token_version or 0)
     return {
         "access_token": access_token,
         "token_type": "bearer",
@@ -169,7 +169,7 @@ async def login(req: LoginRequest, request: Request, db: AsyncSession = Depends(
         )
 
     return {
-        "access_token": create_access_token(user.id),
+        "access_token": create_access_token(user.id, user.token_version or 0),
         "token_type": "bearer",
     }
 
@@ -251,10 +251,12 @@ async def reset_password(req: ResetPasswordRequest, db: AsyncSession = Depends(g
         raise HTTPException(status_code=400, detail="用户不存在")
 
     user.password_hash = hash_password(req.new_password)
+    # 版本号 +1：重置前签发的所有登录凭证立即失效（比如密码泄露后别人已经登录的设备）
+    user.token_version = (user.token_version or 0) + 1
     record.used = True
     await db.commit()
 
-    access_token = create_access_token(user.id)
+    access_token = create_access_token(user.id, user.token_version)
     return {"access_token": access_token, "token_type": "bearer", "message": "密码重置成功"}
 
 

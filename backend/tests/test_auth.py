@@ -76,4 +76,4 @@ async def test_me_success(client, db_session):
 @pytest.mark.asyncio
 async def test_me_no_token(client):
     r = await client.get("/api/auth/me")
-    assert r.status_code == 403
+    assert r.status_code == 401  # FastAPI 0.116+ 缺少凭证时返回 401（以前是 403）

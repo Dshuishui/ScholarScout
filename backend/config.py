@@ -23,7 +23,7 @@ SEARCH_LIMIT_PER_SOURCE = 50
 VALIDATED_LIMIT = 50
 
 import os as _os
-JWT_SECRET = _os.environ.get("JWT_SECRET", "dev-secret-change-in-production")
+JWT_SECRET = _os.environ.get("JWT_SECRET", "dev-only-secret-change-me-in-production")
 
 # 服务器端 DeepSeek Key（订阅推送的 AI 筛选用，非用户 Key）
 DEEPSEEK_API_KEY = _os.environ.get("DEEPSEEK_API_KEY", "")

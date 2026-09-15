@@ -20,6 +20,6 @@ def test_create_and_decode_token():
 
 
 def test_decode_invalid_token_raises():
-    from jose import JWTError
-    with pytest.raises(JWTError):
+    from services.auth_service import TokenError
+    with pytest.raises(TokenError):
         decode_token("not.a.valid.token")

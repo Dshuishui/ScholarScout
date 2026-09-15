@@ -10,6 +10,7 @@ import { ALL_SOURCES } from '../hooks/useSettings'
 import { PaperCard } from './PaperCard'
 import { PaperCardSkeleton } from './PaperCardSkeleton'
 import { getDownloadUrl } from '../api/client'
+import { toast } from './Toast'
 
 const ComparePanel = lazy(() => import('./ComparePanel').then(m => ({ default: m.ComparePanel })))
 
@@ -271,7 +272,13 @@ export function ResultsPanel({ papers, rejectedPapers = [], isLoading, statusMes
         setSubModalKeywords(confirmedKeywords)
         setNewSubId(sub.id)
         setShowSubModal(true)
+      } else {
+        // 以前失败时什么都不提示（比如订阅数达到上限），用户不知道为什么点了没反应
+        const data = await r.json().catch(() => null)
+        toast.show(data?.detail ?? '订阅失败，请稍后重试')
       }
+    } catch {
+      toast.show('订阅失败，请检查网络后重试')
     } finally {
       setSubLoading(false)
     }

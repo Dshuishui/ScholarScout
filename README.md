@@ -185,7 +185,7 @@ Copy `backend/.env.example` to `backend/.env`. All variables have sensible defau
 | `LOG_LEVEL` | `INFO` | `DEBUG` / `WARNING` |
 | `CORE_API_KEY` | _(empty)_ | Free: [core.ac.uk](https://core.ac.uk/services/api) |
 | `NASA_ADS_API_KEY` | _(empty)_ | Free: [ads.harvard.edu](https://ui.adsabs.harvard.edu/user/settings/token) |
-| `JWT_SECRET` | `dev-secret-change-in-production` | **Must be changed in production** |
+| `JWT_SECRET` | `dev-only-secret-change-me-in-production` | **Must be changed in production** |
 | `DEEPSEEK_SYSTEM_KEY` | _(empty)_ | Server-side key for free-trial searches |
 | `SMTP_HOST / SMTP_USER / SMTP_PASS` | _(empty)_ | Email delivery configuration |
 

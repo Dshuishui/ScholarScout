@@ -170,3 +170,94 @@ def test_migrations_keep_application_loggers_enabled(tmp_path, monkeypatch):
 
     assert scheduler_logger.disabled is False
     assert logging.getLogger().level == root_level
+
+
+# ── 改密码后旧凭证失效 ────────────────────────────────────────────────────────
+
+async def test_password_reset_revokes_existing_tokens(client, db_session):
+    from datetime import datetime, timedelta
+    from models_db import PasswordResetToken
+    user, old_token = await make_verified_user(db_session, email="reset@test.com")
+    old = {"Authorization": f"Bearer {old_token}"}
+    assert (await client.get("/api/auth/me", headers=old)).status_code == 200
+
+    db_session.add(PasswordResetToken(user_id=user.id, token="reset-tok",
+                                      expires_at=datetime.utcnow() + timedelta(hours=1)))
+    await db_session.commit()
+    r = await client.post("/api/auth/reset-password", json={"token": "reset-tok", "new_password": "new-password-123"})
+    assert r.status_code == 200
+    new = {"Authorization": f"Bearer {r.json()['access_token']}"}
+
+    assert (await client.get("/api/auth/me", headers=old)).status_code == 401   # 旧凭证失效
+    assert (await client.get("/api/auth/me", headers=new)).status_code == 200   # 新凭证可用
+    # 留言接口也不能再用旧凭证识别身份（以前它自己解码凭证，会绕过撤销检查）
+    with patch("routers.feedback._get_location", new=AsyncMock(return_value=None)):
+        r = await client.post("/api/feedback", json={"content": "hi"}, headers=old)
+    assert r.status_code == 201
+    msgs = (await client.get("/api/feedback", headers=new)).json()
+    assert msgs[-1]["is_mine"] is False  # 用旧凭证发的留言按匿名处理
+
+
+async def test_legacy_token_without_version_still_works(client, db_session):
+    # 上线前签发的凭证不带 ver：视为版本 0，已有用户不会被踢下线
+    import jwt
+    from datetime import datetime, timedelta, timezone
+    from services.auth_service import JWT_SECRET
+    user, _ = await make_verified_user(db_session, email="legacy@test.com")
+    legacy = jwt.encode({"sub": str(user.id), "exp": datetime.now(timezone.utc) + timedelta(days=1)},
+                        JWT_SECRET, algorithm="HS256")
+    assert (await client.get("/api/auth/me", headers={"Authorization": f"Bearer {legacy}"})).status_code == 200
+
+
+# ── 订阅成本控制 ──────────────────────────────────────────────────────────────
+
+async def test_subscription_count_and_daily_creation_limits(client, db_session, monkeypatch):
+    import routers.subscriptions as subs
+    monkeypatch.setattr(subs, "MAX_SUBSCRIPTIONS", 2)
+    monkeypatch.setattr(subs, "CREATE_PER_DAY", 3)
+    monkeypatch.setattr(subs, "_bg_populate_queue", lambda sub_id: None)
+    _, token = await make_verified_user(db_session, email="subs@test.com")
+    h = {"Authorization": f"Bearer {token}"}
+    codes = [(await client.post("/api/subscriptions", json={"keywords": [f"k{i}"]}, headers=h)).status_code
+             for i in range(3)]
+    assert codes == [201, 201, 400]  # 数量上限
+    sub_id = (await client.get("/api/subscriptions", headers=h)).json()[0]["id"]
+    await client.delete(f"/api/subscriptions/{sub_id}", headers=h)
+    r1 = await client.post("/api/subscriptions", json={"keywords": ["k9"]}, headers=h)
+    await client.delete(f"/api/subscriptions/{r1.json()['id']}", headers=h)
+    r2 = await client.post("/api/subscriptions", json={"keywords": ["k10"]}, headers=h)
+    assert (r1.status_code, r2.status_code) == (201, 429)  # 删了再建也受每日次数限制
+
+
+async def test_refresh_queue_daily_limit(client, db_session, monkeypatch):
+    import routers.subscriptions as subs
+    monkeypatch.setattr(subs, "REFRESH_PER_DAY", 1)
+    monkeypatch.setattr(subs, "_bg_populate_queue", lambda sub_id: None)
+    _, token = await make_verified_user(db_session, email="refresh@test.com")
+    h = {"Authorization": f"Bearer {token}"}
+    sub_id = (await client.post("/api/subscriptions", json={"keywords": ["k"]}, headers=h)).json()["id"]
+    codes = [(await client.post(f"/api/subscriptions/{sub_id}/refresh-queue", headers=h)).status_code
+             for _ in range(2)]
+    assert codes == [200, 429]
+
+
+async def test_populate_notification_sends_keywords(monkeypatch, db_engine):
+    """回归：以前读取不存在的 sub.keywords 抛异常，"订阅就绪"通知从来没发出去。"""
+    from sqlalchemy.ext.asyncio import AsyncSession
+    from sqlalchemy.orm import sessionmaker
+    import routers.subscriptions as subs
+    from models_db import Subscription
+    Session = sessionmaker(db_engine, class_=AsyncSession, expire_on_commit=False)
+    async with Session() as s:
+        sub = Subscription(user_id=7, keywords_json='["raft", "consensus"]', active=True, daily_limit=1)
+        s.add(sub)
+        await s.commit()
+        sub_id = sub.id
+    sent = []
+    async def fake_send(key, event, data):
+        sent.append((key, event, data))
+    monkeypatch.setattr(subs, "AsyncSessionLocal", Session)
+    monkeypatch.setattr("scheduler.populate_queue", AsyncMock(return_value=3))
+    monkeypatch.setattr("services.ws_manager.manager.send", fake_send)
+    await subs._bg_populate_queue(sub_id)
+    assert sent == [("user:7", "subscription_ready", {"sub_id": sub_id, "keywords": ["raft", "consensus"], "added": 3})]

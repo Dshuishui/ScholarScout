@@ -14,6 +14,8 @@ class User(Base):
     verify_token = Column(String(64), nullable=True)
     verify_token_expires = Column(DateTime, nullable=True)
     free_searches = Column(Integer, default=0, nullable=False)
+    # 登录凭证版本号：改密码时 +1，之前签发的凭证全部失效
+    token_version = Column(Integer, default=0, server_default="0", nullable=False)
 
 
 class SavedPaper(Base):

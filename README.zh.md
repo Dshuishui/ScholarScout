@@ -186,7 +186,7 @@ npm run dev
 | `LOG_LEVEL` | `INFO` | `DEBUG` / `WARNING` |
 | `CORE_API_KEY` | _(空)_ | [core.ac.uk](https://core.ac.uk/services/api) 免费申请 |
 | `NASA_ADS_API_KEY` | _(空)_ | [ads.harvard.edu](https://ui.adsabs.harvard.edu/user/settings/token) 免费申请 |
-| `JWT_SECRET` | `dev-secret-change-in-production` | **生产必须替换** |
+| `JWT_SECRET` | `dev-only-secret-change-me-in-production` | **生产必须替换** |
 | `DEEPSEEK_SYSTEM_KEY` | _(空)_ | 免费试用功能所需的系统 Key |
 | `SMTP_HOST / SMTP_USER / SMTP_PASS` | _(空)_ | 邮件推送配置（QQ 邮箱授权码） |
 

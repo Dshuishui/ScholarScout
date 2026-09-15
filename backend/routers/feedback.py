@@ -3,17 +3,15 @@ import json
 import httpx
 from datetime import datetime
 from fastapi import APIRouter, Depends, Request, HTTPException
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from typing import Optional
 from database import get_db
 from models_db import Feedback, User
-from services.auth_service import decode_token
+from dependencies import get_optional_user
 from services.email_service import send_feedback_notification, send_reply_notification
 from services.rate_limit import client_ip
-from jose import JWTError
 
 router = APIRouter()
 
@@ -31,7 +29,6 @@ def _parse_reactions(raw: str | None) -> dict:
 
 
 RECALL_WINDOW = 300  # 5 minutes
-optional_bearer = HTTPBearer(auto_error=False)
 
 
 class FeedbackRequest(BaseModel):
@@ -62,14 +59,9 @@ async def _get_location(ip: str) -> Optional[str]:
 @router.get("")
 async def get_feedback(
     db: AsyncSession = Depends(get_db),
-    credentials: Optional[HTTPAuthorizationCredentials] = Depends(optional_bearer),
+    current_user: Optional[User] = Depends(get_optional_user),
 ):
-    current_user_id = None
-    if credentials:
-        try:
-            current_user_id = decode_token(credentials.credentials)
-        except Exception:
-            pass
+    current_user_id = current_user.id if current_user else None
 
     result = await db.execute(
         select(Feedback).order_by(Feedback.created_at.asc()).limit(100)
@@ -132,20 +124,10 @@ async def submit_feedback(
     req: FeedbackRequest,
     request: Request,
     db: AsyncSession = Depends(get_db),
-    credentials: Optional[HTTPAuthorizationCredentials] = Depends(optional_bearer),
+    current_user: Optional[User] = Depends(get_optional_user),
 ):
-    is_author = False
-    user_id = None
-    if credentials:
-        try:
-            uid = decode_token(credentials.credentials)
-            user_id = uid
-            res = await db.execute(select(User).where(User.id == uid))
-            user = res.scalar_one_or_none()
-            if user and user.email == AUTHOR_EMAIL:
-                is_author = True
-        except (JWTError, Exception):
-            pass
+    user_id = current_user.id if current_user else None
+    is_author = bool(current_user and current_user.email == AUTHOR_EMAIL)
 
     location = await _get_location(client_ip(request))
 
@@ -185,14 +167,11 @@ async def submit_feedback(
 async def recall_feedback(
     msg_id: int,
     db: AsyncSession = Depends(get_db),
-    credentials: Optional[HTTPAuthorizationCredentials] = Depends(optional_bearer),
+    current_user: Optional[User] = Depends(get_optional_user),
 ):
-    if not credentials:
+    if not current_user:
         raise HTTPException(status_code=401, detail="需要登录才能撤回留言")
-    try:
-        user_id = decode_token(credentials.credentials)
-    except Exception:
-        raise HTTPException(status_code=401, detail="无效的身份凭证")
+    user_id = current_user.id
 
     result = await db.execute(select(Feedback).where(Feedback.id == msg_id))
     msg = result.scalar_one_or_none()

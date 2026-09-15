@@ -51,6 +51,10 @@ def reset_rate_limits():
     feedback_router._reaction_ips.clear()
     import routers.search as search_router
     search_router._trial_parse_attempts.clear()
+    import routers.subscriptions as subs_router
+    subs_router._create_attempts.clear()
+    subs_router._refresh_attempts.clear()
+    subs_router._test_send_attempts.clear()
     yield
 
 

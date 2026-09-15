@@ -26,7 +26,7 @@ async def test_list_subscriptions_empty(client, db_session):
 @pytest.mark.asyncio
 async def test_subscriptions_requires_auth(client):
     r = await client.get("/api/subscriptions")
-    assert r.status_code == 403
+    assert r.status_code == 401
 
 
 # ── POST /api/subscriptions ───────────────────────────────────────────────────

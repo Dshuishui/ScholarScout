@@ -34,7 +34,7 @@ async def test_list_sessions_empty(client, db_session):
 @pytest.mark.asyncio
 async def test_sessions_requires_auth(client):
     r = await client.get("/api/user/sessions")
-    assert r.status_code == 403
+    assert r.status_code == 401
 
 
 # ── POST /api/user/sessions ────────────────────────────────────────────────────

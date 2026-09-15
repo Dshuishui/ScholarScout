@@ -1,10 +1,11 @@
 """订阅管理 API（需登录）。"""
+import asyncio
 import html
 import json
+from collections import defaultdict
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Query
 from fastapi.responses import HTMLResponse
-from jose import JWTError
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -12,9 +13,33 @@ from sqlalchemy import select
 from database import get_db, AsyncSessionLocal
 from models_db import Subscription, SubscriptionQueueItem, User
 from dependencies import get_current_user
-from services.auth_service import decode_unsubscribe_token
+from services.auth_service import decode_unsubscribe_token, TokenError
+from services.rate_limit import rate_ok
 
 router = APIRouter()
+
+# ─── 成本控制 ───────────────────────────────────────────────
+# 每次建订阅、刷新队列都会跑一轮全数据源搜索 + 大模型筛选，测试发送还会发邮件。
+# 不设限的话一个账号就能耗光 OpenAlex 每天的免费额度（无 key 时约 100 次）和系统 DeepSeek Key。
+MAX_SUBSCRIPTIONS = 10
+DAY = 86400
+CREATE_PER_DAY = 10
+REFRESH_PER_DAY = 5
+TEST_SEND_PER_DAY = 3
+_create_attempts: dict[str, list[float]] = defaultdict(list)
+_refresh_attempts: dict[str, list[float]] = defaultdict(list)
+_test_send_attempts: dict[str, list[float]] = defaultdict(list)
+
+# 后台补充队列串行执行：一次性建很多订阅时不会同时对外发出大量搜索请求
+_populate_locks: dict[asyncio.AbstractEventLoop, asyncio.Lock] = {}
+
+
+def _populate_lock() -> asyncio.Lock:
+    loop = asyncio.get_running_loop()
+    if loop not in _populate_locks:
+        _populate_locks.clear()  # 只保留当前事件循环的锁（测试里每个用例都是新循环）
+        _populate_locks[loop] = asyncio.Lock()
+    return _populate_locks[loop]
 
 
 # ─── Pydantic 模型 ──────────────────────────────────────────
@@ -112,8 +137,10 @@ async def create_subscription(
     count_result = await db.execute(
         select(Subscription).where(Subscription.user_id == current_user.id)
     )
-    if len(count_result.scalars().all()) >= 20:
-        raise HTTPException(status_code=400, detail="最多同时订阅 20 个关键词组合")
+    if len(count_result.scalars().all()) >= MAX_SUBSCRIPTIONS:
+        raise HTTPException(status_code=400, detail=f"最多同时订阅 {MAX_SUBSCRIPTIONS} 个关键词组合")
+    if not rate_ok(_create_attempts, str(current_user.id), limit=CREATE_PER_DAY, window_sec=DAY):
+        raise HTTPException(status_code=429, detail="今天创建订阅的次数已达上限，请明天再试")
 
     keywords = [kw.strip() for kw in body.keywords if kw.strip()]
     sub = Subscription(
@@ -136,20 +163,22 @@ async def _bg_populate_queue(sub_id: int) -> None:
     """后台任务：为新创建的订阅填充推送队列。"""
     from scheduler import populate_queue
     from services.ws_manager import manager as ws_manager
-    now = datetime.now(timezone.utc)
-    async with AsyncSessionLocal() as db:
-        result = await db.execute(
-            select(Subscription).where(Subscription.id == sub_id)
-        )
-        sub = result.scalar_one_or_none()
-        if sub:
-            added = await populate_queue(sub, db, now, search_days=30, max_add=30)
-            client_key = f"user:{sub.user_id}"
-            await ws_manager.send(client_key, "subscription_ready", {
-                "sub_id": sub_id,
-                "keywords": sub.keywords,
-                "added": added if isinstance(added, int) else 0,
-            })
+    async with _populate_lock():
+        now = datetime.now(timezone.utc)
+        async with AsyncSessionLocal() as db:
+            result = await db.execute(
+                select(Subscription).where(Subscription.id == sub_id)
+            )
+            sub = result.scalar_one_or_none()
+            if sub:
+                added = await populate_queue(sub, db, now, search_days=30, max_add=30)
+                client_key = f"user:{sub.user_id}"
+                await ws_manager.send(client_key, "subscription_ready", {
+                    "sub_id": sub_id,
+                    # 以前写成 sub.keywords（模型里没有这个属性），抛异常导致这条通知从来没发出去过
+                    "keywords": json.loads(sub.keywords_json),
+                    "added": added if isinstance(added, int) else 0,
+                })
 
 
 @router.delete("/subscriptions/{sub_id}", status_code=204)
@@ -220,6 +249,8 @@ async def refresh_subscription_queue(
     sub = sub_result.scalar_one_or_none()
     if not sub:
         raise HTTPException(status_code=404, detail="订阅不存在")
+    if not rate_ok(_refresh_attempts, str(current_user.id), limit=REFRESH_PER_DAY, window_sec=DAY):
+        raise HTTPException(status_code=429, detail="今天刷新队列的次数已达上限，请明天再试")
 
     background_tasks.add_task(_bg_populate_queue, sub_id)
     return {"message": "队列刷新已在后台启动，稍后刷新页面查看"}
@@ -288,6 +319,8 @@ async def test_send_subscription(
     sub = result.scalar_one_or_none()
     if not sub:
         raise HTTPException(status_code=404, detail="订阅不存在")
+    if not rate_ok(_test_send_attempts, str(current_user.id), limit=TEST_SEND_PER_DAY, window_sec=DAY):
+        raise HTTPException(status_code=429, detail="今天测试发送的次数已达上限，请明天再试")
 
     from scheduler import _process_subscription
     now = datetime.now(timezone.utc)
@@ -312,7 +345,7 @@ def _unsubscribe_page(title: str, body: str, status_code: int = 200) -> HTMLResp
 async def _load_sub_from_token(token: str, db: AsyncSession) -> Subscription | None:
     try:
         sub_id = decode_unsubscribe_token(token)
-    except (JWTError, ValueError):
+    except (TokenError, ValueError):
         return None
     result = await db.execute(select(Subscription).where(Subscription.id == sub_id))
     return result.scalar_one_or_none()

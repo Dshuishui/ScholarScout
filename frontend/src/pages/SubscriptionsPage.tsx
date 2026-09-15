@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useAuth } from '../hooks/useAuth'
+import { toast } from '../components/Toast'
 
 interface Subscription {
   id: number
@@ -209,10 +210,15 @@ export function SubscriptionsPage({ token, onClose, initialExpandId }: Props) {
   const handleRefreshQueue = async (id: number) => {
     setRefreshingId(id)
     try {
-      await fetch(`/api/subscriptions/${id}/refresh-queue`, {
+      const r = await fetch(`/api/subscriptions/${id}/refresh-queue`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
       })
+      if (!r.ok) {
+        const data = await r.json().catch(() => null)
+        toast.show(data?.detail ?? '刷新失败，请稍后重试')
+        return
+      }
       // 后台刷新，3 秒后重新拉取
       setTimeout(() => fetchQueue(id), 3000)
     } finally {

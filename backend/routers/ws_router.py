@@ -11,14 +11,18 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-def _resolve_client_key(token: Optional[str], fallback_id: str) -> str:
+async def _resolve_client_key(token: Optional[str], fallback_id: str) -> str:
+    """有效的登录凭证按用户分组推送；无效或已撤销（改过密码）的凭证按匿名连接处理。"""
     if token:
         try:
-            from services.auth_service import decode_token
-            user_id = decode_token(token)
-            return f"user:{user_id}"
+            from database import AsyncSessionLocal
+            from dependencies import user_from_token
+            async with AsyncSessionLocal() as db:
+                user = await user_from_token(token, db)
+            if user:
+                return f"user:{user.id}"
         except Exception:
-            pass
+            logger.warning("WebSocket token check failed", exc_info=True)
     return f"anon:{fallback_id}"
 
 
@@ -41,7 +45,7 @@ async def websocket_endpoint(
       search_indexed     — vector indexing completed for a search batch
       subscription_ready — background queue population finished
     """
-    client_key = _resolve_client_key(token, cid or str(id(websocket)))
+    client_key = await _resolve_client_key(token, cid or str(id(websocket)))
     await manager.connect(websocket, client_key)
 
     await websocket.send_text(json.dumps({

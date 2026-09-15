@@ -78,4 +78,4 @@ async def test_add_and_get_history(client, db_session):
 @pytest.mark.asyncio
 async def test_saved_requires_auth(client):
     r = await client.get("/api/user/saved")
-    assert r.status_code == 403
+    assert r.status_code == 401
