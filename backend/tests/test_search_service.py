@@ -141,3 +141,33 @@ async def test_search_all_sources_deduplicates():
     assert len(result) == 1
     sources = {lk["source"] for lk in result[0].source_links}
     assert "arXiv" in sources and "Semantic Scholar" in sources
+
+
+# ── 429 重试 / Google Scholar ────────────────────────────────────────────────
+
+async def test_get_with_retry_retries_once_on_429(monkeypatch):
+    from services import search_service as s
+
+    class Resp:
+        def __init__(self, code): self.status_code, self.headers = code, {"retry-after": "0"}
+
+    calls = []
+    class Client:
+        async def get(self, url, **kw):
+            calls.append(url)
+            return Resp(429 if len(calls) == 1 else 200)
+
+    monkeypatch.setattr(s.asyncio, "sleep", AsyncMock())
+    resp = await s._get_with_retry(Client(), "https://api.openalex.org/works")
+    assert resp.status_code == 200
+    assert len(calls) == 2
+
+
+async def test_google_scholar_without_serpapi_key_returns_fast(monkeypatch):
+    # 以前会先用 scholarly 走代理，代理失效时每次搜索卡 15 秒
+    import time
+    from services import search_service as s
+    monkeypatch.setattr(s, "SERPAPI_KEY", "")
+    t = time.monotonic()
+    assert await s._search_google_scholar(ParsedQuery(keywords=["raft"]), 5) == []
+    assert time.monotonic() - t < 1

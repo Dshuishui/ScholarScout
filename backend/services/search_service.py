@@ -1,5 +1,4 @@
 import asyncio
-import functools
 import logging
 import re
 import unicodedata
@@ -7,7 +6,7 @@ import xml.etree.ElementTree as ET
 import feedparser
 import httpx
 from models import Paper, ParsedQuery
-from config import CORE_API_KEY, NASA_ADS_API_KEY, SERPAPI_KEY, PROXY_URL, POLITE_EMAIL
+from config import CORE_API_KEY, NASA_ADS_API_KEY, SERPAPI_KEY, POLITE_EMAIL
 
 logger = logging.getLogger(__name__)
 
@@ -128,7 +127,8 @@ async def _search_openalex(parsed: ParsedQuery, limit: int) -> list[Paper]:
             params["filter"] = f"publication_date:>{parsed.date_from}"
 
         async with httpx.AsyncClient(timeout=15) as client:
-            resp = await client.get(
+            resp = await _get_with_retry(
+                client,
                 "https://api.openalex.org/works",
                 params=params,
                 headers={"User-Agent": "ScholarScout/1.0 (mailto:sasakinakamura9@gmail.com)"},
@@ -191,7 +191,8 @@ async def _search_pubmed(parsed: ParsedQuery, limit: int) -> list[Paper]:
 
         headers = {"User-Agent": "ScholarScout/1.0 (mailto:sasakinakamura9@gmail.com)"}
         async with httpx.AsyncClient(timeout=20) as client:
-            search_resp = await client.get(
+            search_resp = await _get_with_retry(
+                client,
                 "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi",
                 params=search_params, headers=headers,
             )
@@ -202,7 +203,8 @@ async def _search_pubmed(parsed: ParsedQuery, limit: int) -> list[Paper]:
             return []
 
         async with httpx.AsyncClient(timeout=20) as client:
-            fetch_resp = await client.get(
+            fetch_resp = await _get_with_retry(
+                client,
                 "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi",
                 params={"db": "pubmed", "id": ",".join(ids), "retmode": "xml", "rettype": "abstract"},
                 headers=headers,
@@ -325,7 +327,8 @@ async def _search_inspire(parsed: ParsedQuery, limit: int) -> list[Paper]:
             query += f" AND date>{parsed.date_from[:4]}"
 
         async with httpx.AsyncClient(timeout=20) as client:
-            resp = await client.get(
+            resp = await _get_with_retry(
+                client,
                 "https://inspirehep.net/api/literature",
                 params={"q": query, "size": limit, "sort": "mostrecent",
                         "fields": "titles,authors,abstracts,earliest_date,dois,arxiv_eprints"},
@@ -379,7 +382,8 @@ async def _search_europepmc(parsed: ParsedQuery, limit: int) -> list[Paper]:
             query += f" AND FIRST_PDATE:[{parsed.date_from[:4]} TO *]"
 
         async with httpx.AsyncClient(timeout=20) as client:
-            resp = await client.get(
+            resp = await _get_with_retry(
+                client,
                 "https://www.ebi.ac.uk/europepmc/webservices/rest/search",
                 params={"query": query, "pageSize": limit,
                         "format": "json", "resultType": "core"},
@@ -433,7 +437,8 @@ async def _search_nasa_ads(parsed: ParsedQuery, limit: int) -> list[Paper]:
             query += f" pubdate:[{parsed.date_from[:4]} TO 9999]"
 
         async with httpx.AsyncClient(timeout=20) as client:
-            resp = await client.get(
+            resp = await _get_with_retry(
+                client,
                 "https://api.adsabs.harvard.edu/v1/search/query",
                 params={"q": query, "rows": limit,
                         "fl": "title,author,abstract,pubdate,doi,identifier,bibcode,pub",
@@ -492,7 +497,8 @@ async def _search_crossref(parsed: ParsedQuery, limit: int) -> list[Paper]:
             params["filter"] = f"from-pub-date:{parsed.date_from[:4]}"
 
         async with httpx.AsyncClient(timeout=20) as client:
-            resp = await client.get(
+            resp = await _get_with_retry(
+                client,
                 "https://api.crossref.org/works",
                 params=params,
                 headers={"User-Agent": f"ScholarScout/1.0 (mailto:{POLITE_EMAIL})"},
@@ -564,52 +570,6 @@ async def _search_crossref(parsed: ParsedQuery, limit: int) -> list[Paper]:
         return []
 
 
-def _scholarly_search_sync(parsed: ParsedQuery, limit: int) -> list[Paper]:
-    """scholarly 同步搜索（在线程池中运行避免阻塞事件循环）。"""
-    from scholarly import scholarly, ProxyGenerator  # 延迟导入，未安装时不崩溃
-
-    if PROXY_URL:
-        pg = ProxyGenerator()
-        pg.SingleProxy(http=PROXY_URL, https=PROXY_URL)
-        scholarly.use_proxy(pg)
-
-    papers = []
-    gen = scholarly.search_pubs(" ".join(parsed.keywords))
-    for i, pub in enumerate(gen):
-        if i >= limit:
-            break
-        bib = pub.get("bib", {})
-        title = (bib.get("title") or "").strip()
-        if not title:
-            continue
-
-        year = bib.get("pub_year")
-        # 日期过滤：跳过早于 date_from 的结果
-        if parsed.date_from and year and str(year) < parsed.date_from[:4]:
-            continue
-
-        raw_authors = bib.get("author", [])
-        if isinstance(raw_authors, str):
-            authors = [a.strip() for a in raw_authors.split(" and ")]
-        else:
-            authors = list(raw_authors)
-
-        papers.append(Paper(
-            paper_id=f"gs_{abs(hash(title))}",
-            title=title,
-            authors=authors,
-            abstract=bib.get("abstract"),
-            published_date=f"{year}-01-01" if year else None,
-            doi=None,
-            pdf_url=pub.get("eprint_url"),
-            url=pub.get("pub_url"),
-            source="Google Scholar",
-            citations=pub.get("num_citations", 0) or 0,
-            venue=bib.get("venue") or None,
-        ))
-    return papers
-
-
 async def _search_google_scholar_serpapi(parsed: ParsedQuery, limit: int) -> list[Paper]:
     """Google Scholar via SerpAPI（备用方案）。"""
     if not SERPAPI_KEY:
@@ -671,21 +631,11 @@ async def _search_google_scholar_serpapi(parsed: ParsedQuery, limit: int) -> lis
 
 
 async def _search_google_scholar(parsed: ParsedQuery, limit: int) -> list[Paper]:
-    """Google Scholar：scholarly + 代理优先，失败自动回退到 SerpAPI。"""
-    # 方案一：scholarly（免费，依赖代理质量）
-    try:
-        loop = asyncio.get_running_loop()
-        fn = functools.partial(_scholarly_search_sync, parsed, limit)
-        results = await asyncio.wait_for(
-            loop.run_in_executor(None, fn),
-            timeout=15.0,
-        )
-        if results:
-            return results
-    except Exception as e:
-        logger.warning("scholarly failed, falling back to SerpAPI: %s", e)
+    """Google Scholar 只走 SerpAPI。
 
-    # 方案二：SerpAPI（付费/免费额度，稳定兜底）
+    服务器在国内，直连 scholar.google.com 被墙；以前用 scholarly + 代理抓取，
+    代理一失效每次搜索都要先卡 15 秒，还会留下后台重试线程。SerpAPI 可直连。
+    """
     return await _search_google_scholar_serpapi(parsed, limit)
 
 

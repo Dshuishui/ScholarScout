@@ -179,7 +179,8 @@ async def _via_arxiv(paper_id: str, doi: str | None) -> bytes | None:
     if not ax_id:
         return None
     try:
-        return await _fetch_bytes(f"https://arxiv.org/pdf/{ax_id}")
+        # arxiv.org 从国内服务器直连能访问但很慢，默认 25 秒常常下不完
+        return await _fetch_bytes(f"https://arxiv.org/pdf/{ax_id}", timeout=60)
     except Exception as e:
         logger.debug("arXiv failed for %s: %s", ax_id, e)
     return None
