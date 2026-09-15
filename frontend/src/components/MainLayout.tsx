@@ -24,6 +24,9 @@ import { RedPandaWidget } from './RedPandaWidget'
 
 const PaperChatDrawer = lazy(() => import('./PaperChatDrawer').then(m => ({ default: m.PaperChatDrawer })))
 
+// 与后端 MAX_UPLOAD_BYTES、nginx 里 /api/paper/parse-pdf 的 client_max_body_size 保持一致
+const MAX_PDF_UPLOAD_MB = 50
+
 interface Props {
   apiKey: string
   onClearKey: () => void
@@ -91,20 +94,30 @@ export function MainLayout({ apiKey, onClearKey }: Props) {
   const handleUploadPdf = async (file: File): Promise<boolean> => {
     if (!activePaper) return false
     const paperId = activePaper.paper_id
+    const fail = (reason: string) => {
+      toast.show(reason)
+      setPdfError(paperId)
+      return false
+    }
+    if (file.size > MAX_PDF_UPLOAD_MB * 1024 * 1024) {
+      return fail(`PDF 超过 ${MAX_PDF_UPLOAD_MB}MB，暂不支持上传`)
+    }
     const formData = new FormData()
     formData.append('file', file)
     try {
       const r = await fetch('/api/paper/parse-pdf', { method: 'POST', body: formData })
+      if (r.status === 413) return fail(`PDF 超过 ${MAX_PDF_UPLOAD_MB}MB，暂不支持上传`)
+      if (r.status === 429) return fail('上传太频繁，请稍后再试')
       const data = await r.json()
       if (data.text) {
         setPdfText(activePaper, data.text)
         return true
       }
-      setPdfError(paperId)
-      return false
+      if (data.error === 'too_large') return fail(`PDF 超过 ${MAX_PDF_UPLOAD_MB}MB，暂不支持上传`)
+      if (data.error === 'extract_failed') return fail('没能从 PDF 中提取到文字，可能是扫描版或图片版 PDF')
+      return fail('PDF 解析失败，请尝试其他文件')
     } catch {
-      setPdfError(paperId)
-      return false
+      return fail('上传失败，请检查网络后重试')
     }
   }
 

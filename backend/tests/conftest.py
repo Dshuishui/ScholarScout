@@ -47,6 +47,10 @@ def reset_rate_limits():
     auth_router._login_failures.clear()
     auth_router._resend_attempts.clear()
     auth_router._reset_attempts.clear()
+    import routers.feedback as feedback_router
+    feedback_router._reaction_ips.clear()
+    import routers.search as search_router
+    search_router._trial_parse_attempts.clear()
     yield
 
 

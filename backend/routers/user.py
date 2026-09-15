@@ -75,9 +75,22 @@ async def get_history(user: User = Depends(get_current_user), db: AsyncSession =
     return [json.loads(row.paper_json) for row in result.scalars()]
 
 
+MAX_HISTORY = 100  # 与 GET /history 返回的条数一致；超出的旧记录没人看得到，只会让表无限增长
+
+
 @router.post("/history", status_code=201)
 async def add_history(body: PaperBody, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     db.add(ReadingHistory(user_id=user.id, paper_json=json.dumps(body.paper)))
+    await db.flush()
+    stale = await db.execute(
+        select(ReadingHistory.id)
+        .where(ReadingHistory.user_id == user.id)
+        .order_by(ReadingHistory.viewed_at.desc(), ReadingHistory.id.desc())
+        .offset(MAX_HISTORY)
+    )
+    stale_ids = list(stale.scalars())
+    if stale_ids:
+        await db.execute(delete(ReadingHistory).where(ReadingHistory.id.in_(stale_ids)))
     await db.commit()
     return {"recorded": True}
 

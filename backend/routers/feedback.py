@@ -12,6 +12,7 @@ from database import get_db
 from models_db import Feedback, User
 from services.auth_service import decode_token
 from services.email_service import send_feedback_notification, send_reply_notification
+from services.rate_limit import client_ip
 from jose import JWTError
 
 router = APIRouter()
@@ -146,12 +147,7 @@ async def submit_feedback(
         except (JWTError, Exception):
             pass
 
-    ip = (
-        request.headers.get("X-Real-IP")
-        or request.headers.get("X-Forwarded-For", "").split(",")[0].strip()
-        or request.client.host
-    )
-    location = await _get_location(ip)
+    location = await _get_location(client_ip(request))
 
     valid_categories = {'suggest', 'bug', 'chat'}
     category = req.category if req.category in valid_categories else 'chat'
@@ -221,10 +217,16 @@ class ReactRequest(BaseModel):
     action: str  # "add" | "remove"
 
 
+# (留言 id, 表情) → 已点过的 IP。点赞无需登录，没有这个记录就能无限刷数量或把别人的赞减掉。
+# 只存在内存里，重启后清空，对留言板这种场景足够。
+_reaction_ips: dict[tuple[int, str], set[str]] = {}
+
+
 @router.patch("/{msg_id}/react", status_code=200)
 async def react_feedback(
     msg_id: int,
     req: ReactRequest,
+    request: Request,
     db: AsyncSession = Depends(get_db),
 ):
     if req.emoji not in VALID_EMOJIS or req.action not in ('add', 'remove'):
@@ -236,8 +238,17 @@ async def react_feedback(
         raise HTTPException(status_code=404, detail="留言不存在")
 
     reactions = _parse_reactions(msg.reactions_json)
-    count = reactions.get(req.emoji, 0)
-    reactions[req.emoji] = max(0, count + (1 if req.action == 'add' else -1))
+    voters = _reaction_ips.setdefault((msg_id, req.emoji), set())
+    ip = client_ip(request)
+    if req.action == 'add' and ip not in voters:
+        voters.add(ip)
+        reactions[req.emoji] = reactions.get(req.emoji, 0) + 1
+    elif req.action == 'remove' and ip in voters:
+        voters.discard(ip)
+        reactions[req.emoji] = max(0, reactions.get(req.emoji, 0) - 1)
+    else:
+        return {"reactions": reactions}  # 重复点赞或撤销别人的赞：不改数量
+
     msg.reactions_json = json.dumps(reactions, ensure_ascii=False)
     await db.commit()
     return {"reactions": reactions}

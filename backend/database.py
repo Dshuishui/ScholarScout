@@ -51,6 +51,7 @@ def _run_alembic() -> None:
 
     ini_path = os.path.join(os.path.dirname(__file__), "alembic.ini")
     alembic_cfg = Config(ini_path)
+    alembic_cfg.attributes["configure_logger"] = False  # 保留应用自己的日志配置，见 alembic/env.py
 
     if tables and "alembic_version" not in tables:
         # Existing DB deployed before Alembic — stamp as current.

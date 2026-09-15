@@ -1,4 +1,5 @@
 """SMTP 邮件发送服务（QQ 邮箱 SSL）。"""
+import html
 import logging
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -13,10 +14,23 @@ from models import Paper
 logger = logging.getLogger(__name__)
 
 
+def _esc(text: str | None) -> str:
+    """邮件 HTML 里插入的所有用户输入和外部数据都要转义，否则可以往我们发出的邮件里塞任意链接。"""
+    return html.escape(text or "", quote=True)
+
+
+def _safe_href(url: str | None) -> str | None:
+    """只允许 http/https 链接，防止 javascript: 之类的地址。"""
+    if url and url.lower().startswith(("http://", "https://")):
+        return html.escape(url, quote=True)
+    return None
+
+
 def _paper_card_html(paper: Paper, expand_abstract: bool = False) -> str:
+    href = _safe_href(paper.url)
     title_link = (
-        f'<a href="{paper.url}" style="color:#1d4ed8;text-decoration:none;font-weight:600;">{paper.title}</a>'
-        if paper.url else f'<strong>{paper.title}</strong>'
+        f'<a href="{href}" style="color:#1d4ed8;text-decoration:none;font-weight:600;">{_esc(paper.title)}</a>'
+        if href else f'<strong>{_esc(paper.title)}</strong>'
     )
     meta_parts = []
     if paper.authors:
@@ -26,7 +40,7 @@ def _paper_card_html(paper: Paper, expand_abstract: bool = False) -> str:
         meta_parts.append(paper.published_date[:4])
     if paper.venue:
         meta_parts.append(paper.venue)
-    meta = " · ".join(meta_parts)
+    meta = _esc(" · ".join(meta_parts))
     abstract_text = (paper.abstract or "").strip()
     if not expand_abstract and len(abstract_text) > 300:
         abstract_text = abstract_text[:300] + "…"
@@ -34,14 +48,14 @@ def _paper_card_html(paper: Paper, expand_abstract: bool = False) -> str:
 <div style="margin-bottom:16px;padding:16px;border:1px solid #e5e7eb;border-radius:10px;background:#fff;">
   <div style="font-size:15px;margin-bottom:6px;">{title_link}</div>
   <div style="font-size:12px;color:#6b7280;margin-bottom:8px;">{meta}</div>
-  {"" if not abstract_text else f'<div style="font-size:13px;color:#374151;line-height:1.6;">{abstract_text}</div>'}
+  {"" if not abstract_text else f'<div style="font-size:13px;color:#374151;line-height:1.6;">{_esc(abstract_text)}</div>'}
 </div>"""
 
 
 def build_daily_email_html(keywords: list[str], papers: list[Paper], unsubscribe_url: str | None = None) -> str:
     """每日推送邮件：1～N 篇（由 daily_limit 决定），摘要展开。"""
     today = date.today().strftime("%Y年%m月%d日")
-    kw_str = " · ".join(keywords)
+    kw_str = _esc(" · ".join(keywords))
     count = len(papers)
     single = count == 1
 
@@ -249,10 +263,10 @@ async def send_feedback_notification(content: str, location: str | None, categor
 <div style="background:#fff;border-radius:12px;padding:24px;border:1px solid #e5e7eb;">
   <div style="font-size:18px;font-weight:700;color:#4f46e5;margin-bottom:16px;">ScholarScout 新留言</div>
   <div style="background:#f9fafb;border-radius:8px;padding:14px 16px;margin-bottom:16px;font-size:15px;line-height:1.7;color:#111827;">
-    {content}
+    {_esc(content)}
   </div>
   <div style="font-size:12px;color:#9ca3af;">
-    类型：{category_label}{location_str}
+    类型：{_esc(category_label)}{_esc(location_str)}
   </div>
 </div>
 </body>
@@ -297,10 +311,10 @@ async def send_reply_notification(to_email: str, original_content: str, reply_co
   <div style="font-size:18px;font-weight:700;color:#4f46e5;margin-bottom:16px;">ScholarScout 留言板</div>
   <div style="font-size:14px;color:#6b7280;margin-bottom:8px;">您的留言收到了新回复：</div>
   <div style="background:#f3f4f6;border-radius:6px;padding:10px 14px;margin-bottom:16px;font-size:13px;color:#6b7280;border-left:3px solid #d1d5db;">
-    {preview}
+    {_esc(preview)}
   </div>
   <div style="background:#eef2ff;border-radius:8px;padding:14px 16px;font-size:15px;line-height:1.7;color:#111827;">
-    {reply_content}
+    {_esc(reply_content)}
   </div>
   <div style="margin-top:20px;">
     <a href="http://118.25.192.117" style="display:inline-block;background:#4f46e5;color:#fff;font-size:13px;font-weight:600;padding:9px 20px;border-radius:8px;text-decoration:none;">

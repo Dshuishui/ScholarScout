@@ -2,10 +2,11 @@
 优先级：primary URL → Unpaywall → Semantic Scholar → arXiv → PMC → Sci-Hub
 """
 import asyncio
+import ipaddress
 import logging
 import re
 import httpx
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urljoin
 
 from config import SEMANTIC_SCHOLAR_HEADERS
 
@@ -22,10 +23,7 @@ _SCI_HUB_MIRRORS = [
     "https://sci-hub.ru",
 ]
 
-_PRIVATE_IP = re.compile(
-    r"^(127\.|10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.|169\.254\.|"
-    r"::1$|^localhost$|^0\.0\.0\.0)"
-)
+MAX_REDIRECTS = 5
 
 _UA = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
@@ -33,22 +31,54 @@ _UA = (
 )
 
 
+def _is_public_ip(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
+    if isinstance(ip, ipaddress.IPv6Address) and ip.ipv4_mapped:
+        ip = ip.ipv4_mapped
+    return ip.is_global and not ip.is_multicast
+
+
 def _is_safe_url(url: str) -> bool:
-    """防 SSRF：拒绝私有 IP / 非标准端口，允许所有公网域名。"""
+    """同步的初步检查：只允许 http/https、80/443 端口；主机名本身是 IP 时必须是公网地址。
+
+    只看字面不够（域名可能解析到内网，如腾讯云元数据地址 metadata.tencentyun.com），
+    真正发请求前还要经过 _check_url_safe 做 DNS 解析检查。
+    """
     try:
         p = urlparse(url)
         if p.scheme not in ("http", "https"):
             return False
         host = (p.hostname or "").lower()
-        if _PRIVATE_IP.match(host):
+        if not host or host == "localhost":
             return False
-        # 拒绝非标准端口（80/443 以外）
-        port = p.port
-        if port is not None and port not in (80, 443):
+        if p.port is not None and p.port not in (80, 443):
             return False
-        return True
+        try:
+            return _is_public_ip(ipaddress.ip_address(host))
+        except ValueError:
+            return True  # 是域名，交给 DNS 检查
     except Exception:
         return False
+
+
+async def _resolve_host(host: str) -> list[str]:
+    infos = await asyncio.get_running_loop().getaddrinfo(host, None)
+    return [info[4][0] for info in infos]
+
+
+async def _check_url_safe(url: str) -> None:
+    """防 SSRF：字面检查 + 解析出的所有 IP 都必须是公网地址，否则抛 ValueError。
+
+    仍存在极小的 DNS 重绑定窗口（检查和实际连接各解析一次），对本服务可接受。
+    """
+    if not _is_safe_url(url):
+        raise ValueError(f"不安全地址: {url}")
+    host = urlparse(url).hostname or ""
+    try:
+        addrs = await _resolve_host(host)
+    except OSError:
+        raise ValueError(f"无法解析地址: {host}")
+    if not addrs or not all(_is_public_ip(ipaddress.ip_address(a.split("%")[0])) for a in addrs):
+        raise ValueError(f"不安全地址: {url}")
 
 
 def _extract_pdf_url_from_html(html: str, base_url: str) -> str | None:
@@ -79,27 +109,31 @@ async def _fetch_bytes(url: str, timeout: int = 25, _depth: int = 0) -> bytes:
     """
     if _depth > 2:
         raise ValueError("落地页跳转层数超限")
-    if not _is_safe_url(url):
-        raise ValueError(f"不安全地址: {url}")
+    await _check_url_safe(url)  # 地址不合格就不必创建客户端
 
     async with httpx.AsyncClient(
-        follow_redirects=True,
+        follow_redirects=False,  # 手动跟随：每一跳都先做 SSRF 检查再请求
         timeout=timeout,
         headers={"User-Agent": _UA, "Accept": "application/pdf,*/*;q=0.9"},
     ) as client:
-        async with client.stream("GET", url) as resp:
-            resp.raise_for_status()
-            if not _is_safe_url(str(resp.url)):
-                raise ValueError("重定向到私有地址")
-
-            ct = resp.headers.get("content-type", "").split(";")[0].strip()
-            total, chunks = 0, []
-            async for chunk in resp.aiter_bytes(65536):
-                total += len(chunk)
-                if total > MAX_FILE_SIZE:
-                    raise ValueError("文件超过 50 MB")
-                chunks.append(chunk)
-            final_url = str(resp.url)
+        for _ in range(MAX_REDIRECTS + 1):
+            async with client.stream("GET", url) as resp:
+                if resp.status_code in (301, 302, 303, 307, 308) and resp.headers.get("location"):
+                    url = urljoin(url, resp.headers["location"])
+                    await _check_url_safe(url)  # 跳转目标先检查，再发请求
+                    continue
+                resp.raise_for_status()
+                ct = resp.headers.get("content-type", "").split(";")[0].strip()
+                total, chunks = 0, []
+                async for chunk in resp.aiter_bytes(65536):
+                    total += len(chunk)
+                    if total > MAX_FILE_SIZE:
+                        raise ValueError("文件超过 50 MB")
+                    chunks.append(chunk)
+                final_url = url
+                break
+        else:
+            raise ValueError("重定向次数过多")
 
     data = b"".join(chunks)
 

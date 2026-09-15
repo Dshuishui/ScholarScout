@@ -11,7 +11,10 @@ import models_db  # noqa: E402, F401 — registers all ORM models onto Base.meta
 
 config = context.config
 
-if config.config_file_name is not None:
+# 只在命令行跑 alembic 时应用 alembic.ini 的日志配置。应用启动时由 database._run_alembic 调用，
+# 那时 fileConfig 会把根日志级别改成 WARNING，并禁用之前创建的所有 logger（scheduler、search_service 等），
+# 线上的警告和错误就全都不输出了。
+if config.config_file_name is not None and config.attributes.get("configure_logger", True):
     fileConfig(config.config_file_name)
 
 target_metadata = Base.metadata

@@ -16,6 +16,7 @@ from services.auth_service import hash_password, verify_password, create_access_
 from services.email_service import send_verification_email, send_reset_password_email
 from dependencies import get_current_user
 from config import FREE_SEARCHES_QUOTA, APP_BASE_URL, DEEPSEEK_SYSTEM_KEY
+from services.rate_limit import rate_ok, client_ip
 
 router = APIRouter()
 
@@ -26,21 +27,8 @@ _login_failures: dict[str, list[float]] = defaultdict(list)     # IP → 登录�
 _resend_attempts: dict[str, list[float]] = defaultdict(list)    # email → 重发时间戳
 _reset_attempts: dict[str, list[float]] = defaultdict(list)     # IP → 重置密码请求时间戳
 
-def _rate_ok(store: dict, key: str, limit: int, window_sec: int) -> bool:
-    """检查是否在限额内。是则记录并返回 True；否则返回 False。"""
-    now = time.time()
-    store[key] = [t for t in store[key] if now - t < window_sec]
-    if len(store[key]) >= limit:
-        return False
-    store[key].append(now)
-    return True
-
-def _get_ip(request: Request) -> str:
-    """尽量取真实 IP（Nginx 代理后取 X-Forwarded-For）。"""
-    forwarded = request.headers.get("X-Forwarded-For")
-    if forwarded:
-        return forwarded.split(",")[0].strip()
-    return request.client.host if request.client else "unknown"
+_rate_ok = rate_ok
+_get_ip = client_ip
 
 
 # ── Pydantic 模型 ─────────────────────────────────────────────────────────────
@@ -86,7 +74,10 @@ async def register(req: RegisterRequest, request: Request, db: AsyncSession = De
     if existing:
         if existing.is_verified:
             raise HTTPException(status_code=400, detail="邮箱已注册")
-        # 已注册但未验证：重新发一封验证邮件
+        # 已注册但未验证：重新发一封验证邮件。按收件地址限流，
+        # 否则换 IP 反复注册同一邮箱就能借我们的发件邮箱轰炸别人，发件邮箱被封后注册/找回密码全部失效
+        if not _rate_ok(_resend_attempts, req.email.lower(), limit=3, window_sec=3600):
+            raise HTTPException(status_code=429, detail="发送过于频繁，请 1 小时后再试")
         token, expires = _make_verify_token()
         await db.execute(
             sa_update(User)

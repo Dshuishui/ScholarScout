@@ -21,7 +21,6 @@ SEMANTIC_SCHOLAR_HEADERS = {"x-api-key": SEMANTIC_SCHOLAR_API_KEY} if SEMANTIC_S
 POLITE_EMAIL = "sasakinakamura9@gmail.com"  # 用于 CrossRef / OpenAlex / Unpaywall 礼貌池标识
 SEARCH_LIMIT_PER_SOURCE = 50
 VALIDATED_LIMIT = 50
-CORS_ORIGINS = ["*"]
 
 import os as _os
 JWT_SECRET = _os.environ.get("JWT_SECRET", "dev-secret-change-in-production")
@@ -33,6 +32,12 @@ DEEPSEEK_SYSTEM_KEY = _os.environ.get("DEEPSEEK_SYSTEM_KEY", "")
 FREE_SEARCHES_QUOTA = int(_os.environ.get("FREE_SEARCHES_QUOTA", "3"))
 # 前端地址（邮件验证链接用）
 APP_BASE_URL = _os.environ.get("APP_BASE_URL", "http://118.25.192.117")
+# 允许跨域调用 API 的来源。前端经 nginx 同源访问，本身不需要跨域；
+# 以前是 "*"，任何网站都能在用户浏览器里直接调用我们的接口（包括下载代理）。
+# 多个来源用逗号分隔；本地开发走 Vite 代理也是同源，一般不用配。
+CORS_ORIGINS = [
+    o.strip() for o in _os.environ.get("CORS_ORIGINS", APP_BASE_URL).split(",") if o.strip()
+]
 
 # SMTP 配置（QQ 邮箱）：smtp.qq.com:465，密码为授权码
 SMTP_HOST = _os.environ.get("SMTP_HOST", "smtp.qq.com")

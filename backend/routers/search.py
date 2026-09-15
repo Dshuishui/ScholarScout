@@ -1,6 +1,8 @@
 import asyncio
 import json
 import logging
+import weakref
+from collections import defaultdict
 from typing import Optional
 from concurrent.futures import ThreadPoolExecutor
 
@@ -23,12 +25,16 @@ from services.search_service import search_all_sources, enhance_with_unpaywall, 
 from services.download_service import fetch_pdf_with_fallback
 from services.pdf_finder_service import find_pdfs_with_kimi, generate_fallback_links
 from services.cache_service import get_cached_search, cache_search
+from services.rate_limit import rate_ok
 from config import (
     CORE_API_KEY, NASA_ADS_API_KEY, SERPAPI_KEY, KIMI_API_KEY,
     DEEPSEEK_BASE_URL, DEEPSEEK_MODEL, DEEPSEEK_SYSTEM_KEY,
 )
 
 router = APIRouter()
+
+TRIAL_PARSE_PER_HOUR = 20  # 试用用户（系统 Key 代付）每小时最多解析次数
+_trial_parse_attempts: dict[str, list[float]] = defaultdict(list)
 
 
 async def _index_papers_async(papers_dict: list[dict]) -> None:
@@ -104,6 +110,9 @@ async def parse(
             raise HTTPException(status_code=403, detail="免费次数已用完，请配置自己的 DeepSeek API Key")
         if not DEEPSEEK_SYSTEM_KEY:
             raise HTTPException(status_code=503, detail="系统暂不支持免费试用，请使用自己的 Key")
+        # parse 不扣额度（search 时才扣），不限流的话试用账号可以无限调用、消耗系统 Key
+        if not rate_ok(_trial_parse_attempts, str(optional_user.id), limit=TRIAL_PARSE_PER_HOUR, window_sec=3600):
+            raise HTTPException(status_code=429, detail="请求过于频繁，请稍后再试")
         api_key = DEEPSEEK_SYSTEM_KEY
 
     history = [{"role": m.role, "content": m.content} for m in request.messages]
@@ -318,6 +327,18 @@ async def health():
     }
 
 
+MAX_CONCURRENT_DOWNLOADS = 4
+_download_slots: "weakref.WeakKeyDictionary[asyncio.AbstractEventLoop, asyncio.Semaphore]" = weakref.WeakKeyDictionary()
+
+
+def _download_slot() -> asyncio.Semaphore:
+    """每个 PDF 最多 50 MB 读进内存，nginx 又允许 50 个并发，不限并发会撑爆 3.6 GB 内存的服务器。"""
+    loop = asyncio.get_running_loop()
+    if loop not in _download_slots:
+        _download_slots[loop] = asyncio.Semaphore(MAX_CONCURRENT_DOWNLOADS)
+    return _download_slots[loop]
+
+
 @router.get("/download")
 async def download(
     url: str,
@@ -325,7 +346,8 @@ async def download(
     paper_id: str | None = None,
 ):
     try:
-        content = await fetch_pdf_with_fallback(url, doi=doi, paper_id=paper_id)
+        async with _download_slot():
+            content = await fetch_pdf_with_fallback(url, doi=doi, paper_id=paper_id)
         return Response(
             content=content,
             media_type="application/pdf",
