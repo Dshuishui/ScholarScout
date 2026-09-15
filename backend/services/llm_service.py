@@ -1,6 +1,7 @@
 import json
 import asyncio
 import logging
+import math
 from openai import AsyncOpenAI
 from models import ParsedQuery, Paper
 from config import DEEPSEEK_BASE_URL, DEEPSEEK_MODEL
@@ -24,7 +25,8 @@ PARSE_SYSTEM = """你是学术搜索助手。结合对话历史，将用户的�
   "keywords": ["英文关键词1", "英文关键词2", "同义词或相关术语3", "更宽泛的上位概念4"],
   "date_from": "YYYY-01-01 或 null",
   "date_to": "YYYY-12-31 或 null",
-  "max_results": 30
+  "max_results": 30,
+  "domains": ["cs"]
 }
 
 规则：
@@ -32,6 +34,8 @@ PARSE_SYSTEM = """你是学术搜索助手。结合对话历史，将用户的�
   例如用户说"transformer"→ ["transformer", "attention mechanism", "self-attention", "large language model"]
   例如用户说"癌症检测"→ ["cancer detection", "tumor diagnosis", "oncology screening", "malignancy classification"]
 - 保证关键词多样性，避免完全重复的词
+- domains 是需求涉及的学科，只能从这些值里选：cs（计算机/人工智能/软件）、math、physics、astro（天文/地球科学）、bio（生物/生命科学）、med（医学/药学/公共卫生）、chem（化学/材料）、eng（工程）、social（经济/心理/教育/社会学）、humanities
+  交叉学科要把涉及的学科都列上，例如"深度学习用于医学影像" → ["cs", "med"]；拿不准时返回 []
 - 用户未提时间则 date_from/date_to 为 null
 - "最近两年" 相对今天计算
 - 若用户说"找更多"或"换个方向"，结合历史推断搜索主题"""
@@ -156,9 +160,22 @@ async def validate_papers(
     return accepted, rejected
 
 
+def citation_bonus(citations: int) -> float:
+    """引用量加分，0～1 分：100 次 ≈ 0.5，1 万次及以上 = 1。
+
+    大模型评分基本是 5～10 的整数，同分很多；参考 Semantic Scholar、Consensus 的做法，
+    用引用量把奠基论文排到同分论文前面。封顶 1 分，不会压过明显更高的相关性判断。
+    """
+    return min(1.0, math.log10(1 + max(citations, 0)) / 4)
+
+
 def rank_accepted(papers: list[Paper]) -> list[Paper]:
-    """按大模型相关性评分从高到低排序（稳定排序，同分保持原顺序；没打分的排最后）。
+    """按"大模型相关性评分 + 引用量加分"从高到低排序；没打分的排最后。
 
     必须在截取 validated_limit 之前调用，否则排在后面的数据源里的高分论文会先被截掉。
     """
-    return sorted(papers, key=lambda p: p.relevance_score if p.relevance_score is not None else -1, reverse=True)
+    def key(p: Paper) -> float:
+        if p.relevance_score is None:
+            return -1.0
+        return p.relevance_score + citation_bonus(p.citations)
+    return sorted(papers, key=key, reverse=True)

@@ -27,7 +27,7 @@ export async function* searchPapers(
   apiKey: string,
   history: { role: string; content: string }[] = [],
   settings: { limitPerSource?: number; validatedLimit?: number; selectedSources?: string[] } = {},
-  confirmed?: { keywords: string[]; date_from?: string | null; date_to?: string | null },
+  confirmed?: { keywords: string[]; date_from?: string | null; date_to?: string | null; domains?: string[] },
   model?: string,
   authToken?: string,
 ): AsyncGenerator<SearchEvent> {
@@ -49,6 +49,7 @@ export async function* searchPapers(
         keywords: confirmed.keywords,
         date_from: confirmed.date_from ?? null,
         date_to: confirmed.date_to ?? null,
+        domains: confirmed.domains ?? null,
       }),
     }),
   })

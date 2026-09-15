@@ -6,7 +6,7 @@ import xml.etree.ElementTree as ET
 import feedparser
 import httpx
 from models import Paper, ParsedQuery
-from config import CORE_API_KEY, NASA_ADS_API_KEY, SERPAPI_KEY, POLITE_EMAIL
+from config import CORE_API_KEY, NASA_ADS_API_KEY, SERPAPI_KEY, OPENALEX_API_KEY, POLITE_EMAIL
 
 logger = logging.getLogger(__name__)
 
@@ -121,62 +121,100 @@ async def _search_semantic_scholar(parsed: ParsedQuery, limit: int) -> list[Pape
         return []
 
 
+_OPENALEX_SELECT = "id,title,authorships,abstract_inverted_index,publication_date,doi,open_access,cited_by_count,primary_location"
+
+
+def _openalex_item_to_paper(item: dict) -> Paper:
+    doi = (item.get("doi") or "").replace("https://doi.org/", "") or None
+    oa = item.get("open_access", {})
+    pdf_url = oa.get("oa_url") if oa.get("is_oa") else None
+    work_id = item.get("id", "").replace("https://openalex.org/", "")
+
+    abstract = None
+    inv = item.get("abstract_inverted_index")
+    if inv:
+        words: dict[int, str] = {}
+        for word, positions in inv.items():
+            for pos in positions:
+                words[pos] = word
+        abstract = " ".join(words[i] for i in sorted(words))
+
+    venue = ((item.get("primary_location") or {}).get("source") or {}).get("display_name")
+    return Paper(
+        paper_id=work_id,
+        title=item.get("title", ""),
+        authors=[
+            a.get("author", {}).get("display_name", "")
+            for a in item.get("authorships", [])[:5]
+        ],
+        abstract=abstract,
+        published_date=item.get("publication_date"),
+        doi=doi,
+        pdf_url=pdf_url,
+        url=item.get("id"),
+        source="OpenAlex",
+        citations=item.get("cited_by_count", 0) or 0,
+        venue=venue,
+    )
+
+
+async def _openalex_request(client: httpx.AsyncClient, search_param: str, query: str,
+                            parsed: ParsedQuery, limit: int) -> list[Paper]:
+    params = {search_param: query, "per_page": limit, "select": _OPENALEX_SELECT}
+    if parsed.date_from:
+        params["filter"] = f"publication_date:>{parsed.date_from}"
+    if OPENALEX_API_KEY:
+        params["api_key"] = OPENALEX_API_KEY
+    resp = await _get_with_retry(
+        client,
+        "https://api.openalex.org/works",
+        params=params,
+        headers={"User-Agent": f"ScholarScout/1.0 (mailto:{POLITE_EMAIL})"},
+    )
+    resp.raise_for_status()
+    return [_openalex_item_to_paper(it) for it in resp.json().get("results", [])]
+
+
+def _rrf_fuse(ranked_lists: list[list[Paper]], limit: int, k: int = 10) -> list[Paper]:
+    """Reciprocal Rank Fusion：在任一路结果里排得靠前的论文都会排到前面。
+
+    k 取 10 而不是常见的 60：k=60 时"两路都排第 50"（2/110）会压过"只在一路排第 1"（1/61），
+    截取前 limit 篇后，语义检索独有的头部结果（如 GPT-3）反而会被挤掉。
+    """
+    scores: dict[str, float] = {}
+    first_seen: dict[str, Paper] = {}
+    for papers in ranked_lists:
+        for rank, p in enumerate(papers, start=1):
+            scores[p.paper_id] = scores.get(p.paper_id, 0.0) + 1.0 / (k + rank)
+            first_seen.setdefault(p.paper_id, p)
+    ordered = sorted(scores, key=lambda pid: scores[pid], reverse=True)
+    return [first_seen[pid] for pid in ordered[:limit]]
+
+
 async def _search_openalex(parsed: ParsedQuery, limit: int) -> list[Paper]:
+    """关键词检索 + （配置了 API key 时）语义检索，RRF 融合。
+
+    关键词用 OR 连接：空格拼接会被当成"所有词都要出现"，同义词一多经典论文就被漏掉
+    （实测潜在扩散模型、思维链由"前 50 条没有"变成排第 1）。
+    语义检索（OpenAlex 用 GTE-large 对标题+摘要做了向量化）补上用词不同的论文：
+    实测 GPT-3 从第 16 升到第 1；但它会漏掉思维链（关键词检索排第 1），所以两路融合而不是替换。
+    语义检索每次多一次计费调用，无 key 时每天只有 0.1 美元额度，所以只在配置 key 后启用。
+    """
     try:
-        params = {
-            # 空格拼接会被 OpenAlex 当成"所有词都要出现"，同义词一多经典论文就被漏掉；
-            # 实测潜在扩散模型、思维链两篇论文由"前 50 条没有"变成排第 1
-            "search": _quoted_or(parsed.keywords),
-            "per_page": limit,
-            "select": "id,title,authorships,abstract_inverted_index,publication_date,doi,open_access,cited_by_count,primary_location",
-        }
-        if parsed.date_from:
-            params["filter"] = f"publication_date:>{parsed.date_from}"
-
-        async with httpx.AsyncClient(timeout=15) as client:
-            resp = await _get_with_retry(
-                client,
-                "https://api.openalex.org/works",
-                params=params,
-                headers={"User-Agent": "ScholarScout/1.0 (mailto:sasakinakamura9@gmail.com)"},
+        async with httpx.AsyncClient(timeout=20) as client:
+            keyword_task = _openalex_request(client, "search", _quoted_or(parsed.keywords), parsed, limit)
+            if not OPENALEX_API_KEY:
+                return await keyword_task
+            keyword_res, semantic_res = await asyncio.gather(
+                keyword_task,
+                _openalex_request(client, "search.semantic", ", ".join(parsed.keywords), parsed, limit),
+                return_exceptions=True,
             )
-            resp.raise_for_status()
-            data = resp.json()
-
-        papers = []
-        for item in data.get("results", []):
-            doi = (item.get("doi") or "").replace("https://doi.org/", "") or None
-            oa = item.get("open_access", {})
-            pdf_url = oa.get("oa_url") if oa.get("is_oa") else None
-            work_id = item.get("id", "").replace("https://openalex.org/", "")
-
-            abstract = None
-            inv = item.get("abstract_inverted_index")
-            if inv:
-                words: dict[int, str] = {}
-                for word, positions in inv.items():
-                    for pos in positions:
-                        words[pos] = word
-                abstract = " ".join(words[i] for i in sorted(words))
-
-            venue = ((item.get("primary_location") or {}).get("source") or {}).get("display_name")
-            papers.append(Paper(
-                paper_id=work_id,
-                title=item.get("title", ""),
-                authors=[
-                    a.get("author", {}).get("display_name", "")
-                    for a in item.get("authorships", [])[:5]
-                ],
-                abstract=abstract,
-                published_date=item.get("publication_date"),
-                doi=doi,
-                pdf_url=pdf_url,
-                url=item.get("id"),
-                source="OpenAlex",
-                citations=item.get("cited_by_count", 0) or 0,
-                venue=venue,
-            ))
-        return papers
+        lists = [r for r in (keyword_res, semantic_res) if isinstance(r, list)]
+        for r in (keyword_res, semantic_res):
+            if isinstance(r, Exception):
+                logger.warning("OpenAlex sub-search error: %s", r)
+        return _rrf_fuse(lists, limit)
     except Exception as e:
         logger.warning("OpenAlex search error: %s", e)
         return []
@@ -817,11 +855,31 @@ _SOURCE_FUNCS: dict = {
 }
 
 
-def get_source_names(sources: list[str] | None = None) -> list[str]:
+# 专科数据源只覆盖特定领域；其余（arXiv、Semantic Scholar、OpenAlex、CrossRef、CORE、Google Scholar）是综合库。
+# 实测搜纯计算机的题目时，PubMed + Europe PMC 贡献了候选池的一半，基本都是噪音。
+KNOWN_DOMAINS = {"cs", "math", "physics", "astro", "bio", "med", "chem", "eng", "social", "humanities"}
+_SOURCE_DOMAINS: dict[str, set[str]] = {
+    "PubMed":      {"bio", "med", "chem", "social"},
+    "Europe PMC":  {"bio", "med", "chem", "social"},
+    "INSPIRE-HEP": {"physics", "astro"},
+    "NASA ADS":    {"physics", "astro"},
+}
+
+
+def _source_matches_domains(name: str, domains: list[str] | None) -> bool:
+    """领域未知、为空或含无法识别的值时一律不过滤，宁可多查不能漏查。"""
+    if not domains or not set(domains) <= KNOWN_DOMAINS:
+        return True
+    covered = _SOURCE_DOMAINS.get(name)
+    return covered is None or bool(covered & set(domains))
+
+
+def get_source_names(sources: list[str] | None = None, domains: list[str] | None = None) -> list[str]:
     """Return the list of source names that will actually be searched."""
-    if not sources:
-        return list(_SOURCE_FUNCS.keys())
-    return [k for k in _SOURCE_FUNCS if k in sources]
+    names = list(_SOURCE_FUNCS.keys()) if not sources else [k for k in _SOURCE_FUNCS if k in sources]
+    routed = [n for n in names if _source_matches_domains(n, domains)]
+    # 用户手动只勾了专科库（比如只勾 PubMed）时，按领域过滤会一个都不剩：尊重用户的选择
+    return routed or names
 
 
 async def search_all_sources(
@@ -830,11 +888,7 @@ async def search_all_sources(
     sources: list[str] | None = None,
     on_source_done=None,  # async callable(name: str, count: int) | None
 ) -> list[Paper]:
-    funcs = (
-        _SOURCE_FUNCS
-        if not sources
-        else {k: v for k, v in _SOURCE_FUNCS.items() if k in sources}
-    )
+    funcs = {name: _SOURCE_FUNCS[name] for name in get_source_names(sources, parsed.domains)}
 
     async def run_source(name: str, fn) -> list[Paper]:
         papers = await fn(parsed, limit_per_source)

@@ -116,6 +116,7 @@ async def parse(
         "keywords": parsed.keywords,
         "date_from": parsed.date_from,
         "date_to": parsed.date_to,
+        "domains": parsed.domains,
     }
 
 
@@ -142,6 +143,7 @@ async def search(
                     date_from=request.date_from,
                     date_to=request.date_to,
                     max_results=request.limit_per_source,
+                    domains=request.domains or [],
                 )
             else:
                 # 旧路径：兼容不带关键词的调用
@@ -155,9 +157,12 @@ async def search(
             kw_str = "、".join(parsed.keywords)
             yield sse("progress", {"message": f"正在搜索关键词：{kw_str}..."})
 
+            # 缓存键用实际要查的数据源（已含按领域选源的结果），避免复用未选源时的缓存
+            source_names = get_source_names(request.sources, parsed.domains)
+
             # Check Redis cache before hitting external APIs
             cached_papers = await get_cached_search(
-                parsed.keywords, request.sources or [],
+                parsed.keywords, source_names,
                 parsed.date_from or "", parsed.date_to or "",
             )
             if cached_papers:
@@ -170,7 +175,6 @@ async def search(
                 return
 
             # Notify frontend which sources will be searched
-            source_names = get_source_names(request.sources)
             yield sse("search_start", {
                 "sources": source_names,
                 "date_from": parsed.date_from,
@@ -225,7 +229,7 @@ async def search(
 
             # Store validated results in Redis (non-blocking)
             asyncio.create_task(cache_search(
-                parsed.keywords, request.sources or [],
+                parsed.keywords, source_names,
                 papers_dict, parsed.date_from or "", parsed.date_to or "",
             ))
 

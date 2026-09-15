@@ -23,6 +23,7 @@ class SearchRequest(BaseModel):
     date_from: Optional[str] = Field(default=None, max_length=20)
     date_to: Optional[str] = Field(default=None, max_length=20)
     sources: Optional[list[str]] = Field(default=None, max_length=15)
+    domains: Optional[list[str]] = Field(default=None, max_length=10)  # parse 阶段识别的学科领域，用于选源
     model: Optional[str] = Field(default=None, max_length=100)
 
 
@@ -54,3 +55,4 @@ class ParsedQuery(BaseModel):
     date_from: Optional[str] = None
     date_to: Optional[str] = None
     max_results: int = 30
+    domains: list[str] = []  # 学科领域，空表示未知（查全部数据源）

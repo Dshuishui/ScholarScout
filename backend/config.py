@@ -12,6 +12,9 @@ SEARCH_SOURCES = ["arxiv", "semantic_scholar", "openalex", "pubmed", "core", "in
 CORE_API_KEY = os.environ.get("CORE_API_KEY", "")
 NASA_ADS_API_KEY = os.environ.get("NASA_ADS_API_KEY", "")
 SERPAPI_KEY = os.environ.get("SERPAPI_KEY", "")
+# OpenAlex 2026 年起生产环境需要 key（免费，每天 1 美元额度）；无 key 时每天只有 0.1 美元。
+# 配置后同时启用 OpenAlex 语义检索
+OPENALEX_API_KEY = os.environ.get("OPENALEX_API_KEY", "")
 POLITE_EMAIL = "sasakinakamura9@gmail.com"  # 用于 CrossRef / OpenAlex / Unpaywall 礼貌池标识
 SEARCH_LIMIT_PER_SOURCE = 50
 VALIDATED_LIMIT = 50

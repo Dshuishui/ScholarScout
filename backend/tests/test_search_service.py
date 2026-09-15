@@ -235,3 +235,92 @@ async def test_nasa_ads_sorts_by_score(monkeypatch):
     monkeypatch.setattr(s, "NASA_ADS_API_KEY", "k")
     p = await _capture_params(monkeypatch, s._search_nasa_ads, ParsedQuery(keywords=["exoplanet"]))
     assert p["sort"] == "score desc"
+
+
+# ── 按领域选源 ────────────────────────────────────────────────────────────────
+
+def test_cs_query_skips_biomedical_and_physics_sources():
+    from services.search_service import get_source_names
+    names = get_source_names(None, ["cs"])
+    assert "PubMed" not in names and "Europe PMC" not in names
+    assert "INSPIRE-HEP" not in names and "NASA ADS" not in names
+    assert {"arXiv", "OpenAlex", "CrossRef", "Semantic Scholar"} <= set(names)
+
+
+def test_interdisciplinary_query_keeps_all_involved_sources():
+    from services.search_service import get_source_names
+    names = get_source_names(None, ["cs", "med"])
+    assert "PubMed" in names and "Europe PMC" in names
+    assert "INSPIRE-HEP" not in names
+
+
+def test_unknown_or_empty_domains_search_everything():
+    from services.search_service import get_source_names, _SOURCE_FUNCS
+    everything = list(_SOURCE_FUNCS)
+    assert get_source_names(None, []) == everything
+    assert get_source_names(None, None) == everything
+    assert get_source_names(None, ["cs", "something-new"]) == everything  # 含无法识别的值就不过滤
+
+
+def test_user_selected_specialist_source_is_respected():
+    from services.search_service import get_source_names
+    # 用户手动只勾 PubMed，就算识别为计算机领域也不能一个源都不查
+    assert get_source_names(["PubMed"], ["cs"]) == ["PubMed"]
+
+
+# ── OpenAlex 混合检索 ─────────────────────────────────────────────────────────
+
+@pytest.fixture
+def stub_httpx(monkeypatch):
+    """不依赖本机代理等环境变量创建 httpx 客户端。"""
+    from services import search_service as s
+    class DummyClient:
+        def __init__(self, *a, **kw): pass
+        async def __aenter__(self): return self
+        async def __aexit__(self, *a): return False
+    monkeypatch.setattr(s.httpx, "AsyncClient", DummyClient)
+
+def test_rrf_fuse_keeps_top_results_from_each_list():
+    from services.search_service import _rrf_fuse
+    kw = [make_paper(f"k{i}", f"K{i}") for i in range(50)]
+    sem = [make_paper("s0", "S0")] + kw[1:50]  # 语义检索第 1 是关键词检索没有的论文，其余与关键词结果重叠
+    fused = [p.paper_id for p in _rrf_fuse([kw, sem], limit=50)]
+    assert "s0" in fused and "k0" in fused  # 各自排第 1 的都不能被两路都有的尾部结果挤掉
+    assert fused.index("k1") < fused.index("k30")  # 两路都靠前的仍然排在前面
+
+
+async def test_openalex_without_key_runs_keyword_search_only(monkeypatch, stub_httpx):
+    from services import search_service as s
+    calls = []
+    async def fake_request(client, param, query, parsed, limit):
+        calls.append(param)
+        return [make_paper("W1", "Paper 1", source="OpenAlex")]
+    monkeypatch.setattr(s, "OPENALEX_API_KEY", "")
+    monkeypatch.setattr(s, "_openalex_request", fake_request)
+    assert len(await s._search_openalex(ParsedQuery(keywords=["raft"]), 10)) == 1
+    assert calls == ["search"]
+
+
+async def test_openalex_with_key_fuses_keyword_and_semantic(monkeypatch, stub_httpx):
+    from services import search_service as s
+    results = {
+        "search": [make_paper("W1", "Keyword hit", source="OpenAlex")],
+        "search.semantic": [make_paper("W2", "Semantic hit", source="OpenAlex")],
+    }
+    async def fake_request(client, param, query, parsed, limit):
+        return results[param]
+    monkeypatch.setattr(s, "OPENALEX_API_KEY", "k")
+    monkeypatch.setattr(s, "_openalex_request", fake_request)
+    ids = {p.paper_id for p in await s._search_openalex(ParsedQuery(keywords=["raft"]), 10)}
+    assert ids == {"W1", "W2"}
+
+
+async def test_openalex_semantic_failure_keeps_keyword_results(monkeypatch, stub_httpx):
+    from services import search_service as s
+    async def fake_request(client, param, query, parsed, limit):
+        if param == "search.semantic":
+            raise RuntimeError("429")
+        return [make_paper("W1", "Keyword hit", source="OpenAlex")]
+    monkeypatch.setattr(s, "OPENALEX_API_KEY", "k")
+    monkeypatch.setattr(s, "_openalex_request", fake_request)
+    assert [p.paper_id for p in await s._search_openalex(ParsedQuery(keywords=["raft"]), 10)] == ["W1"]

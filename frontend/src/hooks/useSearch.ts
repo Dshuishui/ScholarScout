@@ -16,6 +16,7 @@ interface PendingSearch {
   keywords: string[]
   date_from: string | null
   date_to: string | null
+  domains?: string[]
   query: string
   history: { role: string; content: string }[]
 }
@@ -55,7 +56,7 @@ export function useSearch(apiKey: string, settings: SearchSettings, model?: stri
     try {
       for await (const event of searchPapers(
         pending.query, apiKey, pending.history, settings,
-        { keywords, date_from: pending.date_from, date_to: pending.date_to },
+        { keywords, date_from: pending.date_from, date_to: pending.date_to, domains: pending.domains },
         model,
         authToken,
       )) {
@@ -162,6 +163,7 @@ export function useSearch(apiKey: string, settings: SearchSettings, model?: stri
           keywords: result.keywords,
           date_from: result.date_from,
           date_to: result.date_to,
+          domains: result.domains,
           query,
           history,
         }

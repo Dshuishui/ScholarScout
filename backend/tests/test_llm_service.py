@@ -127,3 +127,32 @@ def test_rank_accepted_sorts_by_score_before_truncation():
     ]
     assert [p.paper_id for p in rank_accepted(papers)] == ["b", "a", "c", "unscored"]
     assert [p.paper_id for p in rank_accepted(papers)[:1]] == ["b"]
+
+
+def test_citation_bonus_is_bounded():
+    from services.llm_service import citation_bonus
+    assert citation_bonus(0) == 0
+    assert 0.45 < citation_bonus(100) < 0.55
+    assert citation_bonus(10_000) == 1.0
+    assert citation_bonus(10_000_000) == 1.0
+
+
+def test_rank_accepted_breaks_score_ties_by_citations():
+    papers = [
+        Paper(paper_id="new", title="N", authors=[], source="OpenAlex", relevance_score=8, citations=3),
+        Paper(paper_id="classic", title="C", authors=[], source="OpenAlex", relevance_score=8, citations=90000),
+        Paper(paper_id="best-match", title="B", authors=[], source="OpenAlex", relevance_score=10, citations=0),
+    ]
+    # 同为 8 分时高引的奠基论文在前；但 10 分的论文不会被 8 分的高引论文反超
+    assert [p.paper_id for p in rank_accepted(papers)] == ["best-match", "classic", "new"]
+
+
+@pytest.mark.asyncio
+async def test_parse_query_returns_domains():
+    with patch("services.llm_service.AsyncOpenAI") as MockClient:
+        MockClient.return_value.chat.completions.create = AsyncMock(return_value=_mock_llm({
+            "keywords": ["deep learning", "medical imaging"], "date_from": None, "date_to": None,
+            "max_results": 30, "domains": ["cs", "med"],
+        }))
+        result = await parse_query("深度学习用于医学影像", "sk-fake-key")
+    assert result.domains == ["cs", "med"]

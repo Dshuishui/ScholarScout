@@ -75,7 +75,7 @@ export type SearchEvent = SearchProgressEvent | SearchDoneEvent | SearchErrorEve
 
 export type ParseResult =
   | { intent: 'chat'; reply: string }
-  | { intent: 'search'; keywords: string[]; date_from: string | null; date_to: string | null }
+  | { intent: 'search'; keywords: string[]; date_from: string | null; date_to: string | null; domains?: string[] }
 
 export interface SearchSessionItem {
   id: number
