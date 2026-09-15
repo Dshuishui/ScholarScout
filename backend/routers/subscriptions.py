@@ -1,7 +1,10 @@
 """订阅管理 API（需登录）。"""
+import html
 import json
 from datetime import datetime, timezone
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Query
+from fastapi.responses import HTMLResponse
+from jose import JWTError
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -9,6 +12,7 @@ from sqlalchemy import select
 from database import get_db, AsyncSessionLocal
 from models_db import Subscription, SubscriptionQueueItem, User
 from dependencies import get_current_user
+from services.auth_service import decode_unsubscribe_token
 
 router = APIRouter()
 
@@ -289,3 +293,61 @@ async def test_send_subscription(
     now = datetime.now(timezone.utc)
     outcome = await _process_subscription(sub, current_user.email, now, force_days=7)
     return outcome
+
+
+# ─── 邮件一键退订（免登录）────────────────────────────────────
+
+def _unsubscribe_page(title: str, body: str, status_code: int = 200) -> HTMLResponse:
+    page = f"""<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{title} · ScholarScout</title></head>
+<body style="font-family:-apple-system,Arial,sans-serif;max-width:480px;margin:64px auto;padding:0 16px;color:#111827;">
+<div style="font-size:20px;font-weight:700;color:#4f46e5;margin-bottom:24px;">ScholarScout</div>
+<h1 style="font-size:18px;margin:0 0 12px;">{title}</h1>
+{body}
+</body></html>"""
+    return HTMLResponse(page, status_code=status_code)
+
+
+async def _load_sub_from_token(token: str, db: AsyncSession) -> Subscription | None:
+    try:
+        sub_id = decode_unsubscribe_token(token)
+    except (JWTError, ValueError):
+        return None
+    result = await db.execute(select(Subscription).where(Subscription.id == sub_id))
+    return result.scalar_one_or_none()
+
+
+_INVALID_LINK = ("链接无效", '<p style="color:#6b7280;">退订链接无效或订阅已被删除。</p>')
+
+
+@router.get("/subscriptions/unsubscribe", response_class=HTMLResponse)
+async def unsubscribe_confirm(token: str = Query(...), db: AsyncSession = Depends(get_db)):
+    """展示确认页，不直接退订：企业邮箱的安全网关会预先访问邮件里的链接，GET 改状态会误退订。"""
+    sub = await _load_sub_from_token(token, db)
+    if not sub:
+        return _unsubscribe_page(*_INVALID_LINK, status_code=400)
+    kw = html.escape(" · ".join(json.loads(sub.keywords_json)))
+    if not sub.active:
+        return _unsubscribe_page("已退订", f'<p style="color:#6b7280;">订阅「{kw}」已停止推送。</p>')
+    body = f"""<p style="color:#374151;line-height:1.7;">确定不再接收订阅「{kw}」的每日论文推送吗？</p>
+<form method="post" action="?token={html.escape(token)}">
+<button type="submit" style="background:#4f46e5;color:#fff;border:0;border-radius:8px;padding:10px 20px;font-size:14px;cursor:pointer;">确认退订</button>
+</form>"""
+    return _unsubscribe_page("退订确认", body)
+
+
+@router.post("/subscriptions/unsubscribe", response_class=HTMLResponse)
+async def unsubscribe(token: str = Query(...), db: AsyncSession = Depends(get_db)):
+    """确认页的按钮和邮件客户端的一键退订（List-Unsubscribe-Post）都走这里。"""
+    sub = await _load_sub_from_token(token, db)
+    if not sub:
+        return _unsubscribe_page(*_INVALID_LINK, status_code=400)
+    sub.active = False
+    await db.commit()
+    kw = html.escape(" · ".join(json.loads(sub.keywords_json)))
+    return _unsubscribe_page(
+        "已退订",
+        f'<p style="color:#374151;line-height:1.7;">订阅「{kw}」已停止推送，之后不会再收到这封日报。</p>'
+        '<p style="color:#6b7280;font-size:13px;">想重新订阅，可以登录 ScholarScout 在订阅管理里重新开启。</p>',
+    )

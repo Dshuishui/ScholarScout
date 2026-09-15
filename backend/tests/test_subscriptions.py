@@ -136,3 +136,103 @@ async def test_update_daily_limit_out_of_range(client, db_session):
         headers=headers,
     )
     assert r.status_code == 422
+
+
+# ── 邮件一键退订 ──────────────────────────────────────────────────────────────
+
+async def _create_sub(client, headers, keywords=("RAG",)):
+    with patch("routers.subscriptions._bg_populate_queue", new=_bg_noop):
+        r = await client.post("/api/subscriptions", json={"keywords": list(keywords)}, headers=headers)
+    return r.json()["id"]
+
+
+async def _is_active(client, headers, sub_id):
+    subs = (await client.get("/api/subscriptions", headers=headers)).json()
+    return next(s for s in subs if s["id"] == sub_id)["active"]
+
+
+@pytest.mark.asyncio
+async def test_unsubscribe_get_shows_confirm_without_deactivating(client, db_session):
+    # 企业邮箱安全网关会预先访问链接，GET 绝不能改状态
+    from services.auth_service import create_unsubscribe_token
+    headers = await _headers(db_session)
+    sub_id = await _create_sub(client, headers)
+
+    r = await client.get(f"/api/subscriptions/unsubscribe?token={create_unsubscribe_token(sub_id)}")
+    assert r.status_code == 200
+    assert "确认退订" in r.text
+    assert await _is_active(client, headers, sub_id) is True
+
+
+@pytest.mark.asyncio
+async def test_unsubscribe_post_deactivates(client, db_session):
+    from services.auth_service import create_unsubscribe_token
+    headers = await _headers(db_session)
+    sub_id = await _create_sub(client, headers)
+
+    r = await client.post(
+        f"/api/subscriptions/unsubscribe?token={create_unsubscribe_token(sub_id)}",
+        content="List-Unsubscribe=One-Click",
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+    )
+    assert r.status_code == 200
+    assert "已退订" in r.text
+    assert await _is_active(client, headers, sub_id) is False
+
+
+@pytest.mark.asyncio
+async def test_unsubscribe_invalid_token(client, db_session):
+    r = await client.post("/api/subscriptions/unsubscribe?token=not-a-token")
+    assert r.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_login_token_cannot_unsubscribe(client, db_session):
+    _, login_token = await make_verified_user(db_session, email="x@test.com")
+    r = await client.post(f"/api/subscriptions/unsubscribe?token={login_token}")
+    assert r.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_unsubscribe_token_cannot_log_in(client, db_session):
+    from services.auth_service import create_unsubscribe_token
+    r = await client.get(
+        "/api/subscriptions",
+        headers={"Authorization": f"Bearer {create_unsubscribe_token(1)}"},
+    )
+    assert r.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_unsubscribe_page_escapes_keywords(client, db_session):
+    from services.auth_service import create_unsubscribe_token
+    headers = await _headers(db_session)
+    sub_id = await _create_sub(client, headers, keywords=["<script>alert(1)</script>"])
+
+    r = await client.get(f"/api/subscriptions/unsubscribe?token={create_unsubscribe_token(sub_id)}")
+    assert "<script>alert(1)</script>" not in r.text
+
+
+@pytest.mark.asyncio
+async def test_subscription_email_has_unsubscribe_link_and_headers():
+    from models import Paper
+    from services import email_service
+
+    url = "http://example.com/api/subscriptions/unsubscribe?token=abc"
+    paper = Paper(paper_id="p1", title="T", authors=["A"], source="arXiv")
+    with patch.object(email_service, "SMTP_USER", "u@qq.com"), \
+         patch.object(email_service, "SMTP_PASS", "pw"), \
+         patch.object(email_service.aiosmtplib, "send", new=AsyncMock()) as send:
+        ok = await email_service.send_subscription_email("to@test.com", ["RAG"], [paper], url)
+
+    assert ok is True
+    msg = send.call_args.args[0]
+    assert msg["List-Unsubscribe"] == f"<{url}>"
+    assert msg["List-Unsubscribe-Post"] == "List-Unsubscribe=One-Click"
+    assert url in msg.get_payload()[0].get_payload(decode=True).decode("utf-8")
+
+
+def test_daily_job_runs_at_utc_midnight():
+    from scheduler import setup_scheduler
+    job = setup_scheduler().get_job("daily_subscriptions")
+    assert str(job.trigger.timezone) == "UTC"

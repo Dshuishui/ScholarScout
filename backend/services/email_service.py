@@ -38,7 +38,7 @@ def _paper_card_html(paper: Paper, expand_abstract: bool = False) -> str:
 </div>"""
 
 
-def build_daily_email_html(keywords: list[str], papers: list[Paper]) -> str:
+def build_daily_email_html(keywords: list[str], papers: list[Paper], unsubscribe_url: str | None = None) -> str:
     """每日推送邮件：1～N 篇（由 daily_limit 决定），摘要展开。"""
     today = date.today().strftime("%Y年%m月%d日")
     kw_str = " · ".join(keywords)
@@ -51,6 +51,14 @@ def build_daily_email_html(keywords: list[str], papers: list[Paper]) -> str:
         banner_text = f'您订阅的关键词 <strong>{kw_str}</strong> 今日推送 <strong style="font-size:16px;">{count}</strong> 篇论文'
 
     cards = "".join(_paper_card_html(p, expand_abstract=single) for p in papers)
+
+    if unsubscribe_url:
+        unsubscribe_line = (
+            f'不想再收到此订阅？<a href="{unsubscribe_url}" style="color:#6b7280;text-decoration:underline;">一键退订</a>'
+            '（无需登录）'
+        )
+    else:
+        unsubscribe_line = "如需停止接收，请登录 ScholarScout → 右上角头像 → 订阅管理 → 删除此订阅"
 
     return f"""<!DOCTYPE html>
 <html lang="zh-CN">
@@ -75,7 +83,7 @@ def build_daily_email_html(keywords: list[str], papers: list[Paper]) -> str:
   <!-- Footer -->
   <div style="margin-top:24px;padding-top:16px;border-top:1px solid #e5e7eb;font-size:12px;color:#9ca3af;line-height:1.8;">
     <div>下次推送：明天早 8 点（北京时间 08:00）· 由 ScholarScout 自动发送，请勿直接回复</div>
-    <div>如需停止接收，请登录 ScholarScout → 右上角头像 → 订阅管理 → 删除此订阅</div>
+    <div>{unsubscribe_line}</div>
   </div>
 </div>
 </body>
@@ -330,6 +338,7 @@ async def send_subscription_email(
     to_email: str,
     keywords: list[str],
     papers: list[Paper],
+    unsubscribe_url: str | None = None,
 ) -> bool:
     if not SMTP_USER or not SMTP_PASS:
         logger.warning("SMTP not configured, skipping email to %s", to_email)
@@ -344,8 +353,12 @@ async def send_subscription_email(
     msg["From"] = f"{SMTP_FROM_NAME} <{SMTP_USER}>"
     msg["To"] = to_email
     msg["Date"] = formatdate(localtime=True)
+    if unsubscribe_url:
+        # 邮件客户端据此显示"退订"按钮（RFC 2369 / RFC 8058），用户就不必拉黑发件人
+        msg["List-Unsubscribe"] = f"<{unsubscribe_url}>"
+        msg["List-Unsubscribe-Post"] = "List-Unsubscribe=One-Click"
 
-    html_body = build_daily_email_html(keywords, papers)
+    html_body = build_daily_email_html(keywords, papers, unsubscribe_url)
     msg.attach(MIMEText(html_body, "html", "utf-8"))
 
     try:

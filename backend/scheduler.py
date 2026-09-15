@@ -12,7 +12,8 @@ from models_db import Subscription, SubscriptionQueueItem, User
 from models import ParsedQuery, Paper
 from services.search_service import search_all_sources
 from services.email_service import send_subscription_email
-from config import DEEPSEEK_API_KEY
+from services.auth_service import create_unsubscribe_token
+from config import DEEPSEEK_API_KEY, APP_BASE_URL
 
 logger = logging.getLogger(__name__)
 
@@ -104,6 +105,10 @@ async def populate_queue(
 # 每日发送任务
 # ─────────────────────────────────────────────────────────────
 
+def _unsubscribe_url(sub_id: int) -> str:
+    return f"{APP_BASE_URL}/api/subscriptions/unsubscribe?token={create_unsubscribe_token(sub_id)}"
+
+
 async def send_daily_subscriptions() -> None:
     logger.info("Daily subscription job started")
     now = datetime.now(timezone.utc)
@@ -170,7 +175,7 @@ async def _send_from_queue(
         if not papers:
             return
 
-        sent = await send_subscription_email(email, keywords, papers)
+        sent = await send_subscription_email(email, keywords, papers, _unsubscribe_url(sub.id))
 
         if sent:
             sent_dt = now.replace(tzinfo=None)
@@ -237,7 +242,7 @@ async def _process_subscription(
     daily_limit = max(1, sub.daily_limit or 1)
     new_papers = new_papers[:daily_limit]
 
-    sent = await send_subscription_email(email, keywords, new_papers)
+    sent = await send_subscription_email(email, keywords, new_papers, _unsubscribe_url(sub.id))
     return {"sent": sent, "count": len(new_papers) if sent else 0}
 
 
@@ -248,7 +253,8 @@ async def _process_subscription(
 def setup_scheduler() -> AsyncIOScheduler:
     scheduler.add_job(
         send_daily_subscriptions,
-        trigger=CronTrigger(hour=0, minute=0),
+        # 显式 UTC：不写时区会按服务器系统时区（北京时间）在半夜 0 点发，而邮件里写的是北京时间 08:00
+        trigger=CronTrigger(hour=0, minute=0, timezone="UTC"),
         id="daily_subscriptions",
         replace_existing=True,
         misfire_grace_time=3600,
