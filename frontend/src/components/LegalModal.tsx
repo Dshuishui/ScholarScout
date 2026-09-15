@@ -7,7 +7,7 @@ interface Props {
   defaultTab?: LegalTab
 }
 
-const UPDATED = '2026 年 9 月 15 日'
+const UPDATED = '2026 年 9 月 16 日'
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -26,8 +26,9 @@ function Privacy() {
         <p><b>登录后同步的数据</b>：收藏的论文、最近 100 条阅读记录、AI 对话记录（含你上传 PDF 后提取出的文字）、最多 30 条搜索快照、订阅关键词及推送记录。</p>
         <p><b>留言板</b>：留言内容，以及根据你的 IP 查询到的大致城市。IP 地址本身不写入数据库。</p>
         <p><b>服务器日志</b>：Web 服务器会记录访问 IP、时间和请求地址，用于排查故障和防止滥用。</p>
-        <p><b>访问统计</b>：使用部署在我们自己服务器上的 Umami 统计页面访问量，不接入第三方广告或跟踪服务。</p>
-        <p><b>保存在你浏览器本地的数据</b>：你填写的 DeepSeek API Key、界面偏好设置。</p>
+        <p><b>未登录免费体验</b>：为限制免费次数，你的浏览器会在本地生成一个随机设备标识。服务器只保存这个标识和你 IP 地址的加盐摘要（无法还原出原值）以及使用时间，90 天后自动删除。</p>
+        <p><b>访问统计</b>：使用部署在我们自己服务器上的 Umami 统计页面访问量，以及发起搜索、注册、填写 Key 等关键步骤的次数（不记录搜索内容和 Key），不接入第三方广告或跟踪服务。</p>
+        <p><b>保存在你浏览器本地的数据</b>：你填写的 DeepSeek API Key、界面偏好设置、上述随机设备标识。</p>
       </Section>
       <Section title="2. 关于你的 API Key">
         <p>搜索时，你的 Key 会随请求发送到我们的服务器，只用于本次调用 DeepSeek，不会被保存。论文对话、多论文分析等功能由你的浏览器直接调用 DeepSeek。</p>
@@ -35,7 +36,7 @@ function Privacy() {
       <Section title="3. 会发送给第三方的信息">
         <p>为提供服务，以下信息会发送给第三方：</p>
         <ul className="list-disc pl-5 space-y-1">
-          <li><b>DeepSeek</b>：你的搜索描述、论文标题和摘要、你在对话中输入的问题和上传 PDF 的文字。使用免费试用额度时，由我们的 Key 代为调用。</li>
+          <li><b>DeepSeek</b>：你的搜索描述、论文标题和摘要、你在对话中输入的问题和上传 PDF 的文字。使用免费搜索次数（包括未登录体验）时，由我们的 Key 代为调用。</li>
           <li><b>学术数据库</b>（arXiv、OpenAlex、Semantic Scholar、PubMed、Europe PMC、Crossref、INSPIRE-HEP 等）和 <b>Unpaywall</b>：由你的描述提取出的检索关键词、论文 DOI。</li>
           <li><b>腾讯 QQ 邮箱</b>：用于发送验证、找回密码和订阅推送邮件（你的邮箱地址和邮件内容）。</li>
           <li><b>ip-api.com</b>：发表留言时，用你的 IP 地址查询所在城市。</li>

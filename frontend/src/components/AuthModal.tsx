@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { useAuth } from '../hooks/useAuth'
 import { LegalModal, type LegalTab } from './LegalModal'
+import { track } from '../lib/analytics'
 
 interface Props {
   onClose: () => void
@@ -56,9 +57,11 @@ export function AuthModal({ onClose, defaultTab = 'login' }: Props) {
     try {
       if (tab === 'login') {
         await login(email, password)
+        track('login_success')
         onClose()
       } else {
         const msg = await register(email, password)
+        track('register_submit')
         setSentEmail(email)
         setResendMsg(msg)
       }

@@ -2,23 +2,56 @@ import type { SearchEvent, ParseResult, Paper, SearchSessionItem } from '../type
 
 const API_BASE = '/api'
 
+/** 接口返回的业务错误。code 由后端给出（如 trial_exhausted），前端据此给出对应引导 */
+export class ApiError extends Error {
+  status: number
+  code: string
+  constructor(status: number, code: string, message: string) {
+    super(message)
+    this.status = status
+    this.code = code
+  }
+}
+
+async function toApiError(response: Response): Promise<ApiError> {
+  const data = await response.json().catch(() => null)
+  const detail = data?.detail
+  if (detail && typeof detail === 'object' && typeof detail.code === 'string') {
+    return new ApiError(response.status, detail.code, detail.message ?? '请求失败')
+  }
+  const message = typeof detail === 'string' ? detail : `请求失败: ${response.status}`
+  const code = response.status === 429 ? 'rate_limited' : response.status >= 500 ? 'server_error' : 'http_error'
+  return new ApiError(response.status, code, message)
+}
+
+/** 没有自己的 Key 时的身份：登录用户用账号的免费次数，未登录访客用设备标识领体验次数 */
+export interface TrialAuth {
+  token?: string | null
+  deviceId?: string
+}
+
+function requestHeaders(apiKey: string, trial?: TrialAuth): Record<string, string> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  if (!apiKey && trial) {
+    if (trial.token) headers['Authorization'] = `Bearer ${trial.token}`
+    else if (trial.deviceId) headers['X-Trial-Device'] = trial.deviceId
+  }
+  return headers
+}
+
 export async function parseQuery(
   query: string,
   apiKey: string,
   history: { role: string; content: string }[] = [],
   model?: string,
-  authToken?: string,
+  trial?: TrialAuth,
 ): Promise<ParseResult> {
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-  // 试用模式（无自己的 Key）：传 Bearer token 让后端用系统 Key
-  if (!apiKey && authToken) headers['Authorization'] = `Bearer ${authToken}`
-
   const response = await fetch(`${API_BASE}/parse`, {
     method: 'POST',
-    headers,
+    headers: requestHeaders(apiKey, trial),
     body: JSON.stringify({ query, api_key: apiKey || null, messages: history, model }),
   })
-  if (!response.ok) throw new Error(`请求失败: ${response.status}`)
+  if (!response.ok) throw await toApiError(response)
   return response.json()
 }
 
@@ -29,14 +62,11 @@ export async function* searchPapers(
   settings: { limitPerSource?: number; validatedLimit?: number; selectedSources?: string[] } = {},
   confirmed?: { keywords: string[]; date_from?: string | null; date_to?: string | null; domains?: string[] },
   model?: string,
-  authToken?: string,
+  trial?: TrialAuth,
 ): AsyncGenerator<SearchEvent> {
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-  if (!apiKey && authToken) headers['Authorization'] = `Bearer ${authToken}`
-
   const response = await fetch(`${API_BASE}/search`, {
     method: 'POST',
-    headers,
+    headers: requestHeaders(apiKey, trial),
     body: JSON.stringify({
       query,
       api_key: apiKey || null,
@@ -54,7 +84,7 @@ export async function* searchPapers(
     }),
   })
 
-  if (!response.ok) throw new Error(`请求失败: ${response.status}`)
+  if (!response.ok) throw await toApiError(response)
   if (!response.body) throw new Error('响应无内容')
 
   const reader = response.body.getReader()

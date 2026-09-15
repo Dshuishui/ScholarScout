@@ -35,11 +35,23 @@ export type SearchDoneEvent = {
   papers: Paper[]
   rejected_papers?: Paper[]
   message: string
+  /** 没有找到相关论文时本次不计次数，附带退还后的剩余次数 */
+  refunded?: boolean
+  remaining?: number
 }
 
 export type SearchErrorEvent = {
   type: 'error'
   message: string
+  refunded?: boolean
+  remaining?: number
+}
+
+/** 用免费次数搜索时，开始搜索前服务端告知扣减后的剩余次数 */
+export type SearchQuotaEvent = {
+  type: 'quota'
+  remaining: number
+  kind: 'anon' | 'account'
 }
 
 export type SearchChatEvent = {
@@ -71,7 +83,7 @@ export type SourceDoneEvent = {
   count: number
 }
 
-export type SearchEvent = SearchProgressEvent | SearchDoneEvent | SearchErrorEvent | SearchChatEvent | SearchPdfFindingEvent | SearchPdfUpdateEvent | SearchStartEvent | SourceDoneEvent
+export type SearchEvent = SearchQuotaEvent | SearchProgressEvent | SearchDoneEvent | SearchErrorEvent | SearchChatEvent | SearchPdfFindingEvent | SearchPdfUpdateEvent | SearchStartEvent | SourceDoneEvent
 
 export type ParseResult =
   | { intent: 'chat'; reply: string }

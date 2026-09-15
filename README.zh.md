@@ -212,7 +212,11 @@ npm run dev
 | `SEMANTIC_SCHOLAR_API_KEY` | _(空)_ | **强烈建议配置**。[免费申请](https://www.semanticscholar.org/product/api#api-key-form)；无 Key 时共用限流池，基本一直 429 |
 | `SERPAPI_KEY` | _(空)_ | 通过 [SerpAPI](https://serpapi.com) 搜索 Google Scholar（免费 250 次/月） |
 | `JWT_SECRET` | `dev-only-secret-change-me-in-production` | **生产必须替换** |
-| `DEEPSEEK_SYSTEM_KEY` | _(空)_ | 免费试用功能所需的系统 Key |
+| `DEEPSEEK_SYSTEM_KEY` | _(空)_ | 免费搜索（未登录体验和新注册账号）使用的系统 Key |
+| `ANON_TRIAL_SEARCHES` | `2` | 未登录访客每个浏览器可免费搜索的次数 |
+| `ANON_TRIAL_PER_IP_DAY` | `20` | 同一 IP 24 小时内未登录免费搜索上限 |
+| `ANON_TRIAL_DAILY_CAP` | `200` | 全站 24 小时内未登录免费搜索上限（费用封顶，用到 80% 发告警邮件） |
+| `FREE_SEARCHES_QUOTA` | `3` | 验证邮箱后赠送的免费搜索次数 |
 | `DEEPSEEK_API_KEY` | _(空)_ | 订阅推送 AI 筛选用的服务端 Key |
 | `SMTP_HOST / SMTP_USER / SMTP_PASS` | _(空)_ | 邮件推送配置（QQ 邮箱授权码） |
 | `ADMIN_EMAIL` | _(维护者邮箱)_ | 接收新留言通知和运维告警 |

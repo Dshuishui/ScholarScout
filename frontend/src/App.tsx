@@ -1,15 +1,14 @@
 import { useEffect, useState } from 'react'
-import { KeySetupScreen } from './components/KeySetupScreen'
 import { MainLayout } from './components/MainLayout'
 import { ResetPasswordModal } from './components/ResetPasswordModal'
-import { useApiKey } from './hooks/useApiKey'
+import { AccessModal } from './components/AccessModal'
 import { AuthProvider, useAuth } from './hooks/useAuth'
+import { AccessProvider } from './hooks/useAccess'
 import { toast } from './components/Toast'
+import { track } from './lib/analytics'
 
 function AppInner() {
-  const { apiKey, setApiKey, clearApiKey, hasKey } = useApiKey()
-  const { isLoggedIn, user, loginWithToken } = useAuth()
-  const [guestMode, setGuestMode] = useState(false)
+  const { loginWithToken } = useAuth()
   const [resetToken, setResetToken] = useState<string | null>(null)
 
   // 邮箱验证回调：URL 含 ?verify=<token> 时自动完成验证并登录
@@ -25,6 +24,7 @@ function AppInner() {
         .then(data => {
           if (data.access_token) {
             return loginWithToken(data.access_token).then(() => {
+              track('email_verified')
               const n = data.free_searches as number
               const msg = n > 0 ? `已获得 ${n} 次免费搜索，开始探索吧！` : '验证成功，请配置 API Key 开始使用'
               toast.show(`✅ 邮箱验证成功！${msg}`)
@@ -43,21 +43,11 @@ function AppInner() {
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // 试用模式：已登录 + 有免费额度 → 无需 API Key 也能进入
-  const hasTrial = isLoggedIn && (user?.freeSearches ?? 0) > 0
-  const canEnter = hasKey || hasTrial || guestMode
-
-  const handleClearKey = () => {
-    clearApiKey()
-    setGuestMode(false)
-  }
-
+  // 打开网站直接进入搜索页：未登录访客有免费体验次数，用完再引导注册或填 Key
   return (
     <>
-      {canEnter
-        ? <MainLayout apiKey={apiKey} onClearKey={handleClearKey} />
-        : <KeySetupScreen onKeySubmit={setApiKey} onGuestEnter={() => setGuestMode(true)} />
-      }
+      <MainLayout />
+      <AccessModal />
       {resetToken && (
         <ResetPasswordModal
           token={resetToken}
@@ -72,7 +62,9 @@ function AppInner() {
 export default function App() {
   return (
     <AuthProvider>
-      <AppInner />
+      <AccessProvider>
+        <AppInner />
+      </AccessProvider>
     </AuthProvider>
   )
 }

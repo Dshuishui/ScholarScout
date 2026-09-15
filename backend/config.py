@@ -30,6 +30,12 @@ DEEPSEEK_API_KEY = _os.environ.get("DEEPSEEK_API_KEY", "")
 # 新用户邮箱验证后赠送的免费搜索额度（系统 Key 代付）
 DEEPSEEK_SYSTEM_KEY = _os.environ.get("DEEPSEEK_SYSTEM_KEY", "")
 FREE_SEARCHES_QUOTA = int(_os.environ.get("FREE_SEARCHES_QUOTA", "3"))
+# 未登录访客的免费体验（同样由系统 Key 代付）：
+# 每个浏览器共 N 次；同一 IP 24 小时内最多 M 次（防止换浏览器反复领）；全站 24 小时内最多 CAP 次（费用上限）
+# 按 IP 的上限不能太低：国内手机网络和校园网大量用户共用出口 IP，设成个位数会误伤正常访客
+ANON_TRIAL_SEARCHES = int(_os.environ.get("ANON_TRIAL_SEARCHES", "2"))
+ANON_TRIAL_PER_IP_DAY = int(_os.environ.get("ANON_TRIAL_PER_IP_DAY", "20"))
+ANON_TRIAL_DAILY_CAP = int(_os.environ.get("ANON_TRIAL_DAILY_CAP", "200"))
 # 站长邮箱：接收新留言通知和运维告警（数据源失效、订阅停推）
 ADMIN_EMAIL = _os.environ.get("ADMIN_EMAIL", "dyucong@email.ncu.edu.cn")
 # 前端地址（邮件验证链接用）

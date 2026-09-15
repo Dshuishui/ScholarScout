@@ -35,8 +35,8 @@ interface AuthContextValue {
   resendVerification: (email: string) => Promise<string>
   /** 搜索成功后刷新 freeSearches 计数 */
   refreshCredits: () => Promise<void>
-  /** 本地乐观扣减，无需网络 */
-  decrementFreeSearches: () => void
+  /** 用服务端返回的最新剩余次数更新本地状态 */
+  setFreeSearches: (n: number) => void
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null)
@@ -111,10 +111,10 @@ function useAuthState(): AuthContextValue {
     } catch { /* ignore */ }
   }, [token, _fetchMe])
 
-  const decrementFreeSearches = useCallback(() => {
+  const setFreeSearches = useCallback((n: number) => {
     setUser(prev => {
-      if (!prev) return prev
-      const updated = { ...prev, freeSearches: Math.max(0, prev.freeSearches - 1) }
+      if (!prev || prev.freeSearches === n) return prev
+      const updated = { ...prev, freeSearches: Math.max(0, n) }
       localStorage.setItem(USER_KEY, JSON.stringify(updated))
       return updated
     })
@@ -122,7 +122,7 @@ function useAuthState(): AuthContextValue {
 
   return {
     user, token, register, login, loginWithToken, logout, sessionExpired,
-    resendVerification, refreshCredits, decrementFreeSearches,
+    resendVerification, refreshCredits, setFreeSearches,
     isLoggedIn: !!user,
   }
 }

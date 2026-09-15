@@ -61,9 +61,11 @@ interface Props {
   onNewChat: () => void
   onRegenerate?: () => void
   isMobile?: boolean
+  /** 没有自己的 DeepSeek Key 时传入：显示提示，发送前先引导填写 Key */
+  onRequireKey?: () => void
 }
 
-export function PaperChatDrawer({ paper, messages, isStreaming, pdfStatus, onSend, onStop, onClose, onUploadPdf, onRemovePdf, onNewChat, onRegenerate, isMobile = false }: Props) {
+export function PaperChatDrawer({ paper, messages, isStreaming, pdfStatus, onSend, onStop, onClose, onUploadPdf, onRemovePdf, onNewChat, onRegenerate, isMobile = false, onRequireKey }: Props) {
   const [input, setInput] = useState('')
   const [editingPrompts, setEditingPrompts] = useState(false)
   const [newPrompt, setNewPrompt] = useState('')
@@ -104,6 +106,7 @@ export function PaperChatDrawer({ paper, messages, isStreaming, pdfStatus, onSen
   const handleSend = () => {
     const q = input.trim()
     if (!q || isStreaming || !paper) return
+    if (onRequireKey) { onRequireKey(); return }  // 保留输入内容，填好 Key 后可以直接发送
     setInput('')
     onSend(q)
   }
@@ -422,6 +425,15 @@ export function PaperChatDrawer({ paper, messages, isStreaming, pdfStatus, onSen
 
             {/* ── Input Area ── */}
             <div className="flex-shrink-0 px-4 pb-4 pt-2 border-t border-gray-100">
+              {onRequireKey && (
+                <button
+                  onClick={onRequireKey}
+                  className="w-full mb-2 flex items-center justify-between gap-2 text-left text-xs text-amber-800 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded-xl px-3 py-2 transition-colors"
+                >
+                  <span>论文对话需要你自己的 DeepSeek Key，免费次数只用于搜索</span>
+                  <span className="font-semibold flex-shrink-0">填写 Key →</span>
+                </button>
+              )}
               <div className={`rounded-2xl border transition-all bg-white overflow-hidden ${
                 isStreaming ? 'border-gray-200' : 'border-gray-300 focus-within:border-violet-400 focus-within:ring-2 focus-within:ring-violet-100'
               }`}>
@@ -460,7 +472,7 @@ export function PaperChatDrawer({ paper, messages, isStreaming, pdfStatus, onSen
                   placeholder="询问这篇论文…"
                   rows={2}
                   style={{ minHeight: '56px', maxHeight: '160px' }}
-                  className="w-full px-3.5 pt-3 pb-1 text-sm text-gray-800 placeholder-gray-300 resize-none focus:outline-none bg-transparent disabled:opacity-50"
+                  className="w-full px-3.5 pt-3 pb-1 text-base sm:text-sm text-gray-800 placeholder-gray-300 resize-none focus:outline-none bg-transparent disabled:opacity-50"
                 />
 
                 {/* 底部工具栏 */}

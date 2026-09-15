@@ -10,6 +10,9 @@ import { useModel } from '../hooks/useModel'
 import { useAuth } from '../hooks/useAuth'
 import { useWebSocket } from '../hooks/useWebSocket'
 import { useIsMobile } from '../hooks/useIsMobile'
+import { useAccess } from '../hooks/useAccess'
+import { useBackToClose } from '../hooks/useBackToClose'
+import { track } from '../lib/analytics'
 import { UserMenu } from './UserMenu'
 import { SavedPage } from '../pages/SavedPage'
 import { HistoryPage } from '../pages/HistoryPage'
@@ -27,12 +30,8 @@ const PaperChatDrawer = lazy(() => import('./PaperChatDrawer').then(m => ({ defa
 // 与后端 MAX_UPLOAD_BYTES、nginx 里 /api/paper/parse-pdf 的 client_max_body_size 保持一致
 const MAX_PDF_UPLOAD_MB = 50
 
-interface Props {
-  apiKey: string
-  onClearKey: () => void
-}
-
-export function MainLayout({ apiKey, onClearKey }: Props) {
+export function MainLayout() {
+  const { apiKey, mode, freeRemaining, openGate } = useAccess()
   const { settings, updateSettings } = useSettings()
   const { lastMessage, status: wsStatus } = useWebSocket()
   const { model } = useModel()
@@ -76,6 +75,13 @@ export function MainLayout({ apiKey, onClearKey }: Props) {
     window.addEventListener('navigate:page', handler)
     return () => window.removeEventListener('navigate:page', handler)
   }, [])
+
+  // 论文对话、多论文分析、多文献问答由浏览器直接调用 DeepSeek，免费次数不覆盖，需要用户自己的 Key
+  const requireKey = (feature: string): boolean => {
+    if (apiKey) return true
+    openGate('feature', feature)
+    return false
+  }
 
   const handleAnalyzePaper = (paper: Paper) => {
     setActivePaper(prev => {
@@ -171,8 +177,15 @@ export function MainLayout({ apiKey, onClearKey }: Props) {
 
   const isDrawerOpen = activePaper !== null
 
+  // 手机返回手势关闭当前浮层，而不是离开网站
+  useBackToClose(activePage !== null, () => { setActivePage(null); setExpandSubId(null) })
+  useBackToClose(isDrawerOpen, () => setActivePaper(null))
+  useBackToClose(!!ragPapers, () => setRagPapers(null))
+  useBackToClose(!!graphPapers, () => setGraphPapers(null))
+
   return (
-    <div className="h-screen flex flex-col overflow-hidden">
+    // 100dvh：手机浏览器地址栏收起/展开时高度跟着变，100vh 会让底部标签栏被遮住
+    <div className="h-screen flex flex-col overflow-hidden" style={{ height: '100dvh' }}>
       {/* 全宽顶部导航栏 */}
       <header
         className="h-11 flex-shrink-0 flex items-center px-4 justify-between z-20 relative"
@@ -211,9 +224,9 @@ export function MainLayout({ apiKey, onClearKey }: Props) {
             </button>
           )}
           <button
-            onClick={() => { setActivePage(null); onClearKey() }}
+            onClick={() => setActivePage(null)}
             className="flex items-center gap-2 rounded hover:opacity-80 transition-opacity"
-            title="回到封面"
+            title="ScholarScout"
           >
             <div
               className="w-6 h-6 rounded-md flex items-center justify-center flex-shrink-0"
@@ -231,7 +244,7 @@ export function MainLayout({ apiKey, onClearKey }: Props) {
           </button>
         </div>
 
-        <div className="relative flex items-center gap-3">
+        <div className="relative flex items-center gap-1.5 sm:gap-3">
           {/* WS 连接指示 */}
           <span
             className={`w-1.5 h-1.5 rounded-full flex-shrink-0 transition-colors ${
@@ -245,18 +258,25 @@ export function MainLayout({ apiKey, onClearKey }: Props) {
             onClick={() => setActivePage('semantic')}
             className="text-xs text-indigo-300/70 hover:text-indigo-200 transition-colors px-2 py-1 rounded hover:bg-white/5 flex items-center gap-1"
             title="语义检索"
+            aria-label="语义检索"
           >
             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
             </svg>
-            语义检索
+            <span className="hidden sm:inline">语义检索</span>
           </button>
           <button
-            onClick={onClearKey}
-            className="text-xs text-indigo-300/70 hover:text-indigo-200 transition-colors px-2 py-1 rounded hover:bg-white/5"
-            title="更换 API Key"
+            onClick={() => { track('access_chip_click', { mode }); openGate('manual') }}
+            className={`text-xs transition-colors px-2 py-1 rounded whitespace-nowrap ${
+              mode === 'own_key'
+                ? 'text-indigo-300/70 hover:text-indigo-200 hover:bg-white/5'
+                : (freeRemaining ?? 0) > 0
+                  ? 'text-amber-200 bg-amber-400/10 hover:bg-amber-400/20 border border-amber-300/20'
+                  : 'text-white bg-indigo-500/80 hover:bg-indigo-500'
+            }`}
+            title={mode === 'own_key' ? '管理 DeepSeek API Key' : '免费次数与 API Key'}
           >
-            换 Key
+            {mode === 'own_key' ? '我的 Key' : (freeRemaining ?? 0) > 0 ? `免费 ${freeRemaining} 次` : '填写 Key'}
           </button>
           <UserMenu onNavigate={setActivePage} />
         </div>
@@ -338,15 +358,16 @@ export function MainLayout({ apiKey, onClearKey }: Props) {
             hasSearchError={hasSearchError}
             searchDateRange={searchDateRange}
             sessionId={currentSessionId}
-            onOpenRag={(selectedPapers) => setRagPapers(selectedPapers)}
+            onOpenRag={(selectedPapers) => { if (requireKey('多文献问答')) setRagPapers(selectedPapers) }}
             onOpenGraph={(selectedPapers) => setGraphPapers(selectedPapers)}
+            onRequireKey={requireKey}
           />
         </div>
       </div>
 
       {/* ── 移动端底部 Tab Bar ── */}
       {isMobile && (
-        <div className="flex-shrink-0 bg-white border-t border-gray-200 z-20" style={{ height: '56px' }}>
+        <div className="flex-shrink-0 bg-white border-t border-gray-200 z-20" style={{ height: 'calc(56px + env(safe-area-inset-bottom))', paddingBottom: 'env(safe-area-inset-bottom)' }}>
           <div className="flex h-full">
             {/* 搜索 tab */}
             <button
@@ -385,11 +406,22 @@ export function MainLayout({ apiKey, onClearKey }: Props) {
               </div>
               <span className="text-[10px] font-medium">结果</span>
             </button>
+
+            {/* 留言 tab：手机上悬浮按钮会挡住搜索框，入口放到这里 */}
+            <button
+              onClick={() => window.dispatchEvent(new Event('feedback:toggle'))}
+              className="flex-1 flex flex-col items-center justify-center gap-0.5 text-gray-400 transition-colors"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+              </svg>
+              <span className="text-[10px] font-medium">留言</span>
+            </button>
           </div>
         </div>
       )}
 
-      <RedPandaWidget isSearching={isLoading} />
+      {!isMobile && <RedPandaWidget isSearching={isLoading} />}
       <FeedbackWidget isMobileTabBar={isMobile} />
       <ToastContainer />
       <Suspense fallback={null}>
@@ -398,14 +430,15 @@ export function MainLayout({ apiKey, onClearKey }: Props) {
           messages={activePaper ? getMessages(activePaper.paper_id) : []}
           isStreaming={!!activePaper && streamingPaperId === activePaper.paper_id && isStreaming}
           pdfStatus={activePaper ? getPdfStatus(activePaper.paper_id) : 'idle'}
-          onSend={content => activePaper && sendMessage(activePaper, content)}
+          onSend={content => { if (activePaper && requireKey('论文对话')) sendMessage(activePaper, content) }}
           onStop={stopStreaming}
           onClose={() => setActivePaper(null)}
           onUploadPdf={handleUploadPdf}
           onRemovePdf={activePaper ? () => removePdf(activePaper) : undefined}
           onNewChat={() => activePaper && clearChat(activePaper, true)}
-          onRegenerate={() => activePaper && regenerate(activePaper)}
+          onRegenerate={() => { if (activePaper && requireKey('论文对话')) regenerate(activePaper) }}
           isMobile={isMobile}
+          onRequireKey={apiKey ? undefined : () => openGate('feature', '论文对话')}
         />
       </Suspense>
       {activePage === 'saved' && token && (

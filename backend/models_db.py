@@ -96,6 +96,18 @@ class PasswordResetToken(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
+class TrialUsage(Base):
+    """未登录访客每用掉一次免费搜索记一行。
+
+    设备标识和 IP 只存加盐摘要（不可还原），只用来计数，90 天后由定时任务清理。
+    """
+    __tablename__ = "trial_usage"
+    id = Column(Integer, primary_key=True)
+    device_hash = Column(String(64), nullable=False, index=True)
+    ip_hash = Column(String(64), nullable=False, index=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+
+
 class SearchSession(Base):
     """搜索快照：保存用户每次搜索的关键词、结果和多论文分析。"""
     __tablename__ = "search_sessions"

@@ -7,6 +7,7 @@
     arXiv 这种一直被限流的源不会天天发邮件）
   - 所有源最近多次调用合计一篇都没有 → 告警（代理失效这类全局故障）
   - 启用中的订阅超过 3 天没推送 → 告警
+  - 未登录免费体验 24 小时内用到每日上限的 80% → 提醒（系统 Key 花费）
 同一问题每天最多发一封邮件。统计只在内存里，重启后清空，足够发现持续性故障。
 """
 import logging
@@ -14,12 +15,15 @@ import time
 from collections import defaultdict, deque
 from datetime import datetime, timedelta
 
+import config
+
 logger = logging.getLogger(__name__)
 
 WINDOW_SEC = 6 * 3600          # 统计窗口
 MIN_CALLS = 5                  # 窗口内至少调用这么多次才下结论，避免偶发
 STALLED_SUB_DAYS = 3
 ALERT_COOLDOWN_SEC = 24 * 3600
+TRIAL_CAP_ALERT_RATIO = 0.8    # 未登录体验用到每日上限的 80% 就提醒
 
 # 源名 → deque[(时间戳, 返回篇数)]，保留最近两个窗口
 _calls: dict[str, deque] = defaultdict(lambda: deque(maxlen=2000))
@@ -69,6 +73,13 @@ def detect_problems(now: float | None = None) -> list[tuple[str, str]]:
     return problems
 
 
+async def trial_usage_last_day(db) -> int:
+    from sqlalchemy import func, select
+    from models_db import TrialUsage
+    since = datetime.utcnow() - timedelta(days=1)
+    return await db.scalar(select(func.count()).select_from(TrialUsage).where(TrialUsage.created_at >= since)) or 0
+
+
 async def stalled_subscriptions(db) -> list[tuple[int, str | None]]:
     """启用中、但超过 STALLED_SUB_DAYS 天没有成功推送的订阅 [(id, last_sent)]。刚创建的不算。"""
     from sqlalchemy import select, or_, and_
@@ -109,6 +120,17 @@ async def run_health_check() -> list[str]:
         ids = ", ".join(str(i) for i, _ in stalled)
         problems.append(("stalled-subscriptions",
                          f"{len(stalled)} 个启用中的订阅超过 {STALLED_SUB_DAYS} 天没有推送（订阅 id：{ids}）"))
+    try:
+        async with AsyncSessionLocal() as db:
+            trial_used = await trial_usage_last_day(db)
+    except Exception:
+        logger.exception("Health check: failed to query trial usage")
+        trial_used = 0
+    cap = config.ANON_TRIAL_DAILY_CAP
+    if cap > 0 and trial_used >= cap * TRIAL_CAP_ALERT_RATIO:
+        problems.append(("trial-cap",
+                         f"过去 24 小时未登录免费体验已用 {trial_used}/{cap} 次，接近或达到每日上限，"
+                         f"请留意系统 DeepSeek Key 的花费，必要时调整 ANON_TRIAL_DAILY_CAP"))
 
     sent = []
     for key, message in problems:

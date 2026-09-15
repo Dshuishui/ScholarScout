@@ -211,7 +211,11 @@ Copy `backend/.env.example` to `backend/.env`. All variables have sensible defau
 | `SEMANTIC_SCHOLAR_API_KEY` | _(empty)_ | **Strongly recommended.** Free [application](https://www.semanticscholar.org/product/api#api-key-form); the keyless pool is usually rate-limited |
 | `SERPAPI_KEY` | _(empty)_ | Google Scholar via [SerpAPI](https://serpapi.com) (250 free searches/month) |
 | `JWT_SECRET` | `dev-only-secret-change-me-in-production` | **Must be changed in production** |
-| `DEEPSEEK_SYSTEM_KEY` | _(empty)_ | Server-side key for free-trial searches |
+| `DEEPSEEK_SYSTEM_KEY` | _(empty)_ | Server-side key for free searches (anonymous trial and new accounts) |
+| `ANON_TRIAL_SEARCHES` | `2` | Free searches per browser before sign-up |
+| `ANON_TRIAL_PER_IP_DAY` | `20` | Anonymous free searches per IP per 24 h |
+| `ANON_TRIAL_DAILY_CAP` | `200` | Site-wide anonymous free searches per 24 h (cost ceiling; alert at 80%) |
+| `FREE_SEARCHES_QUOTA` | `3` | Free searches granted after email verification |
 | `DEEPSEEK_API_KEY` | _(empty)_ | Server-side key for subscription relevance filtering |
 | `SMTP_HOST / SMTP_USER / SMTP_PASS` | _(empty)_ | Email delivery configuration |
 | `ADMIN_EMAIL` | _(maintainer address)_ | Receives feedback notifications and health alerts |

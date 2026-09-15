@@ -125,6 +125,7 @@ async def test_alert_email_sent_at_most_once_per_day(monitor, monkeypatch):
     sent = AsyncMock(return_value=True)
     monkeypatch.setattr("services.email_service.send_admin_alert", sent)
     monkeypatch.setattr(monitor, "stalled_subscriptions", AsyncMock(return_value=[]))
+    monkeypatch.setattr(monitor, "trial_usage_last_day", AsyncMock(return_value=0))
     await monitor.run_health_check()
     await monitor.run_health_check()
     assert sent.await_count == 1
@@ -158,3 +159,15 @@ async def test_health_endpoint_reports_source_activity(client, monitor):
     monitor.record_source_result("OpenAlex", 12)
     data = (await client.get("/api/health")).json()
     assert data["source_activity"]["OpenAlex"]["nonzero_6h"] == 1
+
+
+async def test_alerts_when_anonymous_trial_nears_daily_cap(monitor, monkeypatch):
+    sent = AsyncMock(return_value=True)
+    monkeypatch.setattr("services.email_service.send_admin_alert", sent)
+    monkeypatch.setattr(monitor, "stalled_subscriptions", AsyncMock(return_value=[]))
+    monkeypatch.setattr(monitor.config, "ANON_TRIAL_DAILY_CAP", 100)
+    monkeypatch.setattr(monitor, "trial_usage_last_day", AsyncMock(return_value=79))
+    assert await monitor.run_health_check() == []
+    monkeypatch.setattr(monitor, "trial_usage_last_day", AsyncMock(return_value=80))
+    alerts = await monitor.run_health_check()
+    assert len(alerts) == 1 and "80/100" in alerts[0]

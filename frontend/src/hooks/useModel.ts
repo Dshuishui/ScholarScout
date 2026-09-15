@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 
 const STORAGE_KEY = 'scholarscout_model'
 
@@ -11,15 +11,27 @@ export const DEEPSEEK_MODELS = [
   { id: 'deepseek-reasoner', name: 'DeepSeek R1',        desc: '推理 · 深度思维链' },
 ]
 
-export function useModel() {
-  const [model, setModelState] = useState<string>(
-    () => localStorage.getItem(STORAGE_KEY) ?? DEFAULT_MODEL
-  )
+const CHANGE_EVENT = 'scholarscout:model-change'
 
-  const setModel = (m: string) => {
-    localStorage.setItem(STORAGE_KEY, m)
+function readModel(): string {
+  try { return localStorage.getItem(STORAGE_KEY) ?? DEFAULT_MODEL } catch { return DEFAULT_MODEL }
+}
+
+// 多处同时使用（顶部弹窗里切换、论文对话里读取），切换时通过事件通知其他实例同步
+export function useModel() {
+  const [model, setModelState] = useState<string>(readModel)
+
+  useEffect(() => {
+    const sync = () => setModelState(readModel())
+    window.addEventListener(CHANGE_EVENT, sync)
+    return () => window.removeEventListener(CHANGE_EVENT, sync)
+  }, [])
+
+  const setModel = useCallback((m: string) => {
+    try { localStorage.setItem(STORAGE_KEY, m) } catch { /* ignore */ }
     setModelState(m)
-  }
+    window.dispatchEvent(new Event(CHANGE_EVENT))
+  }, [])
 
   return { model, setModel }
 }

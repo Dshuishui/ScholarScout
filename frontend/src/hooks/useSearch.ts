@@ -1,9 +1,15 @@
 import { useState } from 'react'
-import { parseQuery, searchPapers, createSession } from '../api/client'
+import { parseQuery, searchPapers, createSession, ApiError } from '../api/client'
 import type { Message, Paper, SearchSessionItem } from '../types'
 import type { SearchSettings } from './useSettings'
 import { useSearchHistory } from './useSearchHistory'
 import { useAuth } from './useAuth'
+import { useAccess } from './useAccess'
+import type { GateReason } from './useAccess'
+import { track } from '../lib/analytics'
+
+// 这些错误码说明"额度不够"，除了在对话里提示，还要弹出注册 / 填 Key 的引导
+const GATE_CODES = new Set<GateReason>(['trial_exhausted', 'credits_exhausted', 'trial_capacity', 'key_required'])
 
 const WELCOME: Message = {
   id: '0',
@@ -35,10 +41,48 @@ export function useSearch(apiKey: string, settings: SearchSettings, model?: stri
   const [hasSearchError, setHasSearchError] = useState(false)
   const [currentSessionId, setCurrentSessionId] = useState<number | null>(null)
   const { history, addHistory, removeHistory } = useSearchHistory()
-  const { token, decrementFreeSearches } = useAuth()
-  // 试用模式：apiKey 为空 + 有登录 token
-  const isTrial = !apiKey && !!token
-  const authToken = isTrial ? (token ?? undefined) : undefined
+  const { token } = useAuth()
+  const { deviceId, mode, trial, freeRemaining, applyRemaining, openGate, refreshTrial } = useAccess()
+  // 没有自己的 Key 时：登录用户用账号免费次数，未登录访客用设备标识领体验次数
+  const trialAuth = apiKey ? undefined : { token, deviceId }
+
+  /** 已知额度不够时直接弹引导，不发请求、不在对话里留一条失败记录 */
+  const blockedReason = (): GateReason | null => {
+    if (mode === 'own_key') return null
+    if (mode === 'account_trial') return (freeRemaining ?? 0) <= 0 ? 'credits_exhausted' : null
+    if (!trial.loaded) return null  // 额度还没查到，交给服务端判断
+    if (!trial.enabled) return 'key_required'
+    if (trial.anonRemaining <= 0) return 'trial_exhausted'
+    if (!trial.capacityOk) return 'trial_capacity'
+    return null
+  }
+
+  const guard = (): boolean => {
+    const reason = blockedReason()
+    if (reason) {
+      openGate(reason)
+      return false
+    }
+    return true
+  }
+
+  /** 把请求错误翻译成对话里的提示；额度类错误同时弹出引导 */
+  const describeError = (err: unknown): string => {
+    if (err instanceof ApiError) {
+      track('search_error', { code: err.code, mode })
+      if (GATE_CODES.has(err.code as GateReason)) {
+        openGate(err.code as GateReason)
+        refreshTrial()
+      } else if (err.code === 'invalid_key' || err.code === 'insufficient_balance') {
+        openGate('manual')
+      } else if (err.code === 'trial_unavailable') {
+        openGate('key_required')
+      }
+      return `⚠️ ${err.message}`
+    }
+    track('search_error', { code: 'network', mode })
+    return '网络错误，请检查网络后重试'
+  }
 
   const updateAssistant = (assistantId: string, patch: Partial<Message>) =>
     setMessages(prev => prev.map(m => m.id === assistantId ? { ...m, ...patch } : m))
@@ -58,9 +102,11 @@ export function useSearch(apiKey: string, settings: SearchSettings, model?: stri
         pending.query, apiKey, pending.history, settings,
         { keywords, date_from: pending.date_from, date_to: pending.date_to, domains: pending.domains },
         model,
-        authToken,
+        trialAuth,
       )) {
-        if (event.type === 'search_start') {
+        if (event.type === 'quota') {
+          applyRemaining(event.kind, event.remaining)
+        } else if (event.type === 'search_start') {
           // 真正开始搜索时才清空上一次结果
           setPapers([])
           setRejectedPapers([])
@@ -83,9 +129,12 @@ export function useSearch(apiKey: string, settings: SearchSettings, model?: stri
           setRejectedPapers(event.rejected_papers ?? [])
           setStatusMessage(event.message)
           setIsLoading(false)  // 主搜索完成，立即释放输入框
-          // 试用模式：本地乐观扣减免费次数（后端已原子扣减）
-          if (isTrial) decrementFreeSearches()
-          updateAssistant(assistantId, { content: event.message, isLoading: false, papers: event.papers })
+          if (event.refunded && typeof event.remaining === 'number') {
+            applyRemaining(mode === 'account_trial' ? 'account' : 'anon', event.remaining)
+          }
+          track('search_done', { mode, count: event.papers.length })
+          const note = event.refunded ? '\n\n（没有找到相关论文，本次不计免费次数）' : ''
+          updateAssistant(assistantId, { content: event.message + note, isLoading: false, papers: event.papers })
           // 登录用户自动保存搜索快照
           if (token && event.papers.length > 0) {
             createSession(token, {
@@ -111,25 +160,25 @@ export function useSearch(apiKey: string, settings: SearchSettings, model?: stri
         } else if (event.type === 'error') {
           setStatusMessage('')
           setHasSearchError(true)
-          updateAssistant(assistantId, { content: `出错了：${event.message}`, isLoading: false })
+          if (event.refunded && typeof event.remaining === 'number') {
+            applyRemaining(mode === 'account_trial' ? 'account' : 'anon', event.remaining)
+          }
+          track('search_error', { code: 'pipeline', mode })
+          const note = event.refunded ? '（本次不计免费次数）' : ''
+          updateAssistant(assistantId, { content: `出错了：${event.message}${note}`, isLoading: false })
         }
       }
     } catch (err) {
       setHasSearchError(true)
-      const msg = err instanceof Error ? err.message : ''
-      let errDisplay = '网络错误，请稍后重试'
-      if (msg.includes('402') || msg.includes('INSUFFICIENT_BALANCE')) {
-        errDisplay = '⚠️ DeepSeek API 余额不足，请前往 platform.deepseek.com 充值'
-      } else if (msg.includes('401') || msg.includes('INVALID_KEY')) {
-        errDisplay = '⚠️ API Key 无效或已过期，请点击顶栏「换 Key」重新输入'
-      }
-      updateAssistant(assistantId, { content: errDisplay, isLoading: false })
+      updateAssistant(assistantId, { content: describeError(err), isLoading: false })
     } finally {
       setIsLoading(false)
     }
   }
 
   const search = async (query: string) => {
+    if (!guard()) return
+    track('search_submit', { mode })
     const userMsgId = Date.now().toString()
     const assistantId = (Date.now() + 1).toString()
 
@@ -147,7 +196,7 @@ export function useSearch(apiKey: string, settings: SearchSettings, model?: stri
         .slice(-8)
         .map(m => ({ role: m.role, content: m.content }))
 
-      const result = await parseQuery(query, apiKey, history, model, authToken)
+      const result = await parseQuery(query, apiKey, history, model, trialAuth)
 
       if (result.intent === 'chat') {
         updateAssistant(assistantId, { content: result.reply, isLoading: false })
@@ -171,18 +220,15 @@ export function useSearch(apiKey: string, settings: SearchSettings, model?: stri
         addHistory(result.keywords)
         await runSearchStream(assistantId, confirmed, result.keywords)
       }
-    } catch {
-      updateAssistant(assistantId, {
-        content: '网络错误，请检查 Key 是否正确或稍后重试',
-        isLoading: false,
-      })
+    } catch (err) {
+      updateAssistant(assistantId, { content: describeError(err), isLoading: false })
       setIsLoading(false)
     }
   }
 
 
   const reSearch = async (keywords: string[]) => {
-    if (!lastConfirmed) return
+    if (!lastConfirmed || !guard()) return
     const newConfirmed = { ...lastConfirmed, keywords }
     setLastConfirmed(newConfirmed)
 
@@ -226,6 +272,7 @@ export function useSearch(apiKey: string, settings: SearchSettings, model?: stri
   }
 
   const searchFromHistory = async (keywords: string[]) => {
+    if (!guard()) return
     const assistantId = Date.now().toString()
     const userMsgId = (Date.now() - 1).toString()
     const query = keywords.join(' ')

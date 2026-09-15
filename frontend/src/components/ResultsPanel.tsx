@@ -10,6 +10,7 @@ import { ALL_SOURCES } from '../hooks/useSettings'
 import { PaperCard } from './PaperCard'
 import { PaperCardSkeleton } from './PaperCardSkeleton'
 import { getDownloadUrl } from '../api/client'
+import { TrialHint } from './TrialHint'
 import { toast } from './Toast'
 
 const ComparePanel = lazy(() => import('./ComparePanel').then(m => ({ default: m.ComparePanel })))
@@ -53,6 +54,8 @@ interface Props {
   searchDateRange?: { from: string | null; to: string | null } | null
   sessionId?: number | null
   onOpenRag?: (papers: Paper[]) => void
+  /** 需要用户自己 Key 的功能：没有 Key 时弹出引导并返回 false */
+  onRequireKey?: (feature: string) => boolean
   onOpenGraph?: (papers: Paper[]) => void
 }
 
@@ -188,7 +191,7 @@ function Pagination({ current, total, onChange }: {
   )
 }
 
-export function ResultsPanel({ papers, rejectedPapers = [], isLoading, statusMessage, sourceStatuses = {}, settings, onSettingsChange, onReSearch, confirmedKeywords, onAnalyzePaper, onExampleSearch, apiKey, getMessages, hasSearchError = false, searchDateRange, sessionId, onOpenRag, onOpenGraph }: Props) {
+export function ResultsPanel({ papers, rejectedPapers = [], isLoading, statusMessage, sourceStatuses = {}, settings, onSettingsChange, onReSearch, confirmedKeywords, onAnalyzePaper, onExampleSearch, apiKey, getMessages, hasSearchError = false, searchDateRange, sessionId, onOpenRag, onOpenGraph, onRequireKey }: Props) {
   const [currentPage, setCurrentPage] = useState(1)
   const [showBackToTop, setShowBackToTop] = useState(false)
   const listScrollRef = useRef<HTMLDivElement>(null)
@@ -223,6 +226,8 @@ export function ResultsPanel({ papers, rejectedPapers = [], isLoading, statusMes
   const [showSubModal, setShowSubModal] = useState(false)
   const [subModalKeywords, setSubModalKeywords] = useState<string[]>([])
   const [newSubId, setNewSubId] = useState<number | null>(null)
+  // 数据源和数量设置：手机上默认折叠，把首屏留给论文列表
+  const [showConfig, setShowConfig] = useState(() => typeof window === 'undefined' || window.innerWidth >= 640)
   const [showCompare, setShowCompare] = useState(false)
   const [showAuthModal, setShowAuthModal] = useState(false)
   const [showExportModal, setShowExportModal] = useState(false)
@@ -321,11 +326,13 @@ export function ResultsPanel({ papers, rejectedPapers = [], isLoading, statusMes
       const dateStr = new Date().toISOString().slice(0, 10)
       const exportPapers = exportOpts.aiOnly ? papers : [...papers, ...rejectedPapers]
       const headers: string[] = ['标题', '作者', '年份', '来源', '引用数', '摘要', '论文链接', 'PDF链接']
-      if (exportOpts.translate) headers.splice(1, 0, '中文标题')
+      // 翻译标题要调用 DeepSeek，没有自己的 Key 时不加这一列，免得导出一整列空白
+      const translate = exportOpts.translate && !!apiKey
+      if (translate) headers.splice(1, 0, '中文标题')
       if (exportOpts.aiAnalysis) headers.push('AI相关性分析')
 
       let chineseTitles: string[] = []
-      if (exportOpts.translate && apiKey) {
+      if (translate && apiKey) {
         setExportStatus(`正在翻译 ${exportPapers.length} 篇标题…`)
         chineseTitles = await translateTitles(exportPapers.map(p => p.title), apiKey)
         setExportStatus('正在生成文件…')
@@ -342,7 +349,7 @@ export function ResultsPanel({ papers, rejectedPapers = [], isLoading, statusMes
           p.url ?? '',
           p.pdf_url ?? '',
         ]
-        if (exportOpts.translate) row.splice(1, 0, chineseTitles[i] ?? '')
+        if (translate) row.splice(1, 0, chineseTitles[i] ?? '')
         if (exportOpts.aiAnalysis) row.push(p.relevance_reason ?? '')
         return row
       })
@@ -612,9 +619,9 @@ const addKeyword = () => {
   return (
     <div className="flex flex-col h-full" style={{ background: 'transparent' }}>
       {/* 顶部标题栏 */}
-      <div className="px-5 py-3 border-b border-gray-200/80 bg-white/70 backdrop-blur-sm flex items-center justify-between gap-3">
+      <div className="px-3 sm:px-5 py-2 sm:py-3 border-b border-gray-200/80 bg-white/70 backdrop-blur-sm flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-3">
         <div className="flex items-center gap-3 flex-shrink-0 flex-wrap">
-          <div className="flex items-center gap-2">
+          <div className="hidden sm:flex items-center gap-2">
             <div className="w-1.5 h-4 rounded-full bg-gray-300" />
             <h2 className="text-[11px] font-semibold text-gray-400 uppercase tracking-widest">搜索结果</h2>
           </div>
@@ -654,7 +661,7 @@ const addKeyword = () => {
         </div>
 
         {papers.length > 0 && (
-          <div className="flex items-center gap-1.5 flex-wrap">
+          <div className="flex items-center gap-1.5 sm:flex-wrap overflow-x-auto sm:overflow-visible -mx-3 px-3 sm:mx-0 sm:px-0 pb-0.5 sm:pb-0 [&>*]:flex-shrink-0 [&>button]:whitespace-nowrap">
             {totalPages > 1 && (
               <span className="text-xs text-gray-400 tabular-nums mr-1">
                 {start}–{end} / {sortedPapers.length}
@@ -677,7 +684,7 @@ const addKeyword = () => {
             {selectedIds.size >= 2 && (
               <>
                 <button
-                  onClick={() => setShowCompare(true)}
+                  onClick={() => { if (apiKey || onRequireKey?.('AI 多论文分析')) setShowCompare(true) }}
                   className="flex items-center gap-1 text-xs font-medium text-white bg-violet-600 hover:bg-violet-700 rounded-lg px-2.5 py-1 transition-all shadow-sm"
                 >
                   <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -741,10 +748,10 @@ const addKeyword = () => {
 
       {/* 关键词行 */}
       {confirmedKeywords != null && (
-        <div className="px-5 py-2.5 bg-white border-b border-gray-100 flex items-center gap-2 justify-between">
+        <div className="px-3 sm:px-5 py-2.5 bg-white border-b border-gray-100 flex items-center gap-2 justify-between">
           {/* 左侧：标签 + chips + 添加输入 + 重搜按钮 */}
           <div className="flex items-center gap-2 flex-wrap flex-1 min-w-0">
-            <span className="text-sm font-medium text-gray-400 shrink-0">搜索词</span>
+            <span className="hidden sm:inline text-sm font-medium text-gray-400 shrink-0">搜索词</span>
             {editKeywords.map((kw, i) => (
               <span
                 key={i}
@@ -818,19 +825,32 @@ const addKeyword = () => {
                     d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
                 </svg>
               )}
-              {isSubscribed ? '已订阅' : '订阅更新'}
+              {isSubscribed ? '已订阅' : <><span className="sm:hidden">订阅</span><span className="hidden sm:inline">订阅更新</span></>}
             </button>
             {isSubscribed ? (
-              <span className="text-[10px] text-green-600">每日 08:00 推送 · 可随时取消</span>
+              <span className="hidden sm:inline text-[10px] text-green-600">每日 08:00 推送 · 可随时取消</span>
             ) : (
-              <span className="text-[10px] text-gray-400">每日推送 · 可随时取消</span>
+              <span className="hidden sm:inline text-[10px] text-gray-400">每日推送 · 可随时取消</span>
             )}
           </div>
         </div>
       )}
 
-      {/* ── 搜索配置区 ─────────────────────────────────────────────── */}
-      <div className="px-5 pt-3 pb-3 bg-white/70 backdrop-blur-sm border-b border-gray-100/80">
+      {/* ── 搜索配置区（手机上默认折叠，结果优先）─────────────────────── */}
+      <div className="px-3 sm:px-5 pt-2 sm:pt-3 pb-2 sm:pb-3 bg-white/70 backdrop-blur-sm border-b border-gray-100/80">
+        <button
+          onClick={() => setShowConfig(v => !v)}
+          aria-expanded={showConfig}
+          className={`w-full flex items-center justify-between gap-2 text-xs text-gray-500 hover:text-gray-700 ${showConfig ? 'mb-2 sm:hidden' : ''}`}
+        >
+          <span className="truncate">
+            搜索设置 · {(settings.selectedSources ?? ALL_SOURCES).length} 个数据源 · 每源 {settings.limitPerSource} 篇
+          </span>
+          <svg className={`w-3.5 h-3.5 flex-shrink-0 transition-transform ${showConfig ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          </svg>
+        </button>
+        {showConfig && <>
         {/* 源选择 */}
         <div className="mb-3">
           <div className="flex items-center gap-2 mb-2">
@@ -905,18 +925,20 @@ const addKeyword = () => {
           {!settingsChanged && (
             <span className="text-xs text-gray-400">调整参数或勾选源后点击重新搜索</span>
           )}
+          <button onClick={() => setShowConfig(false)} className="hidden sm:inline text-xs text-gray-400 hover:text-gray-600 ml-auto">收起</button>
         </div>
+        </>}
       </div>
 
       {/* Tab 栏 + 排序（有结果才显示）*/}
       {(papers.length > 0 || rejectedPapers.length > 0) && (
-        <div className="px-5 py-0 bg-white border-b border-gray-200 flex items-center justify-between">
-          <div className="flex">
+        <div className="px-2 sm:px-5 py-0 bg-white border-b border-gray-200 flex items-center justify-between gap-2">
+          <div className="flex flex-shrink-0">
             {(['filtered', 'all'] as const).map(tab => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
-                className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+                className={`px-2.5 sm:px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
                   activeTab === tab
                     ? 'border-indigo-600 text-indigo-600'
                     : 'border-transparent text-gray-500 hover:text-gray-700'
@@ -933,7 +955,7 @@ const addKeyword = () => {
           </div>
           <div className="flex items-center gap-2">
             {/* 密度切换 */}
-            <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden">
+            <div className="hidden sm:flex items-center border border-gray-200 rounded-lg overflow-hidden">
               <button
                 onClick={() => setDensity('compact')}
                 title="紧凑模式 — 折叠摘要，每屏显示更多论文"
@@ -951,7 +973,7 @@ const addKeyword = () => {
             </div>
 
             {/* 视图切换 */}
-            <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden">
+            <div className="hidden sm:flex items-center border border-gray-200 rounded-lg overflow-hidden">
               <button
                 onClick={() => setViewMode('list')}
                 title="列表视图"
@@ -973,7 +995,7 @@ const addKeyword = () => {
             </div>
             {/* 年份过滤 */}
             {availableYears && (availableYears.max - availableYears.min) >= 1 && (
-              <div className="flex items-center gap-1 text-xs text-gray-500">
+              <div className="hidden md:flex items-center gap-1 text-xs text-gray-500">
                 <input
                   type="number"
                   value={yearFrom ?? ''}
@@ -1083,11 +1105,11 @@ const addKeyword = () => {
               </svg>
             </div>
             <div>
-              <p className="text-base font-semibold text-gray-700 mb-1.5">开始探索学术文献</p>
-              <p className="text-sm text-gray-400 leading-relaxed">
-                在左侧用自然语言描述你想找的论文<br />
-                AI 将自动提取关键词并搜索 10 个学术数据库
+              <p className="text-base font-semibold text-gray-700 mb-1.5">用自然语言找论文</p>
+              <p className="text-sm text-gray-400 leading-relaxed max-w-md">
+                在左侧描述你的研究问题，AI 提取关键词，按学科检索 OpenAlex、PubMed、arXiv 等学术数据库，再逐篇判断相关性
               </p>
+              <TrialHint className="mt-3" />
             </div>
             <div className="flex flex-col gap-2 w-full max-w-xs">
               <p className="text-xs text-gray-400 mb-1">点击示例快速开始 ↓</p>
@@ -1105,6 +1127,19 @@ const addKeyword = () => {
                 </button>
               ))}
             </div>
+            <div className="grid grid-cols-2 gap-2 w-full max-w-md text-left">
+              {[
+                { title: '多库检索', detail: '关键词 + 语义检索，按学科选库' },
+                { title: 'AI 相关性筛选', detail: '逐篇判断，给出推荐理由' },
+                { title: '论文对话', detail: '上传 PDF 深入追问（需自己的 Key）' },
+                { title: 'PDF 与导出', detail: '查找开放获取全文，导出表格' },
+              ].map(f => (
+                <div key={f.title} className="rounded-xl border border-gray-200 bg-white/70 px-3 py-2.5">
+                  <p className="text-xs font-semibold text-gray-700">{f.title}</p>
+                  <p className="text-[11px] text-gray-400 mt-0.5 leading-snug">{f.detail}</p>
+                </div>
+              ))}
+            </div>
           </div>
         )}
 
@@ -1120,7 +1155,7 @@ const addKeyword = () => {
             <div>
               <p className="text-sm font-semibold text-gray-700 mb-1">未找到相关论文</p>
               <p className="text-xs text-gray-400 leading-relaxed">
-                关键词 <span className="font-medium text-gray-600">"{confirmedKeywords.join(' · ')}"</span> 在 10 个数据源中均无结果<br />
+                关键词 <span className="font-medium text-gray-600">"{confirmedKeywords.join(' · ')}"</span> 在所有数据源中均无结果<br />
                 尝试换用更宽泛的词语，或去掉年份限制
               </p>
             </div>
@@ -1348,13 +1383,14 @@ const addKeyword = () => {
                 <label className="flex items-start gap-3 cursor-pointer group">
                   <input
                     type="checkbox"
-                    checked={exportOpts.translate}
+                    checked={exportOpts.translate && !!apiKey}
+                    disabled={!apiKey}
                     onChange={e => setExportOpts(o => ({ ...o, translate: e.target.checked }))}
                     className="mt-0.5 w-4 h-4 rounded accent-blue-600 cursor-pointer"
                   />
                   <div>
                     <p className="text-sm text-gray-700 group-hover:text-gray-900">翻译标题为中文</p>
-                    <p className="text-xs text-gray-400">AI 批量翻译，导出会稍慢</p>
+                    <p className="text-xs text-gray-400">{apiKey ? 'AI 批量翻译，导出会稍慢' : '需要填写自己的 DeepSeek Key'}</p>
                   </div>
                 </label>
 

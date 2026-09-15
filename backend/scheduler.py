@@ -267,4 +267,12 @@ def setup_scheduler() -> AsyncIOScheduler:
         id="health_check",
         replace_existing=True,
     )
+    from services.trial_service import run_purge
+    scheduler.add_job(
+        run_purge,
+        trigger=CronTrigger(hour=19, minute=30, timezone="UTC"),  # 北京时间 03:30
+        id="purge_trial_usage",
+        replace_existing=True,
+        misfire_grace_time=3600,
+    )
     return scheduler

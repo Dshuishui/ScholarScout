@@ -3,6 +3,7 @@ import type { RefObject } from 'react'
 import type { Message } from '../types'
 import type { HistoryItem } from '../hooks/useSearchHistory'
 import { MessageBubble } from './MessageBubble'
+import { TrialHint } from './TrialHint'
 
 interface Props {
   messages: Message[]
@@ -129,8 +130,9 @@ export function ChatPanel({
             </div>
             <p className="text-sm font-semibold text-gray-700 mb-1">用自然语言搜索学术论文</p>
             <p className="text-xs text-gray-400 leading-relaxed">
-              AI 自动提取关键词，同时搜索 10 个学术数据库
+              AI 提取关键词、按学科检索多个学术数据库，再逐篇筛选相关论文
             </p>
+            <TrialHint className="mt-2.5" />
           </div>
 
           {/* 分类 Tab */}
@@ -266,7 +268,7 @@ export function ChatPanel({
             disabled={isLoading}
             rows={2}
             style={{ minHeight: '52px', maxHeight: '120px' }}
-            className="w-full px-4 pt-3 pb-1 text-sm text-gray-800 placeholder-gray-300 resize-none focus:outline-none bg-transparent leading-relaxed"
+            className="w-full px-4 pt-3 pb-1 text-base sm:text-sm text-gray-800 placeholder-gray-300 resize-none focus:outline-none bg-transparent leading-relaxed"
           />
           <div className="flex items-center justify-between px-3 pb-2.5">
             <span className="text-[11px] text-gray-400">Enter 发送 · Shift+Enter 换行</span>

@@ -262,7 +262,8 @@ export function PaperCard({ paper, selected = false, onToggle, isRejected = fals
 
           {/* Actions */}
           <div className="flex flex-wrap items-end gap-1.5 mt-1">
-            <div className="flex flex-wrap gap-1.5 flex-1 min-w-0">
+            {/* 手机上来源 / PDF 链接独占一行，常驻按钮排在下一行，避免被挤成竖排 */}
+            <div className="flex flex-wrap gap-1.5 basis-full sm:basis-auto sm:flex-1 min-w-0">
               {sourceLinks.map(link => (
                 <a
                   key={link.source}
@@ -317,15 +318,15 @@ export function PaperCard({ paper, selected = false, onToggle, isRejected = fals
               href={scholarUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex-shrink-0 inline-flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-lg border border-sky-200 bg-sky-50 hover:bg-sky-100 hover:border-sky-300 active:bg-sky-200 text-sky-700 transition-all active:scale-95"
+              className="flex-shrink-0 inline-flex flex-col items-center gap-0.5 px-2.5 sm:px-3 py-1.5 rounded-lg border border-sky-200 bg-sky-50 hover:bg-sky-100 hover:border-sky-300 active:bg-sky-200 text-sky-700 transition-all active:scale-95"
             >
               <span className="flex items-center gap-1 text-xs font-semibold leading-tight">
                 <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
                   <path d="M12 24a7 7 0 1 1 0-14 7 7 0 0 1 0 14zm0-24L0 9.5l4.838 3.94A8 8 0 0 1 12 9a8 8 0 0 1 7.162 4.44L24 9.5z"/>
                 </svg>
-                Google Scholar
+                <span className="sm:hidden">Scholar</span><span className="hidden sm:inline">Google Scholar</span>
               </span>
-              <span className="text-[10px] text-sky-400 leading-none">引用 · 全文 · 相关</span>
+              <span className="hidden sm:block text-[10px] text-sky-400 leading-none">引用 · 全文 · 相关</span>
             </a>
 
             {/* Bookmark — 常驻 */}
@@ -333,7 +334,7 @@ export function PaperCard({ paper, selected = false, onToggle, isRejected = fals
               <button
                 onClick={e => { e.stopPropagation(); onSave() }}
                 title={isSaved ? '已收藏 · 点击取消收藏' : isLoggedIn ? '收藏到我的文献库' : '登录后可收藏'}
-                className={`flex-shrink-0 inline-flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-lg border transition-all active:scale-95 ${
+                className={`flex-shrink-0 inline-flex flex-col items-center gap-0.5 px-2.5 sm:px-3 py-1.5 rounded-lg border transition-all active:scale-95 ${
                   isSaved
                     ? 'bg-blue-600 text-white border-blue-600 hover:bg-blue-700'
                     : 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100 hover:border-blue-300'
@@ -346,7 +347,7 @@ export function PaperCard({ paper, selected = false, onToggle, isRejected = fals
                   {isSaved ? '已收藏' : '收藏'}
                 </span>
                 {/* 副文字：已收藏→提示取消，未登录→提示登录，已登录未收藏→透明占位保持高度对齐 */}
-                <span className={`text-[10px] leading-none ${
+                <span className={`hidden sm:block text-[10px] leading-none ${
                   isSaved ? 'text-blue-200' : isLoggedIn ? 'invisible' : 'text-blue-400'
                 }`}>
                   {isSaved ? '点击取消' : '登录后使用'}
@@ -358,7 +359,7 @@ export function PaperCard({ paper, selected = false, onToggle, isRejected = fals
             {onAnalyze && (
               <button
                 onClick={e => { e.stopPropagation(); onAnalyze() }}
-                className="flex-shrink-0 inline-flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-lg border border-violet-200 bg-violet-50 hover:bg-violet-100 hover:border-violet-300 active:bg-violet-200 text-violet-700 transition-all active:scale-95"
+                className="flex-shrink-0 inline-flex flex-col items-center gap-0.5 px-2.5 sm:px-3 py-1.5 rounded-lg border border-violet-200 bg-violet-50 hover:bg-violet-100 hover:border-violet-300 active:bg-violet-200 text-violet-700 transition-all active:scale-95"
               >
                 <span className="flex items-center gap-1 text-xs font-semibold leading-tight">
                   <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -366,7 +367,7 @@ export function PaperCard({ paper, selected = false, onToggle, isRejected = fals
                   </svg>
                   AI 对话
                 </span>
-                <span className="text-[10px] text-violet-400 leading-none">独立上下文</span>
+                <span className="hidden sm:block text-[10px] text-violet-400 leading-none">独立上下文</span>
               </button>
             )}
           </div>
