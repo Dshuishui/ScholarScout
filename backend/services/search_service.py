@@ -11,6 +11,12 @@ from config import CORE_API_KEY, NASA_ADS_API_KEY, SERPAPI_KEY, POLITE_EMAIL
 logger = logging.getLogger(__name__)
 
 
+def _quoted_or(keywords: list[str]) -> str:
+    """把关键词拼成 "a" OR "b" 的布尔查询；多词关键词加引号按短语匹配。"""
+    terms = [k.replace('"', "").strip() for k in keywords]
+    return " OR ".join(f'"{t}"' if " " in t else t for t in terms if t)
+
+
 async def _get_with_retry(client: httpx.AsyncClient, url: str, **kwargs) -> httpx.Response:
     """遇到 429 等待后重试一次；其余状态码直接返回。"""
     resp = await client.get(url, **kwargs)
@@ -26,13 +32,12 @@ async def _get_with_retry(client: httpx.AsyncClient, url: str, **kwargs) -> http
 async def _search_arxiv(parsed: ParsedQuery, limit: int) -> list[Paper]:
     try:
         kw_part = " OR ".join(f'all:"{kw}"' for kw in parsed.keywords)
+        search_query = f'({kw_part})'
         if parsed.date_from:
             date_str = parsed.date_from.replace("-", "")
-            search_query = f'({kw_part}) AND submittedDate:[{date_str}000000 TO *]'
-            sort_by = "submittedDate"
-        else:
-            search_query = f'({kw_part})'
-            sort_by = "relevance"
+            search_query += f' AND submittedDate:[{date_str}000000 TO *]'
+        # 有时间范围也按相关性排：按日期排拿回的是"最新的、沾点边的"，不是最相关的
+        sort_by = "relevance"
 
         async with httpx.AsyncClient(timeout=25) as client:
             resp = await _get_with_retry(
@@ -119,7 +124,9 @@ async def _search_semantic_scholar(parsed: ParsedQuery, limit: int) -> list[Pape
 async def _search_openalex(parsed: ParsedQuery, limit: int) -> list[Paper]:
     try:
         params = {
-            "search": " ".join(parsed.keywords),
+            # 空格拼接会被 OpenAlex 当成"所有词都要出现"，同义词一多经典论文就被漏掉；
+            # 实测潜在扩散模型、思维链两篇论文由"前 50 条没有"变成排第 1
+            "search": _quoted_or(parsed.keywords),
             "per_page": limit,
             "select": "id,title,authorships,abstract_inverted_index,publication_date,doi,open_access,cited_by_count,primary_location",
         }
@@ -182,7 +189,7 @@ async def _search_pubmed(parsed: ParsedQuery, limit: int) -> list[Paper]:
             "term": " OR ".join(parsed.keywords),
             "retmax": limit,
             "retmode": "json",
-            "sort": "date",
+            "sort": "relevance",
         }
         if parsed.date_from:
             search_params["datetype"] = "pdat"
@@ -321,7 +328,9 @@ async def _search_core(parsed: ParsedQuery, limit: int) -> list[Paper]:
 async def _search_inspire(parsed: ParsedQuery, limit: int) -> list[Paper]:
     """INSPIRE-HEP：高能物理 / 粒子物理 / 理论物理，无需 Key"""
     try:
-        kw = " ".join(parsed.keywords)
+        # INSPIRE 里空格是 AND；按 mostrecent 排会把引力波首次探测这类经典论文挤出前 50，
+        # 改成 or 连接 + 默认相关性排序后排第 12
+        kw = " or ".join(f'"{k}"' for k in parsed.keywords)
         query = f"({kw})"
         if parsed.date_from:
             query += f" AND date>{parsed.date_from[:4]}"
@@ -330,7 +339,7 @@ async def _search_inspire(parsed: ParsedQuery, limit: int) -> list[Paper]:
             resp = await _get_with_retry(
                 client,
                 "https://inspirehep.net/api/literature",
-                params={"q": query, "size": limit, "sort": "mostrecent",
+                params={"q": query, "size": limit,
                         "fields": "titles,authors,abstracts,earliest_date,dois,arxiv_eprints"},
                 headers={"Accept": "application/json"},
             )
@@ -442,7 +451,7 @@ async def _search_nasa_ads(parsed: ParsedQuery, limit: int) -> list[Paper]:
                 "https://api.adsabs.harvard.edu/v1/search/query",
                 params={"q": query, "rows": limit,
                         "fl": "title,author,abstract,pubdate,doi,identifier,bibcode,pub",
-                        "sort": "date desc"},
+                        "sort": "score desc"},
                 headers={"Authorization": f"Bearer {NASA_ADS_API_KEY}"},
             )
             resp.raise_for_status()

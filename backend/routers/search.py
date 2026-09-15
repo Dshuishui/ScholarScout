@@ -18,7 +18,7 @@ from database import get_db
 from dependencies import get_optional_user
 from models import SearchRequest, ParseRequest, ParsedQuery, ValidateKeyRequest
 from models_db import User
-from services.llm_service import classify_intent, parse_query, validate_papers
+from services.llm_service import classify_intent, parse_query, validate_papers, rank_accepted
 from services.search_service import search_all_sources, enhance_with_unpaywall, get_source_names
 from services.download_service import fetch_pdf_with_fallback
 from services.pdf_finder_service import find_pdfs_with_kimi, generate_fallback_links
@@ -210,7 +210,7 @@ async def search(
 
             yield sse("progress", {"message": f"正在验证相关性..."})
             accepted, rejected = await validate_papers(papers, request.query, api_key)
-            final = accepted[:request.validated_limit]
+            final = rank_accepted(accepted)[:request.validated_limit]
 
             papers_dict = [p.model_dump() for p in final]
             rejected_dict = [p.model_dump() for p in rejected]

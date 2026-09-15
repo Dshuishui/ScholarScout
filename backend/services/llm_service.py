@@ -1,9 +1,11 @@
 import json
 import asyncio
-from datetime import date
+import logging
 from openai import AsyncOpenAI
 from models import ParsedQuery, Paper
 from config import DEEPSEEK_BASE_URL, DEEPSEEK_MODEL
+
+logger = logging.getLogger(__name__)
 
 INTENT_SYSTEM = """你是学术论文搜索助手。结合对话历史判断用户最新输入的意图。
 
@@ -89,8 +91,7 @@ async def parse_query(user_query: str, api_key: str, history: list[dict] = [], m
         temperature=0.1,
     )
     data = json.loads(response.choices[0].message.content)
-    if not data.get("date_from"):
-        data["date_from"] = f"{date.today().year - 5}-01-01"
+    # 用户没说时间就不限年份：以前默认只搜近 5 年，Transformer、ResNet 这类奠基论文会被直接排除
     return ParsedQuery(**data)
 
 
@@ -133,17 +134,31 @@ async def validate_papers(
                 rejected.append(p)
         return accepted, rejected
 
+    async def _validate_batch_with_retry(batch: list[Paper]) -> tuple[list[Paper], list[Paper]]:
+        try:
+            return await _validate_batch(batch)
+        except Exception as first_error:
+            try:
+                return await _validate_batch(batch)
+            except Exception:
+                # 重试仍失败：这批论文不打分直接保留，而不是整批悄悄消失
+                logger.warning("Validation batch of %d failed twice, keeping unscored: %s", len(batch), first_error)
+                return list(batch), []
+
     batches = [papers[i:i + BATCH_SIZE] for i in range(0, len(papers), BATCH_SIZE)]
-    batch_results = await asyncio.gather(*[_validate_batch(b) for b in batches], return_exceptions=True)
+    batch_results = await asyncio.gather(*[_validate_batch_with_retry(b) for b in batches])
 
     accepted: list[Paper] = []
     rejected: list[Paper] = []
-    for r in batch_results:
-        if not isinstance(r, Exception):
-            a, rej = r
-            accepted.extend(a)
-            rejected.extend(rej)
-    # 如果所有 batch 都报错（如模型不支持），兜底返回全部论文
-    if not accepted and not rejected and papers:
-        return papers, []
+    for a, rej in batch_results:
+        accepted.extend(a)
+        rejected.extend(rej)
     return accepted, rejected
+
+
+def rank_accepted(papers: list[Paper]) -> list[Paper]:
+    """按大模型相关性评分从高到低排序（稳定排序，同分保持原顺序；没打分的排最后）。
+
+    必须在截取 validated_limit 之前调用，否则排在后面的数据源里的高分论文会先被截掉。
+    """
+    return sorted(papers, key=lambda p: p.relevance_score if p.relevance_score is not None else -1, reverse=True)

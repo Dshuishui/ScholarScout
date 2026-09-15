@@ -1,11 +1,9 @@
 import json
-import re
 import pytest
-from datetime import date
 from unittest.mock import AsyncMock, patch, MagicMock
 
 from models import Paper, ParsedQuery
-from services.llm_service import parse_query, validate_papers
+from services.llm_service import parse_query, validate_papers, rank_accepted
 
 
 def _mock_llm(content):
@@ -40,10 +38,8 @@ async def test_parse_query_no_date():
         }))
         result = await parse_query("找transformer相关论文", "sk-fake-key")
 
-    # 未指定日期时应自动回填近 5 年的默认值
-    assert result.date_from is not None
-    assert re.match(r"\d{4}-01-01", result.date_from)
-    assert int(result.date_from[:4]) >= date.today().year - 5
+    # 用户没说时间就不限年份（以前默认近 5 年，会漏掉奠基论文）
+    assert result.date_from is None
     assert "transformer" in result.keywords
 
 
@@ -97,3 +93,37 @@ async def test_validate_papers_empty_input():
     accepted, rejected = await validate_papers([], "query", "sk-fake-key")
     assert accepted == []
     assert rejected == []
+
+
+@pytest.mark.asyncio
+async def test_validate_papers_failed_batch_is_retried_then_kept():
+    # 回归：某一批调用失败时，这 20 篇曾既不在 accepted 也不在 rejected，悄悄消失
+    papers = [Paper(paper_id=str(i), title=f"P{i}", authors=["A"], source="arXiv") for i in range(25)]
+    ok = _mock_llm({"results": [{"id": str(i), "score": 8, "reason": "r", "tldr": "t"} for i in range(20, 25)]})
+
+    calls = {"n": 0}
+    async def create(**kwargs):
+        calls["n"] += 1
+        if "ID: 0\n" in kwargs["messages"][0]["content"]:  # 第一批（0-19）始终失败
+            raise RuntimeError("upstream timeout")
+        return ok
+
+    with patch("services.llm_service.AsyncOpenAI") as MockClient:
+        MockClient.return_value.chat.completions.create = create
+        accepted, rejected = await validate_papers(papers, "q", "sk-fake-key")
+
+    assert len(accepted) + len(rejected) == 25
+    assert {p.paper_id for p in accepted} >= {str(i) for i in range(20)}  # 失败批次原样保留
+    assert calls["n"] == 3  # 失败批次重试了一次
+
+
+def test_rank_accepted_sorts_by_score_before_truncation():
+    # 回归：以前先按数据源合并顺序截取前 N 篇再排序，后面数据源的高分论文会被先截掉
+    papers = [
+        Paper(paper_id="a", title="A", authors=[], source="OpenAlex", relevance_score=5),
+        Paper(paper_id="unscored", title="U", authors=[], source="OpenAlex"),
+        Paper(paper_id="b", title="B", authors=[], source="CrossRef", relevance_score=9),
+        Paper(paper_id="c", title="C", authors=[], source="CrossRef", relevance_score=5),
+    ]
+    assert [p.paper_id for p in rank_accepted(papers)] == ["b", "a", "c", "unscored"]
+    assert [p.paper_id for p in rank_accepted(papers)[:1]] == ["b"]

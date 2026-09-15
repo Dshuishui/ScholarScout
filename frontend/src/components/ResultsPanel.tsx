@@ -779,6 +779,7 @@ const addKeyword = () => {
             {searchDateRange && (
               <span className="text-[11px] text-gray-400 tabular-nums">
                 {(() => {
+                  if (!searchDateRange.from && !searchDateRange.to) return '不限年份'
                   const from = searchDateRange.from?.slice(0, 4) ?? '…'
                   const to = searchDateRange.to?.slice(0, 4) ?? String(new Date().getFullYear())
                   return from === to ? `${from} 年` : `${from}–${to} 年`

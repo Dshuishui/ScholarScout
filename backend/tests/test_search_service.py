@@ -171,3 +171,67 @@ async def test_google_scholar_without_serpapi_key_returns_fast(monkeypatch):
     t = time.monotonic()
     assert await s._search_google_scholar(ParsedQuery(keywords=["raft"]), 5) == []
     assert time.monotonic() - t < 1
+
+
+# ── 各源查询构造 ──────────────────────────────────────────────────────────────
+
+def test_quoted_or_quotes_phrases_only():
+    from services.search_service import _quoted_or
+    assert _quoted_or(["latent diffusion model", "LoRA", ' "quoted" term ']) == \
+        '"latent diffusion model" OR LoRA OR "quoted term"'
+
+
+async def _capture_params(monkeypatch, fn, parsed):
+    """调用某个数据源函数，返回它请求时带的 params（不真正联网）。"""
+    from services import search_service as s
+    captured = {}
+
+    async def fake_get(client, url, **kwargs):
+        captured.update(kwargs.get("params", {}))
+        raise RuntimeError("stop after capturing")
+
+    class DummyClient:  # 不依赖本机代理等环境变量
+        def __init__(self, *a, **kw): pass
+        async def __aenter__(self): return self
+        async def __aexit__(self, *a): return False
+
+    monkeypatch.setattr(s.httpx, "AsyncClient", DummyClient)
+    monkeypatch.setattr(s, "_get_with_retry", fake_get)
+    assert await fn(parsed, 10) == []
+    return captured
+
+
+async def test_openalex_uses_boolean_or(monkeypatch):
+    from services import search_service as s
+    p = await _capture_params(monkeypatch, s._search_openalex,
+                              ParsedQuery(keywords=["latent diffusion model", "image synthesis"]))
+    assert p["search"] == '"latent diffusion model" OR "image synthesis"'
+
+
+async def test_arxiv_sorts_by_relevance_even_with_date(monkeypatch):
+    from services import search_service as s
+    p = await _capture_params(monkeypatch, s._search_arxiv,
+                              ParsedQuery(keywords=["raft"], date_from="2021-01-01"))
+    assert p["sortBy"] == "relevance"
+    assert "submittedDate:[20210101000000 TO *]" in p["search_query"]
+
+
+async def test_pubmed_sorts_by_relevance(monkeypatch):
+    from services import search_service as s
+    p = await _capture_params(monkeypatch, s._search_pubmed, ParsedQuery(keywords=["semaglutide", "obesity"]))
+    assert p["sort"] == "relevance"
+
+
+async def test_inspire_or_query_with_default_relevance_sort(monkeypatch):
+    from services import search_service as s
+    p = await _capture_params(monkeypatch, s._search_inspire,
+                              ParsedQuery(keywords=["gravitational waves", "LIGO"], date_from="2015-01-01"))
+    assert p["q"] == '("gravitational waves" or "LIGO") AND date>2015'
+    assert "sort" not in p
+
+
+async def test_nasa_ads_sorts_by_score(monkeypatch):
+    from services import search_service as s
+    monkeypatch.setattr(s, "NASA_ADS_API_KEY", "k")
+    p = await _capture_params(monkeypatch, s._search_nasa_ads, ParsedQuery(keywords=["exoplanet"]))
+    assert p["sort"] == "score desc"

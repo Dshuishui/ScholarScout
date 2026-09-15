@@ -142,7 +142,7 @@ Diffusion models for medical image segmentation, last two years
 Reinforcement learning for robot control, top-venue papers only
 ```
 
-> Default time window is the last 5 years when no date is specified.
+> No year limit is applied unless the query mentions one (e.g. "after 2023", "last two years").
 
 ---
 
