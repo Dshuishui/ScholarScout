@@ -14,11 +14,12 @@ import { useAccess } from '../hooks/useAccess'
 import { useBackToClose } from '../hooks/useBackToClose'
 import { track } from '../lib/analytics'
 import { UserMenu } from './UserMenu'
-import { SavedPage } from '../pages/SavedPage'
-import { HistoryPage } from '../pages/HistoryPage'
-import { SessionsPage } from '../pages/SessionsPage'
-import { SemanticSearchPanel } from './SemanticSearchPanel'
-import { RagChatPanel } from './RagChatPanel'
+// 二级页面只在打开时加载，首屏只下载搜索页需要的代码
+const SavedPage = lazy(() => import('../pages/SavedPage').then(m => ({ default: m.SavedPage })))
+const HistoryPage = lazy(() => import('../pages/HistoryPage').then(m => ({ default: m.HistoryPage })))
+const SessionsPage = lazy(() => import('../pages/SessionsPage').then(m => ({ default: m.SessionsPage })))
+const SemanticSearchPanel = lazy(() => import('./SemanticSearchPanel').then(m => ({ default: m.SemanticSearchPanel })))
+const RagChatPanel = lazy(() => import('./RagChatPanel').then(m => ({ default: m.RagChatPanel })))
 // react-force-graph-2d 体积较大，仅在打开关系图谱时才加载，避免拖慢首屏
 const PaperGraphPanel = lazy(() => import('./PaperGraphPanel').then(m => ({ default: m.PaperGraphPanel })))
 const SubscriptionsPage = lazy(() => import('../pages/SubscriptionsPage').then(m => ({ default: m.SubscriptionsPage })))
@@ -443,21 +444,23 @@ export function MainLayout() {
       </Suspense>
       {activePage === 'saved' && token && (
         <div className="fixed inset-0 z-40 bg-white">
-          <SavedPage token={token} onClose={() => setActivePage(null)} />
+          <Suspense fallback={null}><SavedPage token={token} onClose={() => setActivePage(null)} /></Suspense>
         </div>
       )}
       {activePage === 'history' && token && (
         <div className="fixed inset-0 z-40 bg-white">
-          <HistoryPage token={token} onClose={() => setActivePage(null)} onOpenChat={handleAnalyzePaper} />
+          <Suspense fallback={null}><HistoryPage token={token} onClose={() => setActivePage(null)} onOpenChat={handleAnalyzePaper} /></Suspense>
         </div>
       )}
       {activePage === 'sessions' && token && (
         <div className="fixed inset-0 z-40 bg-white">
-          <SessionsPage
-            token={token}
-            onClose={() => setActivePage(null)}
-            onLoad={session => { loadSession(session); setActivePage(null) }}
-          />
+          <Suspense fallback={null}>
+            <SessionsPage
+              token={token}
+              onClose={() => setActivePage(null)}
+              onLoad={session => { loadSession(session); setActivePage(null) }}
+            />
+          </Suspense>
         </div>
       )}
       {activePage === 'subscriptions' && token && (
@@ -469,17 +472,19 @@ export function MainLayout() {
       )}
       {activePage === 'semantic' && (
         <div className="fixed inset-0 z-40 bg-white">
-          <SemanticSearchPanel onClose={() => setActivePage(null)} />
+          <Suspense fallback={null}><SemanticSearchPanel onClose={() => setActivePage(null)} /></Suspense>
         </div>
       )}
       {ragPapers && ragPapers.length > 0 && (
         <div className="fixed inset-0 z-40 bg-white">
-          <RagChatPanel
-            papers={ragPapers}
-            apiKey={apiKey}
-            model={model}
-            onClose={() => setRagPapers(null)}
-          />
+          <Suspense fallback={null}>
+            <RagChatPanel
+              papers={ragPapers}
+              apiKey={apiKey}
+              model={model}
+              onClose={() => setRagPapers(null)}
+            />
+          </Suspense>
         </div>
       )}
       {graphPapers && graphPapers.length >= 2 && (

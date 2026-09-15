@@ -524,7 +524,7 @@ export function PaperChatDrawer({ paper, messages, isStreaming, pdfStatus, onSen
                   )}
                 </div>
               </div>
-              <p className="text-[10px] text-gray-300 text-center mt-1.5">Enter 发送 · Shift+Enter 换行 · 拖拽 PDF 到此处上传</p>
+              <p className="hidden sm:block text-[10px] text-gray-300 text-center mt-1.5">Enter 发送 · Shift+Enter 换行 · 拖拽 PDF 到此处上传</p>
             </div>
 
             <input ref={fileInputRef} type="file" accept=".pdf" className="hidden" onChange={handleFileChange} />

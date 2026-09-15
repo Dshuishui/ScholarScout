@@ -168,7 +168,7 @@ export function RagChatPanel({ papers, apiKey, model, onClose }: Props) {
             </button>
           )}
         </div>
-        <p className="text-[11px] text-gray-400 mt-1.5">AI 依据摘要回答，可能存在局限性 · Enter 发送，Shift+Enter 换行</p>
+        <p className="text-[11px] text-gray-400 mt-1.5">AI 依据摘要回答，可能存在局限性<span className="hidden sm:inline"> · Enter 发送，Shift+Enter 换行</span></p>
       </div>
     </div>
   )

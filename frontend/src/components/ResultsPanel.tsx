@@ -1,7 +1,6 @@
 import { useState, useEffect, useMemo, useRef, lazy, Suspense } from 'react'
 import { useAuth } from '../hooks/useAuth'
 import { AuthModal } from './AuthModal'
-import JSZip from 'jszip'
 import type { Paper } from '../types'
 import type { SearchSettings } from '../hooks/useSettings'
 import type { SourceStatus } from '../hooks/useSearch'
@@ -13,6 +12,7 @@ import { getDownloadUrl } from '../api/client'
 import { TrialHint } from './TrialHint'
 import { toast } from './Toast'
 
+const MOBILE_KW_LIMIT = 3
 const ComparePanel = lazy(() => import('./ComparePanel').then(m => ({ default: m.ComparePanel })))
 
 const SOURCE_COLORS: Record<string, string> = {
@@ -228,6 +228,7 @@ export function ResultsPanel({ papers, rejectedPapers = [], isLoading, statusMes
   const [newSubId, setNewSubId] = useState<number | null>(null)
   // 数据源和数量设置：手机上默认折叠，把首屏留给论文列表
   const [showConfig, setShowConfig] = useState(() => typeof window === 'undefined' || window.innerWidth >= 640)
+  const [showAllKeywords, setShowAllKeywords] = useState(false)
   const [showCompare, setShowCompare] = useState(false)
   const [showAuthModal, setShowAuthModal] = useState(false)
   const [showExportModal, setShowExportModal] = useState(false)
@@ -364,7 +365,8 @@ export function ResultsPanel({ papers, rejectedPapers = [], isLoading, statusMes
         : ''
 
       if (chatsHTML) {
-        // 打包成 ZIP
+        // 打包成 ZIP（jszip 按需加载，不占首屏体积）
+        const { default: JSZip } = await import('jszip')
         const zip = new JSZip()
         zip.file('papers.csv', '﻿' + csvContent)
         zip.file('chats.html', chatsHTML)
@@ -514,6 +516,7 @@ const addKeyword = () => {
   const downloadSelected = async () => {
     if (selectedWithPdf.length === 0) return
 
+    const { default: JSZip } = await import('jszip')
     const zip = new JSZip()
     let completed = 0
     const failed: { title: string; authors: string; year: string; url: string; reason: string }[] = []
@@ -755,7 +758,7 @@ const addKeyword = () => {
             {editKeywords.map((kw, i) => (
               <span
                 key={i}
-                className="flex items-center gap-1 bg-indigo-600 text-white text-xs rounded-full px-2.5 py-1 font-medium shadow-sm"
+                className={`${i >= MOBILE_KW_LIMIT && !showAllKeywords ? 'hidden sm:flex' : 'flex'} items-center gap-1 bg-indigo-600 text-white text-xs rounded-full px-2.5 py-1 font-medium shadow-sm`}
               >
                 {kw}
                 <button
@@ -766,6 +769,13 @@ const addKeyword = () => {
                 </button>
               </span>
             ))}
+            {/* 手机上关键词多时只显示前几个，避免把论文列表挤出首屏 */}
+            {editKeywords.length > MOBILE_KW_LIMIT && (
+              <button
+                onClick={() => setShowAllKeywords(v => !v)}
+                className="sm:hidden text-xs text-indigo-600 bg-indigo-50 border border-indigo-200 rounded-full px-2.5 py-1"
+              >{showAllKeywords ? '收起' : `+${editKeywords.length - MOBILE_KW_LIMIT}`}</button>
+            )}
             <input
               value={newKw}
               onChange={e => setNewKw(e.target.value)}

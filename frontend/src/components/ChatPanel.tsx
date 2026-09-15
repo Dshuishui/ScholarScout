@@ -271,7 +271,7 @@ export function ChatPanel({
             className="w-full px-4 pt-3 pb-1 text-base sm:text-sm text-gray-800 placeholder-gray-300 resize-none focus:outline-none bg-transparent leading-relaxed"
           />
           <div className="flex items-center justify-between px-3 pb-2.5">
-            <span className="text-[11px] text-gray-400">Enter 发送 · Shift+Enter 换行</span>
+            <span className="text-[11px] text-gray-400"><span className="hidden sm:inline">Enter 发送 · Shift+Enter 换行</span></span>
             <button
               onClick={handleSend}
               disabled={isLoading || !input.trim()}
