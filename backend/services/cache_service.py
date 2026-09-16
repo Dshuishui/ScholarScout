@@ -1,10 +1,12 @@
 """
-Redis-backed cache for search results.
+搜索结果缓存：配置了 REDIS_URL 用 Redis，否则退化成进程内缓存。
 
-Falls back gracefully to a no-op when REDIS_URL is not configured,
-so the app works without Redis in local development.
+同一个问题重复搜索时结果应当一致。大模型抽关键词本身有随机性，
+命中缓存能让"刚才那次搜索"原样返回，而不是给出一份不一样的结果。
 """
 import json
+import time
+from collections import OrderedDict
 import logging
 import os
 from typing import Optional
@@ -43,16 +45,41 @@ def _cache_key(keywords: list[str], sources: list[str], date_from: str, date_to:
     return f"search:{kw}:{src}:{date_from or ''}:{date_to or ''}"
 
 
+# 没配 Redis 时退化成进程内缓存：同样的关键词短时间内重复搜索，结果保持一致，
+# 也省掉一次外部 API 调用。进程重启即清空，容量有限，只做"同一个人连着搜两次"这种场景。
+_MEMORY_CACHE_MAX = 64
+_memory_cache: "OrderedDict[str, tuple[float, list[dict]]]" = OrderedDict()
+
+
+def _memory_get(key: str) -> Optional[list[dict]]:
+    item = _memory_cache.get(key)
+    if not item:
+        return None
+    expires_at, value = item
+    if expires_at < time.time():
+        _memory_cache.pop(key, None)
+        return None
+    _memory_cache.move_to_end(key)
+    return value
+
+
+def _memory_set(key: str, value: list[dict], ttl: int) -> None:
+    _memory_cache[key] = (time.time() + ttl, value)
+    _memory_cache.move_to_end(key)
+    while len(_memory_cache) > _MEMORY_CACHE_MAX:
+        _memory_cache.popitem(last=False)
+
+
 async def get_cached_search(
     keywords: list[str],
     sources: list[str],
     date_from: str = "",
     date_to: str = "",
 ) -> Optional[list[dict]]:
-    """Return cached search results, or None on cache miss / Redis unavailable."""
+    """Return cached search results, or None on cache miss."""
     r = _get_redis()
     if r is None:
-        return None
+        return _memory_get(_cache_key(keywords, sources, date_from, date_to))
     try:
         raw = await r.get(_cache_key(keywords, sources, date_from, date_to))
         if raw:
@@ -71,9 +98,10 @@ async def cache_search(
     date_to: str = "",
     ttl: int = SEARCH_TTL,
 ) -> None:
-    """Store search results in Redis with TTL."""
+    """Store search results (Redis when configured, otherwise in-process)."""
     r = _get_redis()
     if r is None:
+        _memory_set(_cache_key(keywords, sources, date_from, date_to), results, ttl)
         return
     try:
         key = _cache_key(keywords, sources, date_from, date_to)
@@ -92,6 +120,7 @@ async def invalidate_search(
     """Remove a cached entry (e.g., after re-search)."""
     r = _get_redis()
     if r is None:
+        _memory_cache.pop(_cache_key(keywords, sources, date_from, date_to), None)
         return
     try:
         await r.delete(_cache_key(keywords, sources, date_from, date_to))

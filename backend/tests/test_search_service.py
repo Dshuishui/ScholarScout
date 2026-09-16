@@ -460,3 +460,27 @@ def test_configured_key_enables_source(monkeypatch):
     from services import search_service as s
     monkeypatch.setattr(s.config, "CORE_API_KEY", "key-123")
     assert "CORE" in s.available_sources()
+
+
+# ── 无 Redis 时的进程内缓存 ───────────────────────────────────────────────────
+
+async def test_search_cache_works_without_redis():
+    """线上没配 Redis：同样的关键词重复搜索也应该拿到同一份结果，而不是重新搜一遍。"""
+    from services import cache_service as cs
+    cs._memory_cache.clear()
+    args = (["graph neural network"], ["OpenAlex"], "", "")
+    assert await cs.get_cached_search(*args) is None
+    await cs.cache_search(["graph neural network"], ["OpenAlex"], [{"paper_id": "p1"}], "", "")
+    assert await cs.get_cached_search(*args) == [{"paper_id": "p1"}]
+    await cs.invalidate_search(*args)
+    assert await cs.get_cached_search(*args) is None
+
+
+async def test_search_cache_respects_ttl_and_capacity():
+    from services import cache_service as cs
+    cs._memory_cache.clear()
+    await cs.cache_search(["a"], ["OpenAlex"], [{"paper_id": "x"}], "", "", ttl=-1)
+    assert await cs.get_cached_search(["a"], ["OpenAlex"], "", "") is None  # 过期即失效
+    for i in range(cs._MEMORY_CACHE_MAX + 5):
+        await cs.cache_search([f"kw{i}"], ["OpenAlex"], [{"paper_id": str(i)}], "", "")
+    assert len(cs._memory_cache) <= cs._MEMORY_CACHE_MAX  # 有容量上限，不会无限增长

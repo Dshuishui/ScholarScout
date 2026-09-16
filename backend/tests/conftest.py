@@ -51,6 +51,10 @@ def reset_rate_limits():
     feedback_router._reaction_ips.clear()
     import routers.search as search_router
     search_router._trial_parse_attempts.clear()
+    # 进程内缓存也要清，否则用例之间会相互影响
+    from services import cache_service, llm_service
+    cache_service._memory_cache.clear()
+    llm_service._parse_cache.clear()
     import routers.subscriptions as subs_router
     subs_router._create_attempts.clear()
     subs_router._refresh_attempts.clear()

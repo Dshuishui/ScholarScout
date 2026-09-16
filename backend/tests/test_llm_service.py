@@ -156,3 +156,48 @@ async def test_parse_query_returns_domains():
         }))
         result = await parse_query("深度学习用于医学影像", "sk-fake-key")
     assert result.domains == ["cs", "med"]
+
+
+# ── 同一个问题给同样的结果 ────────────────────────────────────────────────────
+
+async def test_parse_query_is_cached_per_question(monkeypatch):
+    """大模型抽关键词有随机性：同一句话短时间内重复搜索要复用上次的解析结果。"""
+    from services import llm_service as llm
+    llm._parse_cache.clear()
+
+    calls = []
+
+    class FakeResponse:
+        def __init__(self, content):
+            self.choices = [type("C", (), {"message": type("M", (), {"content": content})()})()]
+
+    class FakeClient:
+        def __init__(self, *a, **kw): pass
+        @property
+        def chat(self): return self
+        @property
+        def completions(self): return self
+        async def create(self, **kw):
+            calls.append(kw)
+            return FakeResponse('{"keywords": ["graph neural network"], "domains": ["cs"]}')
+
+    monkeypatch.setattr(llm, "AsyncOpenAI", FakeClient)
+    first = await llm.parse_query("图神经网络用于药物设计", "sk-x")
+    second = await llm.parse_query("图神经网络用于药物设计", "sk-x")
+    assert first.keywords == second.keywords
+    assert len(calls) == 1, "第二次应当直接用缓存"
+    assert calls[0]["temperature"] == 0
+
+    # 带上下文的追问不走缓存（上下文会改变结果）
+    await llm.parse_query("图神经网络用于药物设计", "sk-x", [{"role": "user", "content": "只要综述"}])
+    assert len(calls) == 2
+    llm._parse_cache.clear()
+
+
+async def test_parse_cache_expires(monkeypatch):
+    from services import llm_service as llm
+    llm._parse_cache.clear()
+    monkeypatch.setattr(llm, "_PARSE_CACHE_TTL", -1)  # 立即过期
+    from models import ParsedQuery
+    llm._parse_cache_set(("q", "m"), ParsedQuery(keywords=["a"]))
+    assert llm._parse_cache_get(("q", "m")) is None

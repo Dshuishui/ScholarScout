@@ -1,4 +1,6 @@
 import json
+from collections import OrderedDict
+import time
 import asyncio
 import logging
 import math
@@ -59,6 +61,37 @@ VALIDATE_PROMPT = """用户的原始需求：{query}
 _REASONING_MODELS = {"deepseek-reasoner"}
 
 
+# 同一个问题要给出同样的结果：temperature 0.1 时抽出来的关键词每次都有出入
+# （实测同一句话解析三次，6 个关键词里有 2~3 个不同，连带识别出的学科也不同，
+# 于是搜的数据源、拿到的候选池、最终结果都不一样）。
+TEMPERATURE = 0
+
+# 即便 temperature=0，大模型也不保证每次逐字相同。同一句话在短时间内重复搜索时，
+# 直接复用上次解析出的关键词，保证"同样的问题给同样的结果"。带上下文的追问不缓存。
+_PARSE_CACHE_TTL = 6 * 3600
+_PARSE_CACHE_MAX = 256
+_parse_cache: "OrderedDict[tuple[str, str], tuple[float, ParsedQuery]]" = OrderedDict()
+
+
+def _parse_cache_get(key: tuple[str, str]) -> ParsedQuery | None:
+    item = _parse_cache.get(key)
+    if not item:
+        return None
+    expires_at, parsed = item
+    if expires_at < time.time():
+        _parse_cache.pop(key, None)
+        return None
+    _parse_cache.move_to_end(key)
+    return parsed.model_copy(deep=True)
+
+
+def _parse_cache_set(key: tuple[str, str], parsed: ParsedQuery) -> None:
+    _parse_cache[key] = (time.time() + _PARSE_CACHE_TTL, parsed.model_copy(deep=True))
+    _parse_cache.move_to_end(key)
+    while len(_parse_cache) > _PARSE_CACHE_MAX:
+        _parse_cache.popitem(last=False)
+
+
 def _json_model(model: str) -> str:
     """deepseek-reasoner 不支持 json_object 格式，降级到默认模型。"""
     return DEEPSEEK_MODEL if model in _REASONING_MODELS else model
@@ -76,12 +109,17 @@ async def classify_intent(user_query: str, api_key: str, history: list[dict] = [
         model=_json_model(model),
         messages=messages,
         response_format={"type": "json_object"},
-        temperature=0.1,
+        temperature=TEMPERATURE,
     )
     return json.loads(response.choices[0].message.content)
 
 
 async def parse_query(user_query: str, api_key: str, history: list[dict] = [], model: str = DEEPSEEK_MODEL) -> ParsedQuery:
+    cache_key = (user_query.strip(), model)
+    if not history:
+        cached = _parse_cache_get(cache_key)
+        if cached is not None:
+            return cached
     client = AsyncOpenAI(api_key=api_key, base_url=DEEPSEEK_BASE_URL)
     messages = (
         [{"role": "system", "content": PARSE_SYSTEM}]
@@ -92,11 +130,14 @@ async def parse_query(user_query: str, api_key: str, history: list[dict] = [], m
         model=_json_model(model),
         messages=messages,
         response_format={"type": "json_object"},
-        temperature=0.1,
+        temperature=TEMPERATURE,
     )
     data = json.loads(response.choices[0].message.content)
     # 用户没说时间就不限年份：以前默认只搜近 5 年，Transformer、ResNet 这类奠基论文会被直接排除
-    return ParsedQuery(**data)
+    parsed = ParsedQuery(**data)
+    if not history:
+        _parse_cache_set(cache_key, parsed)
+    return parsed
 
 
 async def validate_papers(
@@ -120,7 +161,7 @@ async def validate_papers(
                 query=user_query, papers_text=papers_text
             )}],
             response_format={"type": "json_object"},
-            temperature=0.1,
+            temperature=TEMPERATURE,
         )
         raw = json.loads(response.choices[0].message.content)
         verdicts = raw if isinstance(raw, list) else raw.get("results", raw.get("papers", list(raw.values())[0] if raw else []))
