@@ -312,11 +312,14 @@ async def search(
                 parsed.date_from or "", parsed.date_to or "",
             )
             if cached_papers:
+                # 命中缓存不产生任何大模型调用，不该扣用户的免费次数
+                await _refund(charge)
                 yield sse("cache_hit", {"message": f"已从缓存加载 {len(cached_papers)} 篇论文"})
                 yield sse("done", {
                     "papers": cached_papers,
                     "rejected_papers": [],
                     "message": f"从缓存加载 {len(cached_papers)} 篇相关论文。",
+                    **_refund_note(charge),
                 })
                 return
 

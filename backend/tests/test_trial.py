@@ -260,3 +260,13 @@ async def test_sources_endpoint_lists_only_usable_sources(client, monkeypatch):
     names = (await client.get("/api/sources")).json()["sources"]
     assert "OpenAlex" in names
     assert "CORE" not in names and "Google Scholar" not in names
+
+
+async def test_cache_hit_does_not_consume_a_free_search(client, db_session, trial, monkeypatch):
+    """重复搜同一个问题命中缓存时没有任何大模型调用，不应该再扣一次免费次数。"""
+    import routers.search as sr
+    monkeypatch.setattr(sr, "get_cached_search", AsyncMock(return_value=[_paper(1).model_dump()]))
+    r = await _search(client)
+    assert "event: cache_hit" in r.text
+    assert '"refunded": true, "remaining": 2' in r.text
+    assert await _usage_count(db_session) == 0
