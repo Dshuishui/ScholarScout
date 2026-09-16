@@ -8,6 +8,7 @@ import feedparser
 import httpx
 from models import Paper, ParsedQuery
 from services.health_monitor import record_source_result
+import config
 from config import (
     CORE_API_KEY, NASA_ADS_API_KEY, SERPAPI_KEY, OPENALEX_API_KEY, SEMANTIC_SCHOLAR_HEADERS, POLITE_EMAIL,
 )
@@ -921,9 +922,24 @@ def _source_matches_domains(name: str, domains: list[str] | None) -> bool:
     return covered is None or bool(covered & set(domains))
 
 
+# 这些源没有 key 就一定返回 0 篇：不查，也不在界面上让用户勾选
+_SOURCE_KEY_REQUIRED = {
+    "CORE":           "CORE_API_KEY",
+    "NASA ADS":       "NASA_ADS_API_KEY",
+    "Google Scholar": "SERPAPI_KEY",
+}
+
+
+def available_sources() -> list[str]:
+    """当前配置下真正可用的数据源。读 config 模块属性而非导入的常量，便于测试替换。"""
+    return [n for n in _SOURCE_FUNCS
+            if not _SOURCE_KEY_REQUIRED.get(n) or getattr(config, _SOURCE_KEY_REQUIRED[n], "")]
+
+
 def get_source_names(sources: list[str] | None = None, domains: list[str] | None = None) -> list[str]:
     """Return the list of source names that will actually be searched."""
-    names = list(_SOURCE_FUNCS.keys()) if not sources else [k for k in _SOURCE_FUNCS if k in sources]
+    usable = available_sources()
+    names = usable if not sources else [k for k in usable if k in sources]
     routed = [n for n in names if _source_matches_domains(n, domains)]
     # 用户手动只勾了专科库（比如只勾 PubMed）时，按领域过滤会一个都不剩：尊重用户的选择
     return routed or names
@@ -933,7 +949,7 @@ async def search_all_sources(
     parsed: ParsedQuery,
     limit_per_source: int = 10,
     sources: list[str] | None = None,
-    on_source_done=None,  # async callable(name: str, count: int) | None
+    on_source_done=None,  # async callable(name: str, count: int, papers: list[Paper]) | None
 ) -> list[Paper]:
     funcs = {name: _SOURCE_FUNCS[name] for name in get_source_names(sources, parsed.domains)}
 
@@ -941,7 +957,8 @@ async def search_all_sources(
         papers = await fn(parsed, limit_per_source)
         record_source_result(name, len(papers))
         if on_source_done:
-            await on_source_done(name, len(papers))
+            # 把结果一并交出去：前端可以边搜边展示，不用等全部源都回来
+            await on_source_done(name, len(papers), [_sanitize_paper(p) for p in papers])
         return papers
 
     results = await asyncio.gather(*(run_source(name, fn) for name, fn in funcs.items()))

@@ -24,7 +24,9 @@ from dependencies import get_optional_user
 from models import SearchRequest, ParseRequest, ParsedQuery, ValidateKeyRequest
 from models_db import User
 from services.llm_service import classify_intent, parse_query, validate_papers, rank_accepted
-from services.search_service import search_all_sources, enhance_with_unpaywall, get_source_names
+from services.search_service import (
+    search_all_sources, enhance_with_unpaywall, get_source_names, available_sources, deduplicate,
+)
 from services.download_service import fetch_pdf_with_fallback
 from services.pdf_finder_service import find_pdfs_with_kimi, generate_fallback_links
 from services.cache_service import get_cached_search, cache_search
@@ -40,7 +42,8 @@ from config import (
 router = APIRouter()
 
 TRIAL_PARSE_PER_HOUR = 20  # 试用用户（系统 Key 代付）每小时最多解析次数，登录用户按账号、访客按 IP 计
-TRIAL_DEVICE_HEADER = "X-Trial-Device"  # 前端在 localStorage 生成的随机设备标识
+TRIAL_DEVICE_HEADER = "X-Trial-Device"
+PREVIEW_LIMIT = 20  # 搜索过程中先展示的原始结果条数  # 前端在 localStorage 生成的随机设备标识
 _trial_parse_attempts: dict[str, list[float]] = defaultdict(list)
 
 
@@ -326,8 +329,11 @@ async def search(
 
             # Collect per-source completion events via queue
             source_queue: asyncio.Queue = asyncio.Queue()
+            collected: list = []          # 已回来的原始论文（未去重）
+            preview_sent = 0              # 上次推给前端的预览条数
 
-            async def on_source_done(name: str, count: int) -> None:
+            async def on_source_done(name: str, count: int, papers: list) -> None:
+                collected.extend(papers)
                 await source_queue.put({"source": name, "count": count})
 
             search_task = asyncio.create_task(
@@ -335,17 +341,29 @@ async def search(
                                    sources=request.sources, on_source_done=on_source_done)
             )
 
+            def preview_payload() -> dict:
+                """搜索还没结束时先给前端一批结果，避免用户对着进度条干等 1 分钟。
+                这批是未经 AI 筛选的原始结果，按引用数排，最多 PREVIEW_LIMIT 篇。"""
+                merged = deduplicate(collected)
+                merged.sort(key=lambda p: p.citations, reverse=True)
+                return {"papers": [p.model_dump() for p in merged[:PREVIEW_LIMIT]], "total": len(merged)}
+
             # Drain progress events while search runs
             while not search_task.done():
                 try:
                     item = source_queue.get_nowait()
                     yield sse("source_done", item)
+                    if len(collected) > preview_sent:
+                        preview_sent = len(collected)
+                        yield sse("partial", preview_payload())
                 except asyncio.QueueEmpty:
                     await asyncio.sleep(0.05)
 
             # Drain any remaining events
             while not source_queue.empty():
                 yield sse("source_done", source_queue.get_nowait())
+            if len(collected) > preview_sent:
+                yield sse("partial", preview_payload())
 
             papers = await search_task
             if not papers:
@@ -451,6 +469,12 @@ async def validate_key(request: ValidateKeyRequest):
     except Exception as e:
         logger.warning("validate-key error: %s", e)
     return {"valid": False, "reason": "Key 无效，请检查后重新输入"}
+
+
+@router.get("/sources")
+async def sources():
+    """界面上可勾选的数据源。没配 key 的源（CORE / NASA ADS / Google Scholar）永远返回 0 篇，不列出来。"""
+    return {"sources": available_sources()}
 
 
 @router.get("/health")

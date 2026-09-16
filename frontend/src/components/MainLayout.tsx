@@ -33,7 +33,7 @@ const MAX_PDF_UPLOAD_MB = 50
 
 export function MainLayout() {
   const { apiKey, mode, freeRemaining, openGate } = useAccess()
-  const { settings, updateSettings } = useSettings()
+  const { settings, updateSettings, availableSources } = useSettings()
   const { lastMessage, status: wsStatus } = useWebSocket()
   const { model } = useModel()
   const { token, isLoggedIn } = useAuth()
@@ -46,7 +46,7 @@ export function MainLayout() {
   const [mobileTab, setMobileTab] = useState<'search' | 'results'>('search')
 
   const {
-    messages, papers, rejectedPapers, isLoading, statusMessage, sourceStatuses,
+    messages, papers, previewPapers, previewTotal, rejectedPapers, isLoading, statusMessage, sourceStatuses,
     search, confirmedKeywords, reSearch,
     hasSearchError, history, removeHistory, searchFromHistory, searchDateRange,
     currentSessionId, loadSession,
@@ -344,11 +344,14 @@ export function MainLayout() {
         <div className={`${isMobile ? (mobileTab === 'results' ? 'flex-1 min-w-0' : 'hidden') : 'flex-1 min-w-0'}`}>
           <ResultsPanel
             papers={papers}
+            previewPapers={previewPapers}
+            previewTotal={previewTotal}
             rejectedPapers={rejectedPapers}
             isLoading={isLoading}
             statusMessage={statusMessage}
             sourceStatuses={sourceStatuses}
             settings={settings}
+            availableSources={availableSources}
             onSettingsChange={updateSettings}
             onReSearch={reSearch}
             confirmedKeywords={confirmedKeywords}

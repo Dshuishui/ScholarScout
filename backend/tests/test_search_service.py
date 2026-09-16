@@ -299,8 +299,8 @@ def test_interdisciplinary_query_keeps_all_involved_sources():
 
 
 def test_unknown_or_empty_domains_search_everything():
-    from services.search_service import get_source_names, _SOURCE_FUNCS
-    everything = list(_SOURCE_FUNCS)
+    from services.search_service import get_source_names, available_sources
+    everything = available_sources()
     assert get_source_names(None, []) == everything
     assert get_source_names(None, None) == everything
     assert get_source_names(None, ["cs", "something-new"]) == everything  # 含无法识别的值就不过滤
@@ -441,3 +441,22 @@ async def test_openalex_semantic_filters_dates_client_side(monkeypatch):
     sent.clear()
     await s._openalex_request(Client(), "search", "diffusion", parsed, 50)
     assert sent["filter"] == "publication_date:>2023-01-01"  # 关键词检索仍然交给服务端筛
+
+
+# ── 没配 key 的数据源 ─────────────────────────────────────────────────────────
+
+def test_sources_without_key_are_not_searched(monkeypatch):
+    """CORE / NASA ADS / Google Scholar 没 key 就永远返回 0 篇，不该浪费一次调用。"""
+    from services import search_service as s
+    for attr in ("CORE_API_KEY", "NASA_ADS_API_KEY", "SERPAPI_KEY"):
+        monkeypatch.setattr(s.config, attr, "")
+    names = s.available_sources()
+    assert {"CORE", "NASA ADS", "Google Scholar"}.isdisjoint(names)
+    assert "OpenAlex" in names and "arXiv" in names
+    assert "CORE" not in s.get_source_names(["CORE", "OpenAlex"], None)
+
+
+def test_configured_key_enables_source(monkeypatch):
+    from services import search_service as s
+    monkeypatch.setattr(s.config, "CORE_API_KEY", "key-123")
+    assert "CORE" in s.available_sources()

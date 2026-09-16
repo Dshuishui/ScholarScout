@@ -53,6 +53,11 @@ interface Props {
   hasSearchError?: boolean
   searchDateRange?: { from: string | null; to: string | null } | null
   sessionId?: number | null
+  /** 搜索进行中的原始结果（未经 AI 筛选） */
+  /** 后端报告的可用数据源（没配 key 的不在其中） */
+  availableSources?: string[]
+  previewPapers?: Paper[]
+  previewTotal?: number
   onOpenRag?: (papers: Paper[]) => void
   /** 需要用户自己 Key 的功能：没有 Key 时弹出引导并返回 false */
   onRequireKey?: (feature: string) => boolean
@@ -191,7 +196,7 @@ function Pagination({ current, total, onChange }: {
   )
 }
 
-export function ResultsPanel({ papers, rejectedPapers = [], isLoading, statusMessage, sourceStatuses = {}, settings, onSettingsChange, onReSearch, confirmedKeywords, onAnalyzePaper, onExampleSearch, apiKey, getMessages, hasSearchError = false, searchDateRange, sessionId, onOpenRag, onOpenGraph, onRequireKey }: Props) {
+export function ResultsPanel({ papers, availableSources, previewPapers = [], previewTotal = 0, rejectedPapers = [], isLoading, statusMessage, sourceStatuses = {}, settings, onSettingsChange, onReSearch, confirmedKeywords, onAnalyzePaper, onExampleSearch, apiKey, getMessages, hasSearchError = false, searchDateRange, sessionId, onOpenRag, onOpenGraph, onRequireKey }: Props) {
   const [currentPage, setCurrentPage] = useState(1)
   const [showBackToTop, setShowBackToTop] = useState(false)
   const listScrollRef = useRef<HTMLDivElement>(null)
@@ -228,6 +233,7 @@ export function ResultsPanel({ papers, rejectedPapers = [], isLoading, statusMes
   const [newSubId, setNewSubId] = useState<number | null>(null)
   // 数据源和数量设置：手机上默认折叠，把首屏留给论文列表
   const [showConfig, setShowConfig] = useState(() => typeof window === 'undefined' || window.innerWidth >= 640)
+  const sourceOptions: readonly string[] = availableSources?.length ? availableSources : ALL_SOURCES
   const [showAllKeywords, setShowAllKeywords] = useState(false)
   const [showCompare, setShowCompare] = useState(false)
   const [showAuthModal, setShowAuthModal] = useState(false)
@@ -854,7 +860,7 @@ const addKeyword = () => {
           className={`w-full flex items-center justify-between gap-2 text-xs text-gray-500 hover:text-gray-700 ${showConfig ? 'mb-2 sm:hidden' : ''}`}
         >
           <span className="truncate">
-            搜索设置 · {(settings.selectedSources ?? ALL_SOURCES).length} 个数据源 · 每源 {settings.limitPerSource} 篇
+            搜索设置 · {(settings.selectedSources ?? sourceOptions).length} 个数据源 · 每源 {settings.limitPerSource} 篇
           </span>
           <svg className={`w-3.5 h-3.5 flex-shrink-0 transition-transform ${showConfig ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
@@ -867,7 +873,7 @@ const addKeyword = () => {
             <div className="w-1 h-3.5 rounded-full bg-gray-200" />
             <span className="text-[11px] font-semibold text-gray-400 uppercase tracking-widest">搜索源</span>
             <button
-              onClick={() => onSettingsChange({ selectedSources: [...ALL_SOURCES] })}
+              onClick={() => onSettingsChange({ selectedSources: [...sourceOptions] })}
               className="text-xs text-indigo-500 hover:text-indigo-700 transition-colors ml-1"
             >全选</button>
             <button
@@ -876,16 +882,16 @@ const addKeyword = () => {
             >清空</button>
           </div>
           <div className="flex flex-wrap gap-x-4 gap-y-1.5">
-            {ALL_SOURCES.map(source => (
+            {sourceOptions.map(source => (
               <label key={source} className="flex items-center gap-1.5 cursor-pointer select-none group">
                 <input
                   type="checkbox"
-                  checked={(settings.selectedSources ?? ALL_SOURCES).includes(source)}
+                  checked={(settings.selectedSources ?? sourceOptions).includes(source)}
                   onChange={() => toggleSource(source)}
                   className="w-3.5 h-3.5 rounded accent-indigo-600 cursor-pointer"
                 />
                 <span className={`text-xs font-medium transition-colors ${
-                  (settings.selectedSources ?? ALL_SOURCES).includes(source)
+                  (settings.selectedSources ?? sourceOptions).includes(source)
                     ? (SOURCE_COLORS[source] ?? 'text-gray-700')
                     : 'text-gray-300'
                 }`}>
@@ -1099,9 +1105,24 @@ const addKeyword = () => {
                 <p className="text-sm text-gray-600">{statusMessage}</p>
               </div>
             ) : null}
-            {Array.from({ length: 4 }).map((_, i) => (
-              <PaperCardSkeleton key={i} index={i} />
-            ))}
+            {/* 已经有源返回结果时，先展示原始结果，不再让用户对着骨架屏等 */}
+            {previewPapers.length > 0 ? (
+              <>
+                <div className="flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2">
+                  <div className="w-3.5 h-3.5 rounded-full border-2 border-amber-400 border-t-transparent animate-spin flex-shrink-0" />
+                  <p className="text-xs text-amber-800 leading-snug">
+                    已找到 {previewTotal} 篇，先显示引用最高的 {previewPapers.length} 篇；AI 正在逐篇判断相关性，结果稍后替换
+                  </p>
+                </div>
+                {previewPapers.map(paper => (
+                  <PaperCard key={paper.paper_id} paper={paper} compact={density === 'compact'} />
+                ))}
+              </>
+            ) : (
+              Array.from({ length: 4 }).map((_, i) => (
+                <PaperCardSkeleton key={i} index={i} />
+              ))
+            )}
           </div>
         )}
 

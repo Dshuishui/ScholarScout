@@ -226,3 +226,37 @@ async def test_system_key_failure_is_not_blamed_on_visitor(client, trial, monkey
     headers = {"X-Trial-Device": DEVICE_A, "X-Real-IP": "1.1.1.1"}
     r = await client.post("/api/parse", json={"query": "hello"}, headers=headers)
     assert r.status_code == 503 and r.json()["detail"]["code"] == "trial_unavailable"
+
+
+# ── 边搜边出结果 ──────────────────────────────────────────────────────────────
+
+async def test_search_streams_partial_results_before_validation(client, trial, monkeypatch):
+    """搜索要 1 分钟左右，用户不应该一直盯着进度条：每个源回来就先推一批原始结果。"""
+    import asyncio
+    import routers.search as sr
+    from services import search_service as real
+
+    async def fake_search_all(parsed, limit_per_source=50, sources=None, on_source_done=None):
+        await on_source_done("OpenAlex", 2, [_paper(1), _paper(2)])
+        await asyncio.sleep(0.2)  # 给 SSE 循环机会把预览推出去
+        await on_source_done("CrossRef", 1, [_paper(3)])
+        await asyncio.sleep(0.2)
+        return real.deduplicate([_paper(1), _paper(2), _paper(3)])
+
+    monkeypatch.setattr(sr, "search_all_sources", fake_search_all)
+    monkeypatch.setattr(sr, "validate_papers", AsyncMock(return_value=([_paper(1)], [])))
+    r = await _search(client)
+    assert r.status_code == 200
+    partials = [line for line in r.text.splitlines() if line.startswith("event: partial")]
+    assert partials, "没有推送任何预览结果"
+    assert '"total": 3' in r.text        # 预览里累计的是去重后的篇数
+    assert "event: done" in r.text       # 最终仍然返回 AI 筛选后的结果
+
+
+async def test_sources_endpoint_lists_only_usable_sources(client, monkeypatch):
+    from services import search_service as s
+    for attr in ("CORE_API_KEY", "NASA_ADS_API_KEY", "SERPAPI_KEY"):
+        monkeypatch.setattr(s.config, attr, "")
+    names = (await client.get("/api/sources")).json()["sources"]
+    assert "OpenAlex" in names
+    assert "CORE" not in names and "Google Scholar" not in names

@@ -38,6 +38,8 @@ export function useSearch(apiKey: string, settings: SearchSettings, model?: stri
   const [lastConfirmed, setLastConfirmed] = useState<PendingSearch | null>(null)
   const [sourceStatuses, setSourceStatuses] = useState<Record<string, SourceStatus>>({})
   const [searchDateRange, setSearchDateRange] = useState<{ from: string | null; to: string | null } | null>(null)
+  const [previewPapers, setPreviewPapers] = useState<Paper[]>([])
+  const [previewTotal, setPreviewTotal] = useState(0)
   const [hasSearchError, setHasSearchError] = useState(false)
   const [currentSessionId, setCurrentSessionId] = useState<number | null>(null)
   const { history, addHistory, removeHistory } = useSearchHistory()
@@ -84,6 +86,19 @@ export function useSearch(apiKey: string, settings: SearchSettings, model?: stri
     return '网络错误，请检查网络后重试'
   }
 
+  /** 搜索中断（AI 筛选失败、连接断开）时，把已经搜到的原始结果留给用户，而不是清空页面 */
+  const keepPreviewAsResults = (): boolean => {
+    let kept = false
+    setPreviewPapers(prev => {
+      if (prev.length) {
+        setPapers(cur => (cur.length ? cur : prev))
+        kept = prev.length > 0
+      }
+      return prev
+    })
+    return kept
+  }
+
   const updateAssistant = (assistantId: string, patch: Partial<Message>) =>
     setMessages(prev => prev.map(m => m.id === assistantId ? { ...m, ...patch } : m))
 
@@ -106,9 +121,14 @@ export function useSearch(apiKey: string, settings: SearchSettings, model?: stri
       )) {
         if (event.type === 'quota') {
           applyRemaining(event.kind, event.remaining)
+        } else if (event.type === 'partial') {
+          setPreviewPapers(event.papers)
+          setPreviewTotal(event.total)
         } else if (event.type === 'search_start') {
           // 真正开始搜索时才清空上一次结果
           setPapers([])
+          setPreviewPapers([])
+          setPreviewTotal(0)
           setRejectedPapers([])
           setSourceStatuses({})
           setCurrentSessionId(null)
@@ -126,6 +146,7 @@ export function useSearch(apiKey: string, settings: SearchSettings, model?: stri
           updateAssistant(assistantId, { content: event.message })
         } else if (event.type === 'done') {
           setPapers(event.papers)
+          setPreviewPapers([])
           setRejectedPapers(event.rejected_papers ?? [])
           setStatusMessage(event.message)
           setIsLoading(false)  // 主搜索完成，立即释放输入框
@@ -165,12 +186,22 @@ export function useSearch(apiKey: string, settings: SearchSettings, model?: stri
           }
           track('search_error', { code: 'pipeline', mode })
           const note = event.refunded ? '（本次不计免费次数）' : ''
-          updateAssistant(assistantId, { content: `出错了：${event.message}${note}`, isLoading: false })
+          const kept = keepPreviewAsResults()
+          updateAssistant(assistantId, {
+            content: `出错了：${event.message}${note}` + (kept ? '\n\n已保留搜到的原始结果（未经 AI 筛选）。' : ''),
+            isLoading: false,
+          })
         }
       }
+      // 流结束了却没收到 done：连接被中途切断，保留已搜到的结果
+      keepPreviewAsResults()
     } catch (err) {
       setHasSearchError(true)
-      updateAssistant(assistantId, { content: describeError(err), isLoading: false })
+      const kept = keepPreviewAsResults()
+      updateAssistant(assistantId, {
+        content: describeError(err) + (kept ? '\n\n已保留搜到的原始结果（未经 AI 筛选）。' : ''),
+        isLoading: false,
+      })
     } finally {
       setIsLoading(false)
     }
@@ -296,6 +327,8 @@ export function useSearch(apiKey: string, settings: SearchSettings, model?: stri
   return {
     messages,
     papers,
+    previewPapers,
+    previewTotal,
     rejectedPapers,
     isLoading,
     statusMessage,

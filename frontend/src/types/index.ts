@@ -47,6 +47,13 @@ export type SearchErrorEvent = {
   remaining?: number
 }
 
+/** 搜索进行中先送来的原始结果（未经 AI 筛选），让用户不用干等 */
+export type SearchPartialEvent = {
+  type: 'partial'
+  papers: Paper[]
+  total: number
+}
+
 /** 用免费次数搜索时，开始搜索前服务端告知扣减后的剩余次数 */
 export type SearchQuotaEvent = {
   type: 'quota'
@@ -83,7 +90,7 @@ export type SourceDoneEvent = {
   count: number
 }
 
-export type SearchEvent = SearchQuotaEvent | SearchProgressEvent | SearchDoneEvent | SearchErrorEvent | SearchChatEvent | SearchPdfFindingEvent | SearchPdfUpdateEvent | SearchStartEvent | SourceDoneEvent
+export type SearchEvent = SearchPartialEvent | SearchQuotaEvent | SearchProgressEvent | SearchDoneEvent | SearchErrorEvent | SearchChatEvent | SearchPdfFindingEvent | SearchPdfUpdateEvent | SearchStartEvent | SourceDoneEvent
 
 export type ParseResult =
   | { intent: 'chat'; reply: string }
