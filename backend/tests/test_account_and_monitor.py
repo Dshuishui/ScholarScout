@@ -171,3 +171,35 @@ async def test_alerts_when_anonymous_trial_nears_daily_cap(monitor, monkeypatch)
     monkeypatch.setattr(monitor, "trial_usage_last_day", AsyncMock(return_value=80))
     alerts = await monitor.run_health_check()
     assert len(alerts) == 1 and "80/100" in alerts[0]
+
+
+# ── 备份新鲜度告警 ────────────────────────────────────────────────────────────
+
+def test_backup_check_skipped_when_not_configured(monitor, monkeypatch):
+    monkeypatch.setattr(monitor.config, "BACKUP_STATUS_FILE", "")
+    assert monitor.backup_problem(time.time()) is None
+
+
+def test_backup_alert_when_status_file_missing(monitor, monkeypatch, tmp_path):
+    monkeypatch.setattr(monitor.config, "BACKUP_STATUS_FILE", str(tmp_path / "nope"))
+    key, msg = monitor.backup_problem(time.time())
+    assert key == "backup" and "从未成功" in msg
+
+
+def test_backup_alert_only_when_stale(monitor, monkeypatch, tmp_path):
+    status = tmp_path / "last_success"
+    now = time.time()
+    monkeypatch.setattr(monitor.config, "BACKUP_STATUS_FILE", str(status))
+    monkeypatch.setattr(monitor.config, "BACKUP_MAX_AGE_HOURS", 36)
+    status.write_text(str(now - 30 * 3600))
+    assert monitor.backup_problem(now) is None
+    status.write_text(str(now - 40 * 3600))
+    key, msg = monitor.backup_problem(now)
+    assert key == "backup" and "40 小时" in msg
+
+
+def test_backup_garbage_status_file_alerts(monitor, monkeypatch, tmp_path):
+    status = tmp_path / "last_success"
+    status.write_text("not-a-timestamp")
+    monkeypatch.setattr(monitor.config, "BACKUP_STATUS_FILE", str(status))
+    assert monitor.backup_problem(time.time())[0] == "backup"

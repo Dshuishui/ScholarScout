@@ -214,6 +214,8 @@ Copy `backend/.env.example` to `backend/.env`. All variables have sensible defau
 | `DEEPSEEK_SYSTEM_KEY` | _(empty)_ | Server-side key for free searches (anonymous trial and new accounts) |
 | `ANON_TRIAL_SEARCHES` | `2` | Free searches per browser before sign-up |
 | `ANON_TRIAL_PER_IP_DAY` | `20` | Anonymous free searches per IP per 24 h |
+| `BACKUP_STATUS_FILE` | _(empty)_ | Timestamp file written by `deploy/backup.sh`; when set, a stale backup triggers an admin alert ([docs/backup.md](docs/backup.md)) |
+| `BACKUP_MAX_AGE_HOURS` | `36` | Alert when the last successful backup is older than this |
 | `ANON_TRIAL_DAILY_CAP` | `200` | Site-wide anonymous free searches per 24 h (cost ceiling; alert at 80%) |
 | `FREE_SEARCHES_QUOTA` | `3` | Free searches granted after email verification |
 | `DEEPSEEK_API_KEY` | _(empty)_ | Server-side key for subscription relevance filtering |

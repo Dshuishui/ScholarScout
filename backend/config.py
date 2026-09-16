@@ -36,6 +36,11 @@ FREE_SEARCHES_QUOTA = int(_os.environ.get("FREE_SEARCHES_QUOTA", "3"))
 ANON_TRIAL_SEARCHES = int(_os.environ.get("ANON_TRIAL_SEARCHES", "2"))
 ANON_TRIAL_PER_IP_DAY = int(_os.environ.get("ANON_TRIAL_PER_IP_DAY", "20"))
 ANON_TRIAL_DAILY_CAP = int(_os.environ.get("ANON_TRIAL_DAILY_CAP", "200"))
+# 备份状态文件：deploy/backup.sh 每次成功后写入时间戳，健康检查发现太久没成功就告警。
+# 留空表示没有配置备份，不检查。
+BACKUP_STATUS_FILE = _os.environ.get("BACKUP_STATUS_FILE", "")
+BACKUP_MAX_AGE_HOURS = int(_os.environ.get("BACKUP_MAX_AGE_HOURS", "36"))
+
 # 站长邮箱：接收新留言通知和运维告警（数据源失效、订阅停推）
 ADMIN_EMAIL = _os.environ.get("ADMIN_EMAIL", "dyucong@email.ncu.edu.cn")
 # 前端地址（邮件验证链接用）

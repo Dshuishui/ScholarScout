@@ -215,6 +215,8 @@ npm run dev
 | `DEEPSEEK_SYSTEM_KEY` | _(空)_ | 免费搜索（未登录体验和新注册账号）使用的系统 Key |
 | `ANON_TRIAL_SEARCHES` | `2` | 未登录访客每个浏览器可免费搜索的次数 |
 | `ANON_TRIAL_PER_IP_DAY` | `20` | 同一 IP 24 小时内未登录免费搜索上限 |
+| `BACKUP_STATUS_FILE` | _(空)_ | `deploy/backup.sh` 成功后写入的时间戳文件；配置后备份过期会发告警邮件（见 [docs/backup.md](docs/backup.md)） |
+| `BACKUP_MAX_AGE_HOURS` | `36` | 最后一次成功备份超过这个小时数就告警 |
 | `ANON_TRIAL_DAILY_CAP` | `200` | 全站 24 小时内未登录免费搜索上限（费用封顶，用到 80% 发告警邮件） |
 | `FREE_SEARCHES_QUOTA` | `3` | 验证邮箱后赠送的免费搜索次数 |
 | `DEEPSEEK_API_KEY` | _(空)_ | 订阅推送 AI 筛选用的服务端 Key |

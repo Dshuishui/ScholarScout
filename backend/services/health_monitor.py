@@ -8,9 +8,11 @@
   - 所有源最近多次调用合计一篇都没有 → 告警（代理失效这类全局故障）
   - 启用中的订阅超过 3 天没推送 → 告警
   - 未登录免费体验 24 小时内用到每日上限的 80% → 提醒（系统 Key 花费）
+  - 数据库备份超过 36 小时没有成功 → 告警（备份悄悄失效比没有备份更危险）
 同一问题每天最多发一封邮件。统计只在内存里，重启后清空，足够发现持续性故障。
 """
 import logging
+import os
 import time
 from collections import defaultdict, deque
 from datetime import datetime, timedelta
@@ -95,6 +97,25 @@ async def stalled_subscriptions(db) -> list[tuple[int, str | None]]:
     return [(r.id, r.last_sent.isoformat() if r.last_sent else None) for r in rows]
 
 
+def backup_problem(now: float) -> tuple[str, str] | None:
+    """备份状态文件里是最后一次成功备份的 unix 时间戳，见 deploy/backup.sh。"""
+    path = config.BACKUP_STATUS_FILE
+    if not path:
+        return None
+    try:
+        with open(path) as f:
+            last = float(f.read().strip())
+    except FileNotFoundError:
+        return ("backup", f"数据库备份状态文件不存在（{path}），备份可能从未成功执行过")
+    except (OSError, ValueError) as e:
+        return ("backup", f"读取备份状态文件失败（{path}）：{e}")
+    age_h = (now - last) / 3600
+    if age_h > config.BACKUP_MAX_AGE_HOURS:
+        return ("backup", f"数据库备份已经 {age_h:.0f} 小时没有成功（上次成功："
+                          f"{datetime.fromtimestamp(last).strftime('%Y-%m-%d %H:%M')}），请检查 cron 和 deploy/backup.sh")
+    return None
+
+
 def _should_alert(key: str, now: float) -> bool:
     last = _last_alert.get(key)
     if last and now - last < ALERT_COOLDOWN_SEC:
@@ -126,6 +147,10 @@ async def run_health_check() -> list[str]:
     except Exception:
         logger.exception("Health check: failed to query trial usage")
         trial_used = 0
+    backup = backup_problem(now)
+    if backup:
+        problems.append(backup)
+
     cap = config.ANON_TRIAL_DAILY_CAP
     if cap > 0 and trial_used >= cap * TRIAL_CAP_ALERT_RATIO:
         problems.append(("trial-cap",
