@@ -55,6 +55,12 @@ def reset_rate_limits():
     from services import cache_service, llm_service
     cache_service._memory_cache.clear()
     llm_service._parse_cache.clear()
+    import routers.chat as chat_router
+    chat_router._chat_attempts.clear()
+    import routers.translate as translate_router
+    translate_router._attempts.clear()
+    translate_router._cache.clear()
+    translate_router._site_attempts.clear()
     import routers.subscriptions as subs_router
     subs_router._create_attempts.clear()
     subs_router._refresh_attempts.clear()

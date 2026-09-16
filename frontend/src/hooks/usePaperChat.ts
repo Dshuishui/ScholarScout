@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
 import type { Paper } from '../types'
 import { useAuth } from './useAuth'
+import { useAccess } from './useAccess'
 
 export interface ChatMessage {
   role: 'user' | 'assistant'
@@ -12,6 +13,8 @@ export type PdfStatus = 'idle' | 'ok' | 'error'
 
 export function usePaperChat(apiKey: string, model: string = 'deepseek-v4-flash') {
   const { token, isLoggedIn } = useAuth()
+  // 没有自己的 Key 时走后端的免费对话额度（系统 Key 代付）
+  const { deviceId, setChatsRemaining, openGate } = useAccess()
   const [histories, setHistories] = useState<Map<string, ChatMessage[]>>(new Map())
   const [streamingPaperId, setStreamingPaperId] = useState<string | null>(null)
   const [pdfStatuses, setPdfStatuses] = useState<Map<string, PdfStatus>>(new Map())
@@ -120,6 +123,75 @@ export function usePaperChat(apiKey: string, model: string = 'deepseek-v4-flash'
       })
       setStreamingPaperId(paperId)
 
+      const pushDelta = (accumulated: string, streaming = true) => {
+        setHistories(prev => {
+          const next = new Map(prev)
+          const msgs = [...(prev.get(paperId) ?? [])]
+          msgs[msgs.length - 1] = { role: 'assistant', content: accumulated, ...(streaming ? { isStreaming: true } : {}) }
+          next.set(paperId, msgs)
+          if (!streaming && token) _saveToBackend(paper, msgs, token)
+          return next
+        })
+      }
+
+      // ── 免费额度路径：后端代付，浏览器不直接调 DeepSeek ──
+      if (!apiKey) {
+        try {
+          const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+          if (token) headers.Authorization = `Bearer ${token}`
+          else headers['X-Trial-Device'] = deviceId
+          const resp = await fetch('/api/chat/paper', {
+            method: 'POST',
+            signal: controller.signal,
+            headers,
+            body: JSON.stringify({
+              paper,
+              question: userContent,
+              messages: prevMessages.filter(m => !m.isStreaming).map(m => ({ role: m.role, content: m.content })),
+              pdf_text: pdfText ?? null,
+            }),
+          })
+          if (!resp.ok) {
+            const data = await resp.json().catch(() => null)
+            const code = data?.detail?.code
+            const message = data?.detail?.message ?? '对话失败，请稍后重试'
+            if (code === 'chats_exhausted' || code === 'chat_capacity' || code === 'key_required') {
+              openGate('feature', '论文对话')
+            }
+            pushDelta(`⚠️ ${message}`, false)
+            return
+          }
+          const reader = resp.body!.getReader()
+          const decoder = new TextDecoder()
+          let buffer = ''
+          let accumulated = ''
+          while (true) {
+            const { done, value } = await reader.read()
+            if (done) break
+            buffer += decoder.decode(value, { stream: true })
+            const blocks = buffer.split('\n\n')
+            buffer = blocks.pop() ?? ''
+            for (const block of blocks) {
+              const ev = block.split('\n').find(l => l.startsWith('event:'))?.slice(6).trim()
+              const dataLine = block.split('\n').find(l => l.startsWith('data:'))?.slice(5).trim()
+              if (!ev || !dataLine) continue
+              const payload = JSON.parse(dataLine)
+              if (ev === 'quota') setChatsRemaining(payload.remaining)
+              else if (ev === 'delta') { accumulated += payload.text; pushDelta(accumulated) }
+              else if (ev === 'error') accumulated += `\n\n⚠️ ${payload.message}`
+            }
+          }
+          pushDelta(accumulated || '（没有返回内容，请重试）', false)
+        } catch (err) {
+          if ((err as Error).name === 'AbortError') pushDelta('（已停止）', false)
+          else pushDelta('网络错误，请稍后重试', false)
+        } finally {
+          abortRef.current = null
+          setStreamingPaperId(null)
+        }
+        return
+      }
+
       try {
         const resp = await fetch('https://api.deepseek.com/chat/completions', {
           method: 'POST',
@@ -209,7 +281,7 @@ export function usePaperChat(apiKey: string, model: string = 'deepseek-v4-flash'
         setStreamingPaperId(null)
       }
     },
-    [apiKey, histories, token, _saveToBackend, model],
+    [apiKey, histories, token, _saveToBackend, model, deviceId, setChatsRemaining, openGate],
   )
 
   const regenerate = useCallback(async (paper: Paper) => {

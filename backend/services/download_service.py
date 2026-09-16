@@ -1,5 +1,8 @@
 """PDF 下载服务：6 级 fallback 链，最大化开放获取覆盖率。
-优先级：primary URL → Unpaywall → Semantic Scholar → arXiv → PMC → Sci-Hub
+优先级：primary URL → Unpaywall → Semantic Scholar → arXiv → PMC → bioRxiv/medRxiv
+
+只走合法的开放获取渠道。曾经带过 Sci-Hub 兜底，但那与本站服务条款（只提供公开获取版本）
+冲突，也有版权风险，已移除；拿不到全文时改为在界面上给出出版社原文、Google 学术等自助入口。
 """
 import asyncio
 import ipaddress
@@ -17,11 +20,6 @@ ALLOWED_CONTENT_TYPES = ("application/pdf", "application/octet-stream", "binary/
 
 _POLITE_EMAIL = "scholarscout.search@gmail.com"
 
-_SCI_HUB_MIRRORS = [
-    "https://sci-hub.se",
-    "https://sci-hub.st",
-    "https://sci-hub.ru",
-]
 
 MAX_REDIRECTS = 5
 
@@ -278,54 +276,6 @@ async def _via_biorxiv(doi: str) -> bytes | None:
     return None
 
 
-async def _via_scihub(doi: str) -> bytes | None:
-    """尝试多个 Sci-Hub 镜像，解析嵌入的 PDF URL 后下载。"""
-    if not doi:
-        return None
-    for mirror in _SCI_HUB_MIRRORS:
-        try:
-            async with httpx.AsyncClient(
-                follow_redirects=True, timeout=20,
-                headers={"User-Agent": _UA},
-            ) as client:
-                r = await client.get(f"{mirror}/{doi}")
-                if r.status_code != 200:
-                    continue
-
-                ct = r.headers.get("content-type", "")
-                # 有时直接返回 PDF
-                if "pdf" in ct or r.content[:4] == b"%PDF":
-                    if r.content[:4] == b"%PDF":
-                        return r.content
-                    continue
-
-                # 解析 HTML 中的 PDF 链接
-                html = r.text
-                # 匹配 <embed src="..." / <iframe src="..." / location.href='...'
-                patterns = [
-                    r'<embed[^>]+src=["\']?(/[^"\'> ]+)["\']?',
-                    r'<iframe[^>]+src=["\']?(https?://[^"\'> ]+)["\']?',
-                    r"location\.href\s*=\s*['\"]([^'\"]+\.pdf[^'\"]*)['\"]",
-                    r'src=["\']?(https?://[^"\'> ]+\.pdf(?:\?[^"\'> ]*)?)["\']?',
-                ]
-                pdf_url = None
-                for pat in patterns:
-                    m = re.search(pat, html, re.I)
-                    if m:
-                        pdf_url = m.group(1)
-                        if pdf_url.startswith("/"):
-                            pdf_url = f"{mirror}{pdf_url}"
-                        break
-
-                if pdf_url:
-                    data = await _fetch_bytes(pdf_url)
-                    return data
-
-        except Exception as e:
-            logger.debug("Sci-Hub mirror %s failed for %s: %s", mirror, doi, e)
-    return None
-
-
 # ── 主入口 ──────────────────────────────────────────────────────────────────
 
 async def fetch_pdf_bytes(url: str) -> tuple[bytes, str]:
@@ -339,7 +289,7 @@ async def fetch_pdf_with_fallback(
     doi: str | None = None,
     paper_id: str | None = None,
 ) -> bytes:
-    """6 级 fallback 链，返回 PDF 字节；全部失败抛 ValueError。"""
+    """按开放获取渠道逐级尝试，返回 PDF 字节；全部失败抛 ValueError。"""
     steps = [
         ("primary URL",       lambda: _fetch_bytes(url)),
         ("Unpaywall",         lambda: _via_unpaywall(doi) if doi else None),
@@ -347,7 +297,6 @@ async def fetch_pdf_with_fallback(
         ("arXiv",             lambda: _via_arxiv(paper_id or "", doi) if paper_id else None),
         ("PMC",               lambda: _via_pmc(paper_id or "") if paper_id else None),
         ("bioRxiv/medRxiv",   lambda: _via_biorxiv(doi) if doi else None),
-        ("Sci-Hub",           lambda: _via_scihub(doi) if doi else None),
     ]
 
     for name, fn in steps:

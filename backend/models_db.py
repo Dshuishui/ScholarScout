@@ -16,6 +16,8 @@ class User(Base):
     free_searches = Column(Integer, default=0, nullable=False)
     # 登录凭证版本号：改密码时 +1，之前签发的凭证全部失效
     token_version = Column(Integer, default=0, server_default="0", nullable=False)
+    # 免费论文对话条数（系统 Key 代付）。server_default 让已有用户升级后也直接拿到额度
+    free_chats = Column(Integer, default=30, server_default="30", nullable=False)
 
 
 class SavedPaper(Base):
@@ -97,12 +99,13 @@ class PasswordResetToken(Base):
 
 
 class TrialUsage(Base):
-    """未登录访客每用掉一次免费搜索记一行。
+    """未登录访客每用掉一次免费搜索或免费对话记一行。
 
     设备标识和 IP 只存加盐摘要（不可还原），只用来计数，90 天后由定时任务清理。
     """
     __tablename__ = "trial_usage"
     id = Column(Integer, primary_key=True)
+    kind = Column(String(16), default="search", server_default="search", nullable=False, index=True)  # search | chat
     device_hash = Column(String(64), nullable=False, index=True)
     ip_hash = Column(String(64), nullable=False, index=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)

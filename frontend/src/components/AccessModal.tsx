@@ -43,7 +43,9 @@ function headline(reason: GateReason, feature: string | undefined, signupBonus: 
     case 'feature':
       return {
         title: `${feature ?? '这个功能'}需要你自己的 Key`,
-        desc: '免费次数只用于论文搜索。论文对话、多论文分析等功能由你的浏览器直接调用 DeepSeek，需要填写自己的 API Key。',
+        desc: feature === '论文对话'
+          ? '免费对话条数已经用完。填写自己的 DeepSeek API Key 可以不限条数使用，还能基于上传的 PDF 全文回答。'
+          : '多论文分析、多文献问答由你的浏览器直接调用 DeepSeek，需要填写自己的 API Key。论文搜索和单篇论文对话有免费额度，不需要 Key。',
       }
     default:
       return { title: '使用方式', desc: '免费次数用完后，填写自己的 DeepSeek API Key 即可不限次数使用。Key 只保存在你的浏览器里。' }

@@ -32,7 +32,7 @@ const PaperChatDrawer = lazy(() => import('./PaperChatDrawer').then(m => ({ defa
 const MAX_PDF_UPLOAD_MB = 50
 
 export function MainLayout() {
-  const { apiKey, mode, freeRemaining, openGate } = useAccess()
+  const { apiKey, mode, freeRemaining, trial, openGate } = useAccess()
   const { settings, updateSettings, availableSources } = useSettings()
   const { lastMessage, status: wsStatus } = useWebSocket()
   const { model } = useModel()
@@ -77,9 +77,11 @@ export function MainLayout() {
     return () => window.removeEventListener('navigate:page', handler)
   }, [])
 
-  // 论文对话、多论文分析、多文献问答由浏览器直接调用 DeepSeek，免费次数不覆盖，需要用户自己的 Key
+  // 论文对话有免费额度（后端代付）；多论文分析、多文献问答仍由浏览器直连 DeepSeek，需要自己的 Key
+  const freeChatsLeft = trial.chatsRemaining
   const requireKey = (feature: string): boolean => {
     if (apiKey) return true
+    if (feature === '论文对话' && freeChatsLeft > 0) return true
     openGate('feature', feature)
     return false
   }
@@ -442,7 +444,8 @@ export function MainLayout() {
           onNewChat={() => activePaper && clearChat(activePaper, true)}
           onRegenerate={() => { if (activePaper && requireKey('论文对话')) regenerate(activePaper) }}
           isMobile={isMobile}
-          onRequireKey={apiKey ? undefined : () => openGate('feature', '论文对话')}
+          freeChatsLeft={apiKey ? undefined : freeChatsLeft}
+          onRequireKey={apiKey || freeChatsLeft > 0 ? undefined : () => openGate('feature', '论文对话')}
         />
       </Suspense>
       {activePage === 'saved' && token && (

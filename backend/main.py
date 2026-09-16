@@ -9,6 +9,8 @@ from routers import search, auth as auth_router, user as user_router, feedback a
 from routers import subscriptions as subscriptions_router
 from routers import semantic as semantic_router
 from routers import ws_router
+from routers import chat as chat_router
+from routers import translate as translate_router
 from database import init_db
 from config import CORS_ORIGINS
 from scheduler import setup_scheduler
@@ -47,4 +49,6 @@ app.include_router(feedback_router.router, prefix="/api/feedback")
 app.include_router(paper_router.router, prefix="/api/paper")
 app.include_router(subscriptions_router.router, prefix="/api")
 app.include_router(semantic_router.router, prefix="/api/semantic")
+app.include_router(chat_router.router, prefix="/api/chat")
+app.include_router(translate_router.router, prefix="/api/translate")
 app.include_router(ws_router.router)

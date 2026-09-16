@@ -9,16 +9,16 @@ from config import KIMI_BASE_URL, KIMI_MODEL
 
 logger = logging.getLogger(__name__)
 
-# 备用查找平台（规则拼接，无需 AI）
+# 找不到开放获取 PDF 时，给用户几条合法的自助路径。按"最可能直接拿到全文"排序。
+# 不包含 Sci-Hub：版权风险，且与我们自己的服务条款（只提供公开获取版本）冲突。
 _PLATFORMS = [
-    ("arXiv 预印本",      lambda doi, t: f"https://arxiv.org/search/?searchtype=all&query={urllib.parse.quote(t)}"),
-    ("Sci-Hub",          lambda doi, t: f"https://sci-hub.se/{doi}" if doi else None),
-    ("ResearchGate",     lambda doi, t: f"https://www.researchgate.net/search?q={urllib.parse.quote(t)}"),
-    ("Semantic Scholar", lambda doi, t: f"https://www.semanticscholar.org/search?q={urllib.parse.quote(t)}"),
-    ("Google Scholar",   lambda doi, t: f"https://scholar.google.com/scholar?q={urllib.parse.quote(t)}"),
-    ("CORE",             lambda doi, t: f"https://core.ac.uk/search?q={urllib.parse.quote(t)}"),
-    ("BASE",             lambda doi, t: f"https://www.base-search.net/Search/Results?q={urllib.parse.quote(t)}"),
+    ("出版社原文",       lambda doi, t: f"https://doi.org/{doi}" if doi else None),
+    ("Google 学术",      lambda doi, t: f"https://scholar.google.com/scholar?q={urllib.parse.quote(t)}"),
+    ("arXiv 预印本",     lambda doi, t: f"https://arxiv.org/search/?searchtype=all&query={urllib.parse.quote(t)}"),
     ("Open Access Button", lambda doi, t: f"https://openaccessbutton.org/access?doi={urllib.parse.quote(doi)}" if doi else None),
+    ("Semantic Scholar", lambda doi, t: f"https://www.semanticscholar.org/search?q={urllib.parse.quote(t)}"),
+    ("ResearchGate",     lambda doi, t: f"https://www.researchgate.net/search?q={urllib.parse.quote(t)}"),
+    ("BASE",             lambda doi, t: f"https://www.base-search.net/Search/Results?q={urllib.parse.quote(t)}"),
 ]
 
 

@@ -234,6 +234,13 @@ export function ResultsPanel({ papers, availableSources, previewPapers = [], pre
   // 数据源和数量设置：手机上默认折叠，把首屏留给论文列表
   const [showConfig, setShowConfig] = useState(() => typeof window === 'undefined' || window.innerWidth >= 640)
   const sourceOptions: readonly string[] = availableSources?.length ? availableSources : ALL_SOURCES
+  // 中文标题：非英语母语用户扫 50 条英文标题很累，可一键切换（译文由后端翻译并缓存）
+  const [showZhTitles, setShowZhTitles] = useState(() => {
+    try { return localStorage.getItem('scholarscout_zh_titles') === '1' } catch { return false }
+  })
+  const [zhTitles, setZhTitles] = useState<Record<string, string>>({})
+  const [translating, setTranslating] = useState(false)
+  const [newQuery, setNewQuery] = useState('')
   const [showAllKeywords, setShowAllKeywords] = useState(false)
   const [showCompare, setShowCompare] = useState(false)
   const [showAuthModal, setShowAuthModal] = useState(false)
@@ -499,6 +506,25 @@ const addKeyword = () => {
   const end = Math.min(currentPage * ITEMS_PER_PAGE, sortedPapers.length)
 
   const selectedWithPdf = papers.filter(p => selectedIds.has(p.paper_id) && (p.pdf_url || p.url))
+  // 打开"中文标题"时翻译当前展示的这一页（后端有缓存，翻过的不会重复计费）
+  useEffect(() => {
+    if (!showZhTitles) return
+    const missing = pagePapers.map(p => p.title).filter(t => !(t in zhTitles))
+    if (missing.length === 0) return
+    let cancelled = false
+    setTranslating(true)
+    fetch('/api/translate/titles', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ titles: missing.slice(0, 60) }),
+    })
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (!cancelled && d?.translations) setZhTitles(prev => ({ ...prev, ...d.translations })) })
+      .catch(() => { /* 翻译失败就继续显示英文标题 */ })
+      .finally(() => { if (!cancelled) setTranslating(false) })
+    return () => { cancelled = true }
+  }, [showZhTitles, pagePapers, zhTitles])
+
   const allPageSelected = pagePapers.length > 0 && pagePapers.every(p => selectedIds.has(p.paper_id))
 
   const togglePaper = (id: string) => {
@@ -627,6 +653,32 @@ const addKeyword = () => {
 
   return (
     <div className="flex flex-col h-full" style={{ background: 'transparent' }}>
+      {/* 换个问题再搜：以前只能切回左侧/底部的搜索面板 */}
+      {onExampleSearch && (papers.length > 0 || confirmedKeywords != null) && (
+        <form
+          onSubmit={e => { e.preventDefault(); const q = newQuery.trim(); if (q && !isLoading) { onExampleSearch(q); setNewQuery('') } }}
+          className="flex gap-2 px-3 sm:px-5 pt-2.5 pb-1 bg-white/70 backdrop-blur-sm"
+        >
+          <input
+            value={newQuery}
+            onChange={e => setNewQuery(e.target.value)}
+            placeholder="换个问题再搜一次…"
+            disabled={isLoading}
+            className="flex-1 min-w-0 border border-gray-200 rounded-xl px-3.5 py-2 text-base sm:text-sm placeholder-gray-300 bg-white focus:outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 disabled:opacity-60"
+          />
+          <button
+            type="submit"
+            disabled={isLoading || !newQuery.trim()}
+            className="flex-shrink-0 flex items-center gap-1 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-200 disabled:text-gray-400 rounded-xl px-3.5 transition-colors"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+            搜索
+          </button>
+        </form>
+      )}
+
       {/* 顶部标题栏 */}
       <div className="px-3 sm:px-5 py-2 sm:py-3 border-b border-gray-200/80 bg-white/70 backdrop-blur-sm flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-3">
         <div className="flex items-center gap-3 flex-shrink-0 flex-wrap">
@@ -969,7 +1021,17 @@ const addKeyword = () => {
               </button>
             ))}
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 overflow-x-auto py-1.5 [&>*]:flex-shrink-0">
+            {/* 中文标题开关 */}
+            <button
+              onClick={() => { const next = !showZhTitles; setShowZhTitles(next); try { localStorage.setItem('scholarscout_zh_titles', next ? '1' : '0') } catch { /* ignore */ } }}
+              disabled={translating}
+              title="把论文标题翻译成中文"
+              className={`text-xs font-medium rounded-lg px-2.5 py-1.5 border transition-colors whitespace-nowrap ${
+                showZhTitles ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-gray-500 border-gray-200 hover:border-gray-300'
+              }`}
+            >{translating ? '翻译中…' : '中文标题'}</button>
+
             {/* 密度切换 */}
             <div className="hidden sm:flex items-center border border-gray-200 rounded-lg overflow-hidden">
               <button
@@ -1140,6 +1202,7 @@ const addKeyword = () => {
               <p className="text-sm text-gray-400 leading-relaxed max-w-md">
                 在左侧描述你的研究问题，AI 提取关键词，按学科检索 OpenAlex、PubMed、arXiv 等学术数据库，再逐篇判断相关性
               </p>
+              <p className="text-xs text-gray-300 mt-2">目前只检索英文学术数据库，暂不包含知网、万方等中文库</p>
               <TrialHint className="mt-3" />
             </div>
             <div className="flex flex-col gap-2 w-full max-w-xs">
@@ -1161,9 +1224,9 @@ const addKeyword = () => {
             <div className="grid grid-cols-2 gap-2 w-full max-w-md text-left">
               {[
                 { title: '多库检索', detail: '关键词 + 语义检索，按学科选库' },
-                { title: 'AI 相关性筛选', detail: '逐篇判断，给出推荐理由' },
-                { title: '论文对话', detail: '上传 PDF 深入追问（需自己的 Key）' },
-                { title: 'PDF 与导出', detail: '查找开放获取全文，导出表格' },
+                { title: 'AI 相关性筛选', detail: '逐篇打分（10 分最相关），给出推荐理由' },
+                { title: '论文对话', detail: '就单篇论文追问，免费额度内直接用' },
+                { title: '全文与导出', detail: '找开放获取版本，导出表格' },
               ].map(f => (
                 <div key={f.title} className="rounded-xl border border-gray-200 bg-white/70 px-3 py-2.5">
                   <p className="text-xs font-semibold text-gray-700">{f.title}</p>
@@ -1311,6 +1374,7 @@ const addKeyword = () => {
                           isSaved={savedMap.has(paper.paper_id)}
                           onSave={() => isLoggedIn ? handleSave(paper) : setShowAuthModal(true)}
                           hasChat={!!getMessages && getMessages(paper.paper_id).filter(m => !m.isStreaming).length > 0}
+                          zhTitle={showZhTitles ? zhTitles[paper.title] : undefined}
                         />
                       </div>
                     ))}
@@ -1333,6 +1397,7 @@ const addKeyword = () => {
                   isSaved={savedMap.has(paper.paper_id)}
                   onSave={() => isLoggedIn ? handleSave(paper) : setShowAuthModal(true)}
                   hasChat={!!getMessages && getMessages(paper.paper_id).filter(m => !m.isStreaming).length > 0}
+                  zhTitle={showZhTitles ? zhTitles[paper.title] : undefined}
                 />
               </div>
             ))}

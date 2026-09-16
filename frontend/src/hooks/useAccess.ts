@@ -27,6 +27,9 @@ interface TrialInfo {
   anonTotal: number
   signupBonus: number
   capacityOk: boolean
+  /** 免费论文对话剩余条数（未登录按浏览器算，登录按账号算） */
+  chatsRemaining: number
+  chatsTotal: number
 }
 
 interface AccessContextValue {
@@ -42,6 +45,8 @@ interface AccessContextValue {
   refreshTrial: () => Promise<void>
   /** 搜索流里服务端返回的最新剩余次数 */
   applyRemaining: (kind: 'anon' | 'account', remaining: number) => void
+  /** 论文对话流里服务端返回的最新剩余条数 */
+  setChatsRemaining: (n: number) => void
   gate: { reason: GateReason; feature?: string } | null
   openGate: (reason: GateReason, feature?: string) => void
   closeGate: () => void
@@ -71,6 +76,7 @@ function useAccessState(): AccessContextValue {
   const [deviceId] = useState(loadDeviceId)
   const [trial, setTrial] = useState<TrialInfo>({
     loaded: false, enabled: true, anonRemaining: 0, anonTotal: 2, signupBonus: 3, capacityOk: true,
+    chatsRemaining: 0, chatsTotal: 0,
   })
   const [gate, setGate] = useState<{ reason: GateReason; feature?: string } | null>(null)
 
@@ -98,12 +104,18 @@ function useAccessState(): AccessContextValue {
         anonTotal: d.anon_total ?? 2,
         signupBonus: d.signup_bonus ?? 0,
         capacityOk: d.capacity_ok ?? true,
+        chatsRemaining: d.chats_remaining ?? 0,
+        chatsTotal: d.chats_total ?? 0,
       })
       if (typeof d.account_remaining === 'number') setFreeSearches(d.account_remaining)
     } catch { /* 网络失败时保持原状，真正搜索时服务端会再判断 */ }
   }, [deviceId, token, setFreeSearches])
 
   useEffect(() => { refreshTrial() }, [refreshTrial])
+
+  const setChatsRemaining = useCallback((n: number) => {
+    setTrial(t => (t.chatsRemaining === n ? t : { ...t, chatsRemaining: Math.max(0, n) }))
+  }, [])
 
   const applyRemaining = useCallback((kind: 'anon' | 'account', remaining: number) => {
     if (kind === 'account') setFreeSearches(remaining)
@@ -124,7 +136,7 @@ function useAccessState(): AccessContextValue {
 
   return {
     apiKey, hasKey, setApiKey, clearApiKey, deviceId, mode, freeRemaining,
-    trial, refreshTrial, applyRemaining, gate, openGate, closeGate,
+    trial, refreshTrial, applyRemaining, setChatsRemaining, gate, openGate, closeGate,
   }
 }
 

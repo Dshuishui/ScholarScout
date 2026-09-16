@@ -188,6 +188,8 @@ async def trial_status(
         "anon_remaining": 0,
         "capacity_ok": True,
     }
+    from routers.chat import chat_quota
+    info.update(await chat_quota(http_request, optional_user, db))
     if optional_user:
         info["account_remaining"] = optional_user.free_searches if enabled else 0
         return info

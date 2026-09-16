@@ -41,6 +41,17 @@ ANON_TRIAL_DAILY_CAP = int(_os.environ.get("ANON_TRIAL_DAILY_CAP", "200"))
 BACKUP_STATUS_FILE = _os.environ.get("BACKUP_STATUS_FILE", "")
 BACKUP_MAX_AGE_HOURS = int(_os.environ.get("BACKUP_MAX_AGE_HOURS", "36"))
 
+# 免费论文对话（系统 Key 代付）：未登录按浏览器计，登录按账号计，全站每天有总量上限。
+# 单条对话会截断上下文并限制输出长度，控制单次成本。
+ANON_FREE_CHATS = int(_os.environ.get("ANON_FREE_CHATS", "10"))
+ACCOUNT_FREE_CHATS = int(_os.environ.get("ACCOUNT_FREE_CHATS", "30"))
+ANON_CHAT_PER_IP_DAY = int(_os.environ.get("ANON_CHAT_PER_IP_DAY", "60"))
+CHAT_DAILY_CAP = int(_os.environ.get("CHAT_DAILY_CAP", "500"))
+FREE_CHAT_MAX_TOKENS = int(_os.environ.get("FREE_CHAT_MAX_TOKENS", "900"))
+FREE_CHAT_CONTEXT_CHARS = int(_os.environ.get("FREE_CHAT_CONTEXT_CHARS", "6000"))
+# 标题翻译（系统 Key 代付，不占用户额度）：全站每天最多翻译多少批
+TRANSLATE_DAILY_CAP = int(_os.environ.get("TRANSLATE_DAILY_CAP", "300"))
+
 # 站长邮箱：接收新留言通知和运维告警（数据源失效、订阅停推）
 ADMIN_EMAIL = _os.environ.get("ADMIN_EMAIL", "dyucong@email.ncu.edu.cn")
 # 前端地址（邮件验证链接用）

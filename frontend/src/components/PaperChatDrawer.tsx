@@ -63,9 +63,11 @@ interface Props {
   isMobile?: boolean
   /** 没有自己的 DeepSeek Key 时传入：显示提示，发送前先引导填写 Key */
   onRequireKey?: () => void
+  /** 没有自己的 Key、但还有免费对话额度时，剩余条数 */
+  freeChatsLeft?: number
 }
 
-export function PaperChatDrawer({ paper, messages, isStreaming, pdfStatus, onSend, onStop, onClose, onUploadPdf, onRemovePdf, onNewChat, onRegenerate, isMobile = false, onRequireKey }: Props) {
+export function PaperChatDrawer({ paper, messages, isStreaming, pdfStatus, onSend, onStop, onClose, onUploadPdf, onRemovePdf, onNewChat, onRegenerate, isMobile = false, onRequireKey, freeChatsLeft }: Props) {
   const [input, setInput] = useState('')
   const [editingPrompts, setEditingPrompts] = useState(false)
   const [newPrompt, setNewPrompt] = useState('')
@@ -425,6 +427,11 @@ export function PaperChatDrawer({ paper, messages, isStreaming, pdfStatus, onSen
 
             {/* ── Input Area ── */}
             <div className="flex-shrink-0 px-4 pb-4 pt-2 border-t border-gray-100">
+              {!onRequireKey && freeChatsLeft !== undefined && (
+                <p className="mb-2 text-center text-[11px] text-gray-400">
+                  免费对话剩余 <b className="text-indigo-500">{freeChatsLeft}</b> 条 · 用完后填写自己的 DeepSeek Key 可继续
+                </p>
+              )}
               {onRequireKey && (
                 <button
                   onClick={onRequireKey}

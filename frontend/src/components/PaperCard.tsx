@@ -36,13 +36,15 @@ interface Props {
   onToggle?: () => void
   isRejected?: boolean
   onAnalyze?: () => void
+  /** 打开"中文标题"后的译文 */
+  zhTitle?: string
   compact?: boolean
   isSaved?: boolean
   onSave?: () => void
   hasChat?: boolean
 }
 
-export function PaperCard({ paper, selected = false, onToggle, isRejected = false, onAnalyze, compact = false, isSaved = false, onSave, hasChat = false }: Props) {
+export function PaperCard({ paper, selected = false, onToggle, isRejected = false, onAnalyze, compact = false, isSaved = false, onSave, hasChat = false, zhTitle }: Props) {
   const [copied, setCopied] = useState(false)
   const [expanded, setExpanded] = useState(false)
   const [abstractExpanded, setAbstractExpanded] = useState(false)
@@ -115,9 +117,14 @@ export function PaperCard({ paper, selected = false, onToggle, isRejected = fals
         <div className="flex-1 min-w-0">
           {/* Title + copy */}
           <div className="flex items-start gap-1.5 mb-1.5">
-            <h3 className="text-base font-bold text-gray-900 leading-snug line-clamp-2 flex-1" title={paper.title}>
-              {paper.title}
-            </h3>
+            <div className="flex-1 min-w-0">
+              <h3 className="text-base font-bold text-gray-900 leading-snug line-clamp-2" title={paper.title}>
+                {zhTitle || paper.title}
+              </h3>
+              {zhTitle && (
+                <p className="text-xs text-gray-400 leading-snug line-clamp-1 mt-0.5" title={paper.title}>{paper.title}</p>
+              )}
+            </div>
             <button
               onClick={copyTitle}
               title="复制标题"
@@ -175,7 +182,7 @@ export function PaperCard({ paper, selected = false, onToggle, isRejected = fals
                   paper.relevance_score >= 6 ? 'bg-blue-50 text-blue-600 border-blue-200' :
                   'bg-gray-50 text-gray-500 border-gray-200'
                 }`}
-                title={`AI 相关性评分 ${paper.relevance_score}/10`}
+                title={`AI 判断这篇与你的问题的相关程度：${paper.relevance_score}/10 分`}
               >
                 {paper.relevance_score.toFixed(1)}
               </span>

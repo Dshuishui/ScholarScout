@@ -132,6 +132,7 @@ export function ChatPanel({
             <p className="text-xs text-gray-400 leading-relaxed">
               AI 提取关键词、按学科检索多个学术数据库，再逐篇筛选相关论文
             </p>
+            <p className="text-[11px] text-gray-300 mt-1">只检索英文学术库，暂不含知网等中文库</p>
             <TrialHint className="mt-2.5" />
           </div>
 
