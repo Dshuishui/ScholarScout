@@ -17,7 +17,9 @@ _redis = None
 _init_attempted = False
 
 REDIS_URL = os.environ.get("REDIS_URL", "")
-SEARCH_TTL = int(os.environ.get("CACHE_SEARCH_TTL", "3600"))  # 1 hour
+# 6 小时：和关键词解析的缓存对齐，同一天里重复搜同一个问题结果保持一致。
+# 论文数据不会分钟级变化，缓存久一点不影响结果质量。
+SEARCH_TTL = int(os.environ.get("CACHE_SEARCH_TTL", "21600"))
 
 
 def _get_redis():
