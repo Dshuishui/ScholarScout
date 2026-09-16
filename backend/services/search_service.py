@@ -1,4 +1,5 @@
 import asyncio
+import random
 import logging
 import re
 import unicodedata
@@ -20,15 +21,29 @@ def _quoted_or(keywords: list[str]) -> str:
     return " OR ".join(f'"{t}"' if " " in t else t for t in terms if t)
 
 
+RETRY_STATUS = (429, 502, 503, 504)
+RETRY_ATTEMPTS = 3
+RETRY_MAX_WAIT = 8.0
+
+
 async def _get_with_retry(client: httpx.AsyncClient, url: str, **kwargs) -> httpx.Response:
-    """遇到 429 等待后重试一次；其余状态码直接返回。"""
-    resp = await client.get(url, **kwargs)
-    if resp.status_code == 429:
-        retry_after = int(resp.headers.get("retry-after", 5))
-        wait = min(retry_after, 10)
-        logger.debug("429 from %s, retrying after %ss", url, wait)
-        await asyncio.sleep(wait)
+    """限流 / 上游临时故障时按指数退避重试（2s、4s…，带抖动，上限 8s）。
+
+    有 Retry-After 就听服务端的。多个数据源同时被限流时，抖动能避免重试请求再次撞在一起。
+    """
+    wait = 2.0
+    for attempt in range(RETRY_ATTEMPTS):
         resp = await client.get(url, **kwargs)
+        if resp.status_code not in RETRY_STATUS or attempt == RETRY_ATTEMPTS - 1:
+            return resp
+        try:
+            retry_after = float(resp.headers.get("retry-after", ""))
+        except ValueError:
+            retry_after = 0.0
+        delay = min(max(retry_after, wait), RETRY_MAX_WAIT) + random.uniform(0, 0.5)
+        logger.debug("%s from %s, retry %d after %.1fs", resp.status_code, url, attempt + 1, delay)
+        await asyncio.sleep(delay)
+        wait *= 2
     return resp
 
 

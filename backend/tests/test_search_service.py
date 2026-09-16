@@ -145,6 +145,50 @@ async def test_search_all_sources_deduplicates():
 
 # ── 429 重试 / Google Scholar ────────────────────────────────────────────────
 
+async def test_get_with_retry_backs_off_exponentially(monkeypatch):
+    """限流时按 2s、4s 退避（带抖动），最多 3 次；Semantic Scholar 等源要求指数退避。"""
+    from services import search_service as s
+
+    class Resp:
+        def __init__(self, code): self.status_code, self.headers = code, {}
+
+    calls = []
+    class Client:
+        async def get(self, url, **kw):
+            calls.append(url)
+            return Resp(429)
+
+    waits = []
+    monkeypatch.setattr(s.asyncio, "sleep", AsyncMock(side_effect=lambda d: waits.append(d)))
+    resp = await s._get_with_retry(Client(), "https://api.semanticscholar.org/graph/v1/paper/search")
+    assert resp.status_code == 429
+    assert len(calls) == s.RETRY_ATTEMPTS        # 尝试 3 次后放弃
+    assert len(waits) == s.RETRY_ATTEMPTS - 1    # 最后一次失败后不再等待
+    assert 2 <= waits[0] < 2.5 and 4 <= waits[1] < 4.5  # 指数增长 + 抖动
+    assert all(w <= s.RETRY_MAX_WAIT + 0.5 for w in waits)
+
+
+async def test_get_with_retry_respects_retry_after(monkeypatch):
+    from services import search_service as s
+
+    class Resp:
+        def __init__(self, code, retry_after=None):
+            self.status_code = code
+            self.headers = {"retry-after": retry_after} if retry_after else {}
+
+    calls = []
+    class Client:
+        async def get(self, url, **kw):
+            calls.append(url)
+            return Resp(429, "6") if len(calls) == 1 else Resp(200)
+
+    waits = []
+    monkeypatch.setattr(s.asyncio, "sleep", AsyncMock(side_effect=lambda d: waits.append(d)))
+    resp = await s._get_with_retry(Client(), "https://api.semanticscholar.org/graph/v1/paper/search")
+    assert resp.status_code == 200 and len(calls) == 2
+    assert 6 <= waits[0] < 6.5  # 服务端给了 Retry-After 就听它的
+
+
 async def test_get_with_retry_retries_once_on_429(monkeypatch):
     from services import search_service as s
 
