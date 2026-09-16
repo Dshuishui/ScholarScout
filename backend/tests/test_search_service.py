@@ -380,3 +380,31 @@ async def test_semantic_scholar_sends_api_key_header(monkeypatch, stub_httpx):
     monkeypatch.setattr(s, "SEMANTIC_SCHOLAR_HEADERS", {"x-api-key": "k"})
     await s._search_semantic_scholar(ParsedQuery(keywords=["raft"]), 5)
     assert seen == {"x-api-key": "k"}
+
+
+# ── DOI 登记方的标题优先 ──────────────────────────────────────────────────────
+
+def test_merge_prefers_registrant_title_for_arxiv_doi():
+    """OpenAlex 曾把 LoRA 那篇（10.48550/arXiv.2106.09685）的标题挂成另一篇论文的。"""
+    from models import Paper
+    from services.search_service import deduplicate
+
+    wrong = Paper(paper_id="W1", title="LoRA Fine-Tuning of a 3B Code LLM for Algorithmic Efficiency",
+                  authors=["X"], source="OpenAlex", doi="10.48550/arXiv.2106.09685", citations=2543)
+    right = Paper(paper_id="2106.09685", title="LoRA: Low-Rank Adaptation of Large Language Models",
+                  authors=["Edward J. Hu"], source="arXiv", doi="10.48550/arXiv.2106.09685")
+    merged = deduplicate([wrong, right])
+    assert len(merged) == 1
+    assert merged[0].title == "LoRA: Low-Rank Adaptation of Large Language Models"
+    assert merged[0].citations == 2543  # 其他字段仍取更完整的那份
+
+
+def test_merge_keeps_existing_title_for_publisher_doi():
+    """普通期刊 DOI 不做标题替换，避免把正确标题换成别的源的坏数据。"""
+    from models import Paper
+    from services.search_service import deduplicate
+
+    first = Paper(paper_id="A", title="Attention Is All You Need", authors=["V"], source="OpenAlex", doi="10.1234/abc")
+    second = Paper(paper_id="B", title="attention is all you need (preprint draft)", authors=["V"], source="arXiv", doi="10.1234/abc")
+    merged = deduplicate([first, second])
+    assert len(merged) == 1 and merged[0].title == "Attention Is All You Need"

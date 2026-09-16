@@ -48,8 +48,13 @@ async def run_case(case: dict, limit: int, legacy_5y: bool, use_domains: bool) -
         limit_per_source=limit,
         on_source_done=on_done,
     )
+    # 标题匹配 + DOI 匹配：上游偶尔把标题挂错（OpenAlex 给 LoRA 那篇挂的是别的论文标题），
+    # 只按标题判断会把"其实找到了"算成漏检
     target = _norm(case["target"])[:45]
-    hit = next((p for p in papers if target in _norm(p.title)), None)
+    target_doi = (case.get("doi") or "").lower()
+    hit = next((p for p in papers
+                if target in _norm(p.title)
+                or (target_doi and (p.doi or "").lower() == target_doi)), None)
 
     keyword_words = {w for k in case["keywords"] for w in _norm(k).split() if len(w) > 3}
     off_topic = sum(1 for p in papers if not keyword_words & set(_norm(p.title).split()))

@@ -1,53 +1,214 @@
 {
   "_doc": "检索回归测试集。keywords 模拟 parse_query 的输出（核心词在前 + 同义词/上位概念），固定下来以排除大模型的随机性。user_date_from 为用户明确指定的起始日期，null 表示用户没说时间。",
   "cases": [
-    {"id": "rag-survey", "domain": "cs", "year": 2023, "user_date_from": null,
-     "keywords": ["retrieval-augmented generation", "RAG", "large language model", "knowledge retrieval"],
-     "target": "Retrieval-Augmented Generation for Large Language Models: A Survey"},
-    {"id": "lora", "domain": "cs", "year": 2021, "user_date_from": null,
-     "keywords": ["low-rank adaptation", "LoRA", "parameter-efficient fine-tuning", "large language model"],
-     "target": "LoRA: Low-Rank Adaptation of Large Language Models"},
-    {"id": "chain-of-thought", "domain": "cs", "year": 2022, "user_date_from": null,
-     "keywords": ["chain-of-thought prompting", "reasoning", "large language model", "prompt engineering"],
-     "target": "Chain-of-Thought Prompting Elicits Reasoning in Large Language Models"},
-    {"id": "latent-diffusion", "domain": "cs", "year": 2022, "user_date_from": null,
-     "keywords": ["latent diffusion model", "image synthesis", "text-to-image generation", "generative model"],
-     "target": "High-Resolution Image Synthesis with Latent Diffusion Models"},
-    {"id": "mamba", "domain": "cs", "year": 2023, "user_date_from": null,
-     "keywords": ["state space model", "Mamba", "sequence modeling", "selective state spaces"],
-     "target": "Mamba: Linear-Time Sequence Modeling with Selective State Spaces"},
-    {"id": "gpt3", "domain": "cs", "year": 2020, "user_date_from": null,
-     "keywords": ["few-shot learning", "large language model", "GPT-3", "in-context learning"],
-     "target": "Language Models are Few-Shot Learners"},
-    {"id": "bert", "domain": "cs", "year": 2019, "user_date_from": null,
-     "keywords": ["BERT", "pre-trained language model", "bidirectional transformer", "natural language understanding"],
-     "target": "BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding"},
-    {"id": "attention", "domain": "cs", "year": 2017, "user_date_from": null,
-     "keywords": ["transformer", "attention mechanism", "self-attention", "neural machine translation"],
-     "target": "Attention Is All You Need"},
-    {"id": "resnet", "domain": "cs", "year": 2016, "user_date_from": null,
-     "keywords": ["residual network", "deep learning", "image recognition", "convolutional neural network"],
-     "target": "Deep Residual Learning for Image Recognition"},
-    {"id": "raft", "domain": "cs", "year": 2014, "user_date_from": null,
-     "keywords": ["Raft", "consensus algorithm", "distributed systems", "replicated log"],
-     "target": "In Search of an Understandable Consensus Algorithm"},
-    {"id": "alphafold", "domain": "bio", "year": 2021, "user_date_from": null,
-     "keywords": ["protein structure prediction", "AlphaFold", "deep learning", "structural biology"],
-     "target": "Highly accurate protein structure prediction with AlphaFold"},
-    {"id": "crispr", "domain": "bio", "year": 2012, "user_date_from": null,
-     "keywords": ["CRISPR-Cas9", "genome editing", "RNA-guided endonuclease", "gene editing"],
-     "target": "A Programmable Dual-RNA-Guided DNA Endonuclease in Adaptive Bacterial Immunity"},
-    {"id": "semaglutide", "domain": "med", "year": 2021, "user_date_from": null,
-     "keywords": ["semaglutide", "GLP-1 receptor agonist", "obesity", "weight loss"],
-     "target": "Once-Weekly Semaglutide in Adults with Overweight or Obesity"},
-    {"id": "bnt162b2", "domain": "med", "year": 2020, "user_date_from": null,
-     "keywords": ["mRNA vaccine", "BNT162b2", "COVID-19", "vaccine efficacy"],
-     "target": "Safety and Efficacy of the BNT162b2 mRNA Covid-19 Vaccine"},
-    {"id": "gw150914", "domain": "physics", "year": 2016, "user_date_from": null,
-     "keywords": ["gravitational waves", "binary black hole merger", "LIGO", "general relativity"],
-     "target": "Observation of Gravitational Waves from a Binary Black Hole Merger"},
-    {"id": "diffusion-recent", "domain": "cs", "year": 2023, "user_date_from": "2023-01-01",
-     "keywords": ["latent consistency model", "fast diffusion sampling", "few-step image generation", "diffusion model"],
-     "target": "Latent Consistency Models: Synthesizing High-Resolution Images with Few-Step Inference"}
+    {
+      "id": "rag-survey",
+      "domain": "cs",
+      "year": 2023,
+      "user_date_from": null,
+      "keywords": [
+        "retrieval-augmented generation",
+        "RAG",
+        "large language model",
+        "knowledge retrieval"
+      ],
+      "target": "Retrieval-Augmented Generation for Large Language Models: A Survey"
+    },
+    {
+      "id": "lora",
+      "domain": "cs",
+      "year": 2021,
+      "user_date_from": null,
+      "keywords": [
+        "low-rank adaptation",
+        "LoRA",
+        "parameter-efficient fine-tuning",
+        "large language model"
+      ],
+      "target": "LoRA: Low-Rank Adaptation of Large Language Models",
+      "doi": "10.48550/arXiv.2106.09685"
+    },
+    {
+      "id": "chain-of-thought",
+      "domain": "cs",
+      "year": 2022,
+      "user_date_from": null,
+      "keywords": [
+        "chain-of-thought prompting",
+        "reasoning",
+        "large language model",
+        "prompt engineering"
+      ],
+      "target": "Chain-of-Thought Prompting Elicits Reasoning in Large Language Models"
+    },
+    {
+      "id": "latent-diffusion",
+      "domain": "cs",
+      "year": 2022,
+      "user_date_from": null,
+      "keywords": [
+        "latent diffusion model",
+        "image synthesis",
+        "text-to-image generation",
+        "generative model"
+      ],
+      "target": "High-Resolution Image Synthesis with Latent Diffusion Models"
+    },
+    {
+      "id": "mamba",
+      "domain": "cs",
+      "year": 2023,
+      "user_date_from": null,
+      "keywords": [
+        "state space model",
+        "Mamba",
+        "sequence modeling",
+        "selective state spaces"
+      ],
+      "target": "Mamba: Linear-Time Sequence Modeling with Selective State Spaces"
+    },
+    {
+      "id": "gpt3",
+      "domain": "cs",
+      "year": 2020,
+      "user_date_from": null,
+      "keywords": [
+        "few-shot learning",
+        "large language model",
+        "GPT-3",
+        "in-context learning"
+      ],
+      "target": "Language Models are Few-Shot Learners"
+    },
+    {
+      "id": "bert",
+      "domain": "cs",
+      "year": 2019,
+      "user_date_from": null,
+      "keywords": [
+        "BERT",
+        "pre-trained language model",
+        "bidirectional transformer",
+        "natural language understanding"
+      ],
+      "target": "BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding"
+    },
+    {
+      "id": "attention",
+      "domain": "cs",
+      "year": 2017,
+      "user_date_from": null,
+      "keywords": [
+        "transformer",
+        "attention mechanism",
+        "self-attention",
+        "neural machine translation"
+      ],
+      "target": "Attention Is All You Need"
+    },
+    {
+      "id": "resnet",
+      "domain": "cs",
+      "year": 2016,
+      "user_date_from": null,
+      "keywords": [
+        "residual network",
+        "deep learning",
+        "image recognition",
+        "convolutional neural network"
+      ],
+      "target": "Deep Residual Learning for Image Recognition"
+    },
+    {
+      "id": "raft",
+      "domain": "cs",
+      "year": 2014,
+      "user_date_from": null,
+      "keywords": [
+        "Raft",
+        "consensus algorithm",
+        "distributed systems",
+        "replicated log"
+      ],
+      "target": "In Search of an Understandable Consensus Algorithm"
+    },
+    {
+      "id": "alphafold",
+      "domain": "bio",
+      "year": 2021,
+      "user_date_from": null,
+      "keywords": [
+        "protein structure prediction",
+        "AlphaFold",
+        "deep learning",
+        "structural biology"
+      ],
+      "target": "Highly accurate protein structure prediction with AlphaFold"
+    },
+    {
+      "id": "crispr",
+      "domain": "bio",
+      "year": 2012,
+      "user_date_from": null,
+      "keywords": [
+        "CRISPR-Cas9",
+        "genome editing",
+        "RNA-guided endonuclease",
+        "gene editing"
+      ],
+      "target": "A Programmable Dual-RNA-Guided DNA Endonuclease in Adaptive Bacterial Immunity"
+    },
+    {
+      "id": "semaglutide",
+      "domain": "med",
+      "year": 2021,
+      "user_date_from": null,
+      "keywords": [
+        "semaglutide",
+        "GLP-1 receptor agonist",
+        "obesity",
+        "weight loss"
+      ],
+      "target": "Once-Weekly Semaglutide in Adults with Overweight or Obesity"
+    },
+    {
+      "id": "bnt162b2",
+      "domain": "med",
+      "year": 2020,
+      "user_date_from": null,
+      "keywords": [
+        "mRNA vaccine",
+        "BNT162b2",
+        "COVID-19",
+        "vaccine efficacy"
+      ],
+      "target": "Safety and Efficacy of the BNT162b2 mRNA Covid-19 Vaccine"
+    },
+    {
+      "id": "gw150914",
+      "domain": "physics",
+      "year": 2016,
+      "user_date_from": null,
+      "keywords": [
+        "gravitational waves",
+        "binary black hole merger",
+        "LIGO",
+        "general relativity"
+      ],
+      "target": "Observation of Gravitational Waves from a Binary Black Hole Merger"
+    },
+    {
+      "id": "diffusion-recent",
+      "domain": "cs",
+      "year": 2023,
+      "user_date_from": "2023-01-01",
+      "keywords": [
+        "latent consistency model",
+        "fast diffusion sampling",
+        "few-step image generation",
+        "diffusion model"
+      ],
+      "target": "Latent Consistency Models: Synthesizing High-Resolution Images with Few-Step Inference"
+    }
   ]
 }

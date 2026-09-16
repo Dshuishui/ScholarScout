@@ -63,6 +63,7 @@ async def _search_arxiv(parsed: ParsedQuery, limit: int) -> list[Paper]:
                 "https://export.arxiv.org/api/query",
                 params={"search_query": search_query, "max_results": limit,
                         "sortBy": sort_by, "sortOrder": "descending"},
+                headers={"User-Agent": f"ScholarScout/1.0 (mailto:{POLITE_EMAIL})"},
             )
             resp.raise_for_status()
 
@@ -71,6 +72,10 @@ async def _search_arxiv(parsed: ParsedQuery, limit: int) -> list[Paper]:
         for entry in feed.entries:
             try:
                 arxiv_id = entry.id.split("/abs/")[-1]
+                # 不给 DOI 就没法和 OpenAlex / CrossRef 的同一篇合并，会出现重复条目。
+                # arXiv 每篇都有 10.48550/arXiv.<id> 这个 DOI；已正式发表的用期刊 DOI。
+                bare_id = arxiv_id.split("v")[0]
+                doi = entry.get("arxiv_doi") or f"10.48550/arXiv.{bare_id}"
                 pdf_url = next(
                     (lk.href for lk in entry.get("links", []) if lk.get("type") == "application/pdf"),
                     f"https://arxiv.org/pdf/{arxiv_id}.pdf",
@@ -81,7 +86,7 @@ async def _search_arxiv(parsed: ParsedQuery, limit: int) -> list[Paper]:
                     authors=[a.get("name", "") for a in entry.get("authors", [])],
                     abstract=(entry.get("summary", "") or "").replace("\n", " ").strip() or None,
                     published_date=entry.get("published", "")[:10] or None,
-                    doi=None,
+                    doi=doi,
                     pdf_url=pdf_url,
                     url=entry.get("id"),
                     source="arXiv",
@@ -794,6 +799,17 @@ def _normalize_title(title: str) -> str:
     return re.sub(r"\s+", " ", fallback)
 
 
+def _doi_owner(doi: str | None) -> str | None:
+    """DOI 前缀对应的登记方。登记方给出的标题最可信。
+
+    实例：LoRA 那篇（10.48550/arXiv.2106.09685）在 OpenAlex 里的标题是另一篇论文的，
+    而 arXiv 自己给的标题是对的。
+    """
+    if doi and doi.lower().startswith("10.48550/arxiv"):
+        return "arXiv"
+    return None
+
+
 def _merge(existing: Paper, newcomer: Paper) -> Paper:
     """用后来的论文补全现有版本的空字段，引用数取最大值，摘要取更长的，source_links 累积。"""
     abstract = existing.abstract
@@ -810,7 +826,12 @@ def _merge(existing: Paper, newcomer: Paper) -> Paper:
     else:
         source_links = existing_links
 
+    # 标题冲突时采用 DOI 登记方的版本（其他源偶尔会把标题挂错）
+    owner = _doi_owner(existing.doi or newcomer.doi)
+    title = newcomer.title if (owner and newcomer.source == owner and existing.source != owner) else existing.title
+
     return existing.model_copy(update={
+        "title":        title,
         "pdf_url":      existing.pdf_url or newcomer.pdf_url,
         "abstract":     abstract,
         "citations":    max(existing.citations, newcomer.citations),
