@@ -185,8 +185,12 @@ def _openalex_item_to_paper(item: dict) -> Paper:
 async def _openalex_request(client: httpx.AsyncClient, search_param: str, query: str,
                             parsed: ParsedQuery, limit: int) -> list[Paper]:
     params = {search_param: query, "per_page": limit, "select": _OPENALEX_SELECT}
-    if parsed.date_from:
+    # 语义检索不支持日期类 filter（带上会整个请求 400），改成多取一些、拿回来再按日期筛
+    semantic = search_param == "search.semantic"
+    if parsed.date_from and not semantic:
         params["filter"] = f"publication_date:>{parsed.date_from}"
+    if parsed.date_from and semantic:
+        params["per_page"] = min(limit * 2, 200)
     if OPENALEX_API_KEY:
         params["api_key"] = OPENALEX_API_KEY
     resp = await _get_with_retry(
@@ -196,7 +200,10 @@ async def _openalex_request(client: httpx.AsyncClient, search_param: str, query:
         headers={"User-Agent": f"ScholarScout/1.0 (mailto:{POLITE_EMAIL})"},
     )
     resp.raise_for_status()
-    return [_openalex_item_to_paper(it) for it in resp.json().get("results", [])]
+    papers = [_openalex_item_to_paper(it) for it in resp.json().get("results", [])]
+    if parsed.date_from and semantic:
+        papers = [p for p in papers if not p.published_date or p.published_date >= parsed.date_from][:limit]
+    return papers
 
 
 def _rrf_fuse(ranked_lists: list[list[Paper]], limit: int, k: int = 10) -> list[Paper]:

@@ -408,3 +408,36 @@ def test_merge_keeps_existing_title_for_publisher_doi():
     second = Paper(paper_id="B", title="attention is all you need (preprint draft)", authors=["V"], source="arXiv", doi="10.1234/abc")
     merged = deduplicate([first, second])
     assert len(merged) == 1 and merged[0].title == "Attention Is All You Need"
+
+
+# ── OpenAlex 语义检索与日期筛选 ───────────────────────────────────────────────
+
+async def test_openalex_semantic_filters_dates_client_side(monkeypatch):
+    """OpenAlex 语义检索不接受日期 filter（带上整个请求 400），要拿回来再筛。"""
+    from services import search_service as s
+    from models import ParsedQuery
+
+    sent = {}
+
+    class Resp:
+        status_code = 200
+        def raise_for_status(self): pass
+        def json(self):
+            return {"results": [
+                {"id": "https://openalex.org/W1", "title": "新的", "publication_date": "2024-05-01"},
+                {"id": "https://openalex.org/W2", "title": "太旧", "publication_date": "2019-01-01"},
+            ]}
+
+    class Client:
+        async def get(self, url, **kw):
+            sent.update(kw.get("params", {}))
+            return Resp()
+
+    parsed = ParsedQuery(keywords=["diffusion"], date_from="2023-01-01")
+    papers = await s._openalex_request(Client(), "search.semantic", "diffusion", parsed, 50)
+    assert "filter" not in sent                     # 不能带日期 filter
+    assert [p.title for p in papers] == ["新的"]     # 旧的在本地筛掉
+
+    sent.clear()
+    await s._openalex_request(Client(), "search", "diffusion", parsed, 50)
+    assert sent["filter"] == "publication_date:>2023-01-01"  # 关键词检索仍然交给服务端筛
