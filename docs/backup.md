@@ -31,6 +31,12 @@ BACKUP_STATUS_FILE=/home/ubuntu/backups/scholarscout/last_success
 
 没配置这一项时不做检查（本地开发不会误报）。
 
+## 服务器上的其他服务
+
+这台机器上还跑着别的项目（例如 `wecom-todo.service` 占用 8010 端口）。临时起后端做演练时，
+**先用 `ss -ltn "sport = :<端口>"` 确认端口空闲**，清理时按 PID `kill`，
+不要用 `pkill -f "port 80xx"` 这种模糊匹配——它会连别的项目的进程一起杀掉。
+
 ## 手动备份一次
 
 ```bash
