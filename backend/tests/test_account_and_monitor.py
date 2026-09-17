@@ -81,10 +81,12 @@ async def test_delete_account_removes_data_and_anonymizes_feedback(client, db_se
 # ── 数据源健康监控 ────────────────────────────────────────────────────────────
 
 @pytest.fixture
-def monitor():
+def monitor(tmp_path, monkeypatch):
     from services import health_monitor as hm
     hm._calls.clear()
     hm._last_alert.clear()
+    monkeypatch.setattr(hm, "ALERT_STATE_FILE", tmp_path / "alert_state.json")
+    monkeypatch.setattr(hm, "_state_loaded", False)
     yield hm
     hm._calls.clear()
     hm._last_alert.clear()
@@ -203,3 +205,17 @@ def test_backup_garbage_status_file_alerts(monitor, monkeypatch, tmp_path):
     status.write_text("not-a-timestamp")
     monkeypatch.setattr(monitor.config, "BACKUP_STATUS_FILE", str(status))
     assert monitor.backup_problem(time.time())[0] == "backup"
+
+
+async def test_alert_cooldown_survives_restart(monitor, monkeypatch):
+    """部署重启后端不能让"每天最多一封"失效。"""
+    now = time.time()
+    assert monitor._should_alert("stalled-subscriptions", now) is True
+    assert monitor.ALERT_STATE_FILE.exists()
+
+    # 模拟重启：内存清空，重新从文件加载
+    monitor._last_alert.clear()
+    monkeypatch.setattr(monitor, "_state_loaded", False)
+    assert monitor._should_alert("stalled-subscriptions", now + 3600) is False
+    # 过了冷却期照常提醒
+    assert monitor._should_alert("stalled-subscriptions", now + monitor.ALERT_COOLDOWN_SEC + 1) is True

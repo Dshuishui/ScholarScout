@@ -10,3 +10,4 @@ docs/promotion.md
 backend/scholarscout.db
 backend/chroma_db/
 context/
+backend/.alert_state.json

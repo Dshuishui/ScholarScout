@@ -11,9 +11,11 @@
   - 数据库备份超过 36 小时没有成功 → 告警（备份悄悄失效比没有备份更危险）
 同一问题每天最多发一封邮件。统计只在内存里，重启后清空，足够发现持续性故障。
 """
+import json
 import logging
 import os
 import time
+from pathlib import Path
 from collections import defaultdict, deque
 from datetime import datetime, timedelta
 
@@ -30,6 +32,29 @@ TRIAL_CAP_ALERT_RATIO = 0.8    # 未登录体验用到每日上限的 80% 就提
 # 源名 → deque[(时间戳, 返回篇数)]，保留最近两个窗口
 _calls: dict[str, deque] = defaultdict(lambda: deque(maxlen=2000))
 _last_alert: dict[str, float] = {}
+# 告警冷却时间落盘：只放内存的话每次重启后端（部署）都会清零，
+# 同一个问题一天内会重复发邮件（2026-09-16 实际发生：部署重启后 7 小时内收到两封同样的告警）
+ALERT_STATE_FILE = Path(__file__).resolve().parent.parent / ".alert_state.json"
+_state_loaded = False
+
+
+def _load_alert_state() -> None:
+    global _state_loaded
+    if _state_loaded:
+        return
+    _state_loaded = True
+    try:
+        data = json.loads(ALERT_STATE_FILE.read_text())
+        _last_alert.update({k: float(v) for k, v in data.items()})
+    except (FileNotFoundError, ValueError, OSError):
+        pass
+
+
+def _save_alert_state() -> None:
+    try:
+        ALERT_STATE_FILE.write_text(json.dumps(_last_alert))
+    except OSError as e:
+        logger.warning("Failed to persist alert state: %s", e)
 
 
 def record_source_result(source: str, count: int) -> None:
@@ -117,10 +142,12 @@ def backup_problem(now: float) -> tuple[str, str] | None:
 
 
 def _should_alert(key: str, now: float) -> bool:
+    _load_alert_state()
     last = _last_alert.get(key)
     if last and now - last < ALERT_COOLDOWN_SEC:
         return False
     _last_alert[key] = now
+    _save_alert_state()
     return True
 
 
