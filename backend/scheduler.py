@@ -24,6 +24,22 @@ scheduler = AsyncIOScheduler()
 # 队列填充
 # ─────────────────────────────────────────────────────────────
 
+def rank_for_push(papers: list[Paper]) -> list[Paper]:
+    """决定推送先后：相关度 + 引用量加分；预印本、开放仓库上传的扣 1 分。
+
+    以前按数据源返回顺序直接排队，出现过第一篇推的是 Zenodo 上单作者、0 引用的上传。
+    扣 1 分只影响相关度接近时的先后，高度相关的预印本仍然会推。
+    """
+    from services.llm_service import citation_bonus
+    from services.email_service import _is_unreviewed
+
+    def key(p: Paper) -> float:
+        score = p.relevance_score if p.relevance_score is not None else 5.0
+        return score + citation_bonus(p.citations) - (1.0 if _is_unreviewed(p) else 0.0)
+
+    return sorted(papers, key=key, reverse=True)
+
+
 async def populate_queue(
     sub: Subscription,
     db,
@@ -63,7 +79,7 @@ async def populate_queue(
     )
     existing_ids: set[str] = set(existing_result.scalars().all())
 
-    new_papers = [p for p in all_papers if p.paper_id not in existing_ids]
+    new_papers = rank_for_push([p for p in all_papers if p.paper_id not in existing_ids])
     if not new_papers:
         logger.info("No new papers to add to queue for sub %d", sub.id)
         return 0

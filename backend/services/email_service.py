@@ -5,6 +5,7 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.utils import formatdate
 from datetime import date
+from urllib.parse import quote
 
 import aiosmtplib
 
@@ -26,29 +27,94 @@ def _safe_href(url: str | None) -> str | None:
     return None
 
 
-def _paper_card_html(paper: Paper, expand_abstract: bool = False) -> str:
-    href = _safe_href(paper.url)
-    title_link = (
-        f'<a href="{href}" style="color:#1d4ed8;text-decoration:none;font-weight:600;">{_esc(paper.title)}</a>'
-        if href else f'<strong>{_esc(paper.title)}</strong>'
+# 这些来源是预印本服务器或开放仓库，内容通常没有经过同行评审，推送时提示读者
+_UNREVIEWED_VENUES = (
+    "zenodo", "figshare", "arxiv", "biorxiv", "medrxiv", "chemrxiv", "research square",
+    "ssrn", "preprints", "osf", "techrxiv", "authorea", "sciety",
+)
+
+
+def _is_unreviewed(paper: Paper) -> bool:
+    venue = (paper.venue or "").lower()
+    doi = (paper.doi or "").lower()
+    return any(v in venue for v in _UNREVIEWED_VENUES) or doi.startswith(("10.48550/", "10.5281/", "10.1101/"))
+
+
+def _paper_link(paper: Paper) -> str | None:
+    """标题链接优先指向出版社原文（DOI），而不是 OpenAlex 这类数据库页面——读者点进去认不出来。"""
+    if paper.doi:
+        return _safe_href(f"https://doi.org/{paper.doi}")
+    return _safe_href(paper.url)
+
+
+def _button(href: str | None, text: str, primary: bool = False) -> str:
+    if not href:
+        return ""
+    style = (
+        "background:#4f46e5;color:#ffffff;border:1px solid #4f46e5;" if primary
+        else "background:#ffffff;color:#4338ca;border:1px solid #c7d2fe;"
     )
+    return (f'<a href="{href}" style="{style}display:inline-block;padding:7px 14px;border-radius:8px;'
+            f'font-size:13px;font-weight:600;text-decoration:none;margin:6px 8px 0 0;">{_esc(text)}</a>')
+
+
+def _paper_card_html(paper: Paper, expand_abstract: bool = False, search_url: str | None = None) -> str:
+    """一篇论文的卡片。中文一句话总结放最前面：非英语母语的读者扫一眼就知道值不值得点开。"""
+    link = _paper_link(paper)
+    title_html = (
+        f'<a href="{link}" style="color:#1d4ed8;text-decoration:none;font-weight:600;">{_esc(paper.title)}</a>'
+        if link else f'<strong>{_esc(paper.title)}</strong>'
+    )
+
     meta_parts = []
     if paper.authors:
-        authors_str = ", ".join(paper.authors[:3]) + (" 等" if len(paper.authors) > 3 else "")
-        meta_parts.append(authors_str)
+        meta_parts.append(", ".join(paper.authors[:3]) + (" 等" if len(paper.authors) > 3 else ""))
     if paper.published_date:
         meta_parts.append(paper.published_date[:4])
     if paper.venue:
         meta_parts.append(paper.venue)
+    if paper.citations:
+        meta_parts.append(f"被引 {paper.citations} 次")
     meta = _esc(" · ".join(meta_parts))
+    unreviewed_tag = (
+        '<span style="display:inline-block;margin-left:6px;padding:1px 7px;border-radius:999px;'
+        'background:#fef3c7;color:#92400e;font-size:11px;">预印本/未经同行评审</span>'
+        if _is_unreviewed(paper) else ""
+    )
+
+    tldr_html = (
+        f'<div style="font-size:16px;font-weight:700;color:#111827;line-height:1.5;margin-bottom:10px;">{_esc(paper.tldr)}</div>'
+        if paper.tldr else ""
+    )
+
+    reason_html = ""
+    if paper.relevance_reason:
+        score = f"（相关度 {paper.relevance_score:.0f}/10）" if paper.relevance_score else ""
+        reason_html = (
+            '<div style="background:#f5f3ff;border-radius:8px;padding:9px 11px;margin:10px 0;'
+            f'font-size:13px;color:#5b21b6;line-height:1.6;"><strong>为什么推荐：</strong>{_esc(paper.relevance_reason)}{_esc(score)}</div>'
+        )
+
     abstract_text = (paper.abstract or "").strip()
-    if not expand_abstract and len(abstract_text) > 300:
-        abstract_text = abstract_text[:300] + "…"
+    limit = 600 if expand_abstract and not paper.tldr else 220
+    if len(abstract_text) > limit:
+        abstract_text = abstract_text[:limit].rstrip() + "…"
+    abstract_html = (
+        f'<div style="font-size:12px;color:#6b7280;line-height:1.6;margin-top:8px;">英文摘要：{_esc(abstract_text)}</div>'
+        if abstract_text else ""
+    )
+
+    full_text_href = _safe_href(paper.pdf_url) or link
+    buttons = _button(full_text_href, "阅读全文", primary=True) + _button(search_url, "在 ScholarScout 搜更多相关论文")
+
     return f"""
-<div style="margin-bottom:16px;padding:16px;border:1px solid #e5e7eb;border-radius:10px;background:#fff;">
-  <div style="font-size:15px;margin-bottom:6px;">{title_link}</div>
-  <div style="font-size:12px;color:#6b7280;margin-bottom:8px;">{meta}</div>
-  {"" if not abstract_text else f'<div style="font-size:13px;color:#374151;line-height:1.6;">{_esc(abstract_text)}</div>'}
+<div style="margin-bottom:16px;padding:18px;border:1px solid #e5e7eb;border-radius:12px;background:#fff;">
+  {tldr_html}
+  <div style="font-size:14px;line-height:1.5;margin-bottom:4px;">{title_html}</div>
+  <div style="font-size:12px;color:#6b7280;line-height:1.6;">{meta}{unreviewed_tag}</div>
+  {reason_html}
+  {abstract_html}
+  <div style="margin-top:6px;">{buttons}</div>
 </div>"""
 
 
@@ -64,7 +130,9 @@ def build_daily_email_html(keywords: list[str], papers: list[Paper], unsubscribe
     else:
         banner_text = f'您订阅的关键词 <strong>{kw_str}</strong> 今日推送 <strong style="font-size:16px;">{count}</strong> 篇论文'
 
-    cards = "".join(_paper_card_html(p, expand_abstract=single) for p in papers)
+    # 回到网站继续搜：预填订阅关键词（网站读取 ?q= 放进搜索框，不会自动消耗免费次数）
+    search_url = _safe_href(f"{APP_BASE_URL}/?q={quote(' '.join(keywords))}&from=email")
+    cards = "".join(_paper_card_html(p, expand_abstract=single, search_url=search_url) for p in papers)
 
     if unsubscribe_url:
         unsubscribe_line = (
@@ -72,7 +140,7 @@ def build_daily_email_html(keywords: list[str], papers: list[Paper], unsubscribe
             '（无需登录）'
         )
     else:
-        unsubscribe_line = "如需停止接收，请登录 ScholarScout → 右上角头像 → 订阅管理 → 删除此订阅"
+        unsubscribe_line = "如需停止接收，请登录 ScholarScout → 右上角头像 → 订阅管理"
 
     return f"""<!DOCTYPE html>
 <html lang="zh-CN">
@@ -97,6 +165,7 @@ def build_daily_email_html(keywords: list[str], papers: list[Paper], unsubscribe
   <!-- Footer -->
   <div style="margin-top:24px;padding-top:16px;border-top:1px solid #e5e7eb;font-size:12px;color:#9ca3af;line-height:1.8;">
     <div>下次推送：明天早 8 点（北京时间 08:00）· 由 ScholarScout 自动发送，请勿直接回复</div>
+    <div>想调整每天推送几篇或修改关键词：登录 <a href="{_esc(APP_BASE_URL)}" style="color:#6b7280;text-decoration:underline;">ScholarScout</a> → 右上角头像 → 订阅管理</div>
     <div>{unsubscribe_line}</div>
   </div>
 </div>
@@ -358,7 +427,10 @@ async def send_subscription_email(
         return False
 
     kw_str = " · ".join(keywords)
-    title = papers[0].title[:50] if len(papers) == 1 else f"{kw_str} 等 {len(papers)} 篇"
+    if len(papers) == 1:
+        title = (papers[0].tldr or papers[0].title)[:50]
+    else:
+        title = f"{kw_str} 等 {len(papers)} 篇新论文"
     subject = f"ScholarScout 日报：{title}"
 
     msg = MIMEMultipart("alternative")

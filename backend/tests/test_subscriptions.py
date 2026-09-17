@@ -236,3 +236,53 @@ def test_daily_job_runs_at_utc_midnight():
     from scheduler import setup_scheduler
     job = setup_scheduler().get_job("daily_subscriptions")
     assert str(job.trigger.timezone) == "UTC"
+
+
+# ── 推送邮件内容与排序 ────────────────────────────────────────────────────────
+
+def _push_paper(**kw):
+    from models import Paper
+    base = dict(paper_id="p", title="A title", authors=["Alice"], source="OpenAlex",
+                abstract="An English abstract. " * 40)
+    base.update(kw)
+    return Paper(**base)
+
+
+def test_email_leads_with_chinese_summary_and_reason():
+    from services.email_service import build_daily_email_html
+    p = _push_paper(tldr="利用语义相似度识别并重构代码", relevance_reason="属于重构工具研究",
+                    relevance_score=8.0, doi="10.1234/abc", citations=12, venue="ICSE")
+    html = build_daily_email_html(["refactoring"], [p], "http://x/unsub")
+    assert html.index("利用语义相似度识别并重构代码") < html.index("A title")   # 中文总结在英文标题前
+    assert "为什么推荐" in html and "相关度 8/10" in html
+    assert 'href="https://doi.org/10.1234/abc"' in html                      # 标题指向出版社原文
+    assert "阅读全文" in html and "被引 12 次" in html
+    assert "/?q=refactoring&amp;from=email" in html                          # 回到网站继续搜
+    assert "预印本" not in html
+
+
+def test_email_marks_unreviewed_sources_and_escapes_content():
+    from services.email_service import build_daily_email_html
+    p = _push_paper(venue="Zenodo (CERN)", doi="10.5281/zenodo.1", tldr='<script>alert(1)</script>')
+    html = build_daily_email_html(["x"], [p])
+    assert "预印本/未经同行评审" in html
+    assert "<script>" not in html and "&lt;script&gt;" in html
+
+
+def test_email_truncates_long_english_abstract_when_summary_exists():
+    from services.email_service import build_daily_email_html
+    p = _push_paper(tldr="中文总结")
+    html = build_daily_email_html(["x"], [p])
+    assert "An English abstract. " * 20 not in html   # 有中文总结时英文摘要只保留开头
+
+
+def test_push_order_prefers_relevant_peer_reviewed_papers():
+    from scheduler import rank_for_push
+    zenodo = _push_paper(paper_id="z", relevance_score=8.0, venue="Zenodo", citations=0)
+    journal = _push_paper(paper_id="j", relevance_score=8.0, venue="ICSE", citations=40)
+    weak = _push_paper(paper_id="w", relevance_score=5.0, venue="ICSE", citations=0)
+    strong_preprint = _push_paper(paper_id="s", relevance_score=10.0, venue="arXiv", citations=0)
+    order = [p.paper_id for p in rank_for_push([zenodo, weak, journal, strong_preprint])]
+    assert order[0] == "s"                     # 高度相关的预印本仍然优先
+    assert order.index("j") < order.index("z")  # 同分时正式发表的在前
+    assert order[-1] == "w"

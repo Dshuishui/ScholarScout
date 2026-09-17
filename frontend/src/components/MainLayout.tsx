@@ -44,6 +44,18 @@ export function MainLayout() {
   const [expandSubId, setExpandSubId] = useState<number | null>(null)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [mobileTab, setMobileTab] = useState<'search' | 'results'>('search')
+  // 从推送邮件等外部链接进来时（/?q=关键词）预填搜索框，由用户自己点搜索，不自动消耗免费次数
+  const [initialQuery] = useState(() => {
+    try {
+      const params = new URLSearchParams(window.location.search)
+      const q = params.get('q')?.slice(0, 300) ?? ''
+      if (q || params.get('from')) {
+        if (params.get('from')) track('inbound', { from: params.get('from') ?? '' })
+        window.history.replaceState({}, '', window.location.pathname)
+      }
+      return q
+    } catch { return '' }
+  })
 
   const {
     messages, papers, previewPapers, previewTotal, rejectedPapers, isLoading, statusMessage, sourceStatuses,
@@ -309,6 +321,7 @@ export function MainLayout() {
                 onSearchFromHistory={searchFromHistory}
                 onRemoveHistory={removeHistory}
                 inputRef={chatInputRef}
+                initialQuery={initialQuery}
               />
             </div>
           </div>
@@ -338,6 +351,7 @@ export function MainLayout() {
               onSearchFromHistory={searchFromHistory}
               onRemoveHistory={removeHistory}
               inputRef={chatInputRef}
+              initialQuery={initialQuery}
             />
           </div>
         )}

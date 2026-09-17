@@ -13,6 +13,8 @@ interface Props {
   onSearchFromHistory: (keywords: string[]) => void
   onRemoveHistory: (timestamp: number) => void
   inputRef?: RefObject<HTMLTextAreaElement | null>
+  /** 外部链接带进来的问题，预填到输入框 */
+  initialQuery?: string
 }
 
 const EXAMPLE_GROUPS = [
@@ -47,9 +49,9 @@ const EXAMPLE_GROUPS = [
 
 export function ChatPanel({
   messages, isLoading, onSearch,
-  history, onSearchFromHistory, onRemoveHistory, inputRef,
+  history, onSearchFromHistory, onRemoveHistory, inputRef, initialQuery = '',
 }: Props) {
-  const [input, setInput] = useState('')
+  const [input, setInput] = useState(initialQuery)
   const [activeGroup, setActiveGroup] = useState(0)
   const [historyCollapsed, setHistoryCollapsed] = useState(true)
   const bottomRef = useRef<HTMLDivElement>(null)
