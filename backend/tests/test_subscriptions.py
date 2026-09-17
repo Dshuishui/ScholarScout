@@ -388,3 +388,25 @@ async def test_queue_progress_counts(db_session):
     progress = await _queue_progress(db_session, sub, today_count=1)
     assert progress == {"total": 5, "sent": 3, "today": 1, "remaining": 2,
                         "last_date": "2026-09-19", "daily_limit": 1, "since": "2026-05-23"}
+
+
+async def test_analysis_retries_when_reasoning_exhausts_token_budget(monkeypatch):
+    """推理模型把 max_tokens 花在思考上、正文为空时，要加大上限再试一次。"""
+    from services import paper_analysis as pa
+    calls = []
+
+    def resp(content, finish):
+        return type("R", (), {"usage": None, "choices": [type("C", (), {
+            "finish_reason": finish, "message": type("M", (), {"content": content})()})()]})()
+
+    async def create(**kw):
+        calls.append(kw["max_tokens"])
+        if len(calls) == 1:
+            return resp("", "length")
+        return resp('```json\n{"abstract_zh": "中文", "problem": "问题"}\n```', "stop")
+
+    monkeypatch.setattr(pa.openai, "AsyncOpenAI", lambda **kw: type("C", (), {
+        "chat": type("X", (), {"completions": type("Y", (), {"create": staticmethod(create)})()})()})())
+    result = await pa.analyze_paper(_push_paper(), "sk-x", fetch_full_text=False)
+    assert calls == list(pa.MAX_OUTPUT_TOKENS)
+    assert result["analysis"]["problem"] == "问题" and result["abstract_zh"] == "中文"

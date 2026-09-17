@@ -21,7 +21,10 @@ from models import Paper
 logger = get_logger(__name__)
 
 PDF_TIMEOUT_SEC = 60
-LLM_TIMEOUT_SEC = 240
+LLM_TIMEOUT_SEC = 300
+# deepseek-v4-pro 是推理模型：先思考再输出，思考用的 token 也计入 max_tokens。
+# 读全文做解读时光思考就可能超过 2000，正文输出为空（实际遇到过）。放宽上限，被截断时再加大重试一次。
+MAX_OUTPUT_TOKENS = (8000, 16000)
 ANALYSIS_KEYS = ("problem", "method", "findings", "limitations", "for_whom")
 
 PROMPT = """你是一位严谨的学术论文解读助手，读者是中文母语的研究生，不一定是这个领域的专家。
@@ -73,6 +76,8 @@ async def analyze_paper(paper: Paper, api_key: str, model: Optional[str] = None,
         full_text = await _fetch_full_text(paper)
 
     based_on = "full_text" if full_text else "abstract"
+    logger.info("Analyzing %s with %s based on %s (%d chars of full text)",
+                paper.paper_id, model, based_on, len(full_text or ""))
     if not full_text and not paper.abstract:
         return None  # 连摘要都没有，解读只会是瞎编
 
@@ -86,21 +91,32 @@ async def analyze_paper(paper: Paper, api_key: str, model: Optional[str] = None,
         full_text_block=f"\n【正文（节选）】\n{excerpt}" if excerpt else "",
     )
 
-    try:
-        client = openai.AsyncOpenAI(api_key=api_key, base_url=config.DEEPSEEK_BASE_URL)
-        resp = await asyncio.wait_for(
-            client.chat.completions.create(
-                model=model,
-                messages=[{"role": "user", "content": prompt}],
-                response_format={"type": "json_object"},
-                temperature=0.2,
-                max_tokens=2000,
-            ),
-            timeout=LLM_TIMEOUT_SEC,
-        )
-        data = json.loads(resp.choices[0].message.content)
-    except Exception as e:
-        logger.warning("Paper analysis failed for %s: %s", paper.paper_id, e)
+    client = openai.AsyncOpenAI(api_key=api_key, base_url=config.DEEPSEEK_BASE_URL)
+    data, resp = None, None
+    for max_tokens in MAX_OUTPUT_TOKENS:
+        try:
+            resp = await asyncio.wait_for(
+                client.chat.completions.create(
+                    model=model,
+                    messages=[{"role": "user", "content": prompt}],
+                    response_format={"type": "json_object"},
+                    temperature=0.2,
+                    max_tokens=max_tokens,
+                ),
+                timeout=LLM_TIMEOUT_SEC,
+            )
+        except Exception as e:
+            logger.warning("Paper analysis request failed for %s: %s", paper.paper_id, e)
+            return None
+        choice = resp.choices[0]
+        data = _parse_json(choice.message.content)
+        if data is not None:
+            break
+        logger.warning("Paper analysis got no usable JSON for %s (finish_reason=%s, max_tokens=%d)",
+                       paper.paper_id, choice.finish_reason, max_tokens)
+        if choice.finish_reason != "length":
+            return None  # 不是被截断，加大上限也没用
+    if data is None:
         return None
 
     analysis = {k: str(data.get(k) or "").strip() for k in ANALYSIS_KEYS}
@@ -115,6 +131,21 @@ async def analyze_paper(paper: Paper, api_key: str, model: Optional[str] = None,
         "output_tokens": getattr(usage, "completion_tokens", None),
     })
     return {"abstract_zh": str(data.get("abstract_zh") or "").strip() or None, "analysis": analysis}
+
+
+def _parse_json(content: str | None) -> dict | None:
+    """兼容模型偶尔把 JSON 包在 ```json 代码块里的情况。"""
+    if not content:
+        return None
+    text = content.strip()
+    if text.startswith("```"):
+        text = text.split("\n", 1)[1] if "\n" in text else text
+        text = text.rsplit("```", 1)[0]
+    try:
+        data = json.loads(text)
+    except ValueError:
+        return None
+    return data if isinstance(data, dict) else None
 
 
 async def ensure_analysis(paper: Paper, api_key: str) -> tuple[Paper, bool]:
