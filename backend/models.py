@@ -43,7 +43,10 @@ class Paper(BaseModel):
     tldr: Optional[str] = None
     source_links: list[dict] = []   # [{"source": "arXiv", "url": "..."}]
     venue: Optional[str] = None
-    fallback_links: list[dict] = [] # [{"name": "Sci-Hub", "url": "..."}]，无 PDF 时的备用查找入口
+    fallback_links: list[dict] = [] # [{"name": "Google 学术", "url": "..."}]，无 PDF 时的备用查找入口
+    # 订阅推送前由 Pro 模型生成：中文摘要和结构化解读（见 services/paper_analysis.py）
+    abstract_zh: Optional[str] = None
+    analysis: Optional[dict] = None
 
 
 class ValidateKeyRequest(BaseModel):

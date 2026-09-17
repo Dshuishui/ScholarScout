@@ -9,6 +9,7 @@
   - 启用中的订阅超过 3 天没推送 → 告警
   - 未登录免费体验 24 小时内用到每日上限的 80% → 提醒（系统 Key 花费）
   - 数据库备份超过 36 小时没有成功 → 告警（备份悄悄失效比没有备份更危险）
+  - DeepSeek 余额低于阈值 → 告警（余额耗尽后搜索筛选、免费对话、订阅解读全部失败）
 同一问题每天最多发一封邮件。统计只在内存里，重启后清空，足够发现持续性故障。
 """
 import json
@@ -122,6 +123,34 @@ async def stalled_subscriptions(db) -> list[tuple[int, str | None]]:
     return [(r.id, r.last_sent.isoformat() if r.last_sent else None) for r in rows]
 
 
+async def deepseek_balance() -> float | None:
+    """查询系统 Key 的人民币余额；查不到返回 None（不因为查询失败而误报）。"""
+    key = config.DEEPSEEK_SYSTEM_KEY or config.DEEPSEEK_API_KEY
+    if not key:
+        return None
+    try:
+        import httpx
+        async with httpx.AsyncClient(timeout=15) as client:
+            r = await client.get(f"{config.DEEPSEEK_BASE_URL.rstrip('/')}/user/balance",
+                                 headers={"Authorization": f"Bearer {key}"})
+            r.raise_for_status()
+            for info in r.json().get("balance_infos", []):
+                if info.get("currency") == "CNY":
+                    return float(info.get("total_balance"))
+    except Exception as e:
+        logger.info("DeepSeek balance query failed: %s", e)
+    return None
+
+
+def balance_problem(balance: float | None) -> tuple[str, str] | None:
+    threshold = config.DEEPSEEK_BALANCE_ALERT_CNY
+    if balance is None or balance >= threshold:
+        return None
+    return ("deepseek-balance",
+            f"DeepSeek 账户余额仅剩 ¥{balance:.2f}（低于 ¥{threshold:.0f}）。余额用完后，搜索的 AI 筛选、"
+            f"免费论文对话、订阅推送的论文解读都会失败，请尽快到 platform.deepseek.com 充值")
+
+
 def backup_problem(now: float) -> tuple[str, str] | None:
     """备份状态文件里是最后一次成功备份的 unix 时间戳，见 deploy/backup.sh。"""
     path = config.BACKUP_STATUS_FILE
@@ -177,6 +206,10 @@ async def run_health_check() -> list[str]:
     backup = backup_problem(now)
     if backup:
         problems.append(backup)
+
+    low_balance = balance_problem(await deepseek_balance())
+    if low_balance:
+        problems.append(low_balance)
 
     cap = config.ANON_TRIAL_DAILY_CAP
     if cap > 0 and trial_used >= cap * TRIAL_CAP_ALERT_RATIO:

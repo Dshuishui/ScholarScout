@@ -58,6 +58,89 @@ def _button(href: str | None, text: str, primary: bool = False) -> str:
             f'font-size:13px;font-weight:600;text-decoration:none;margin:6px 8px 0 0;">{_esc(text)}</a>')
 
 
+_ANALYSIS_SECTIONS = (
+    ("problem", "研究问题"),
+    ("method", "怎么做的"),
+    ("findings", "主要发现"),
+    ("limitations", "局限与注意"),
+    ("for_whom", "适合谁读"),
+)
+
+
+def _analysis_html(analysis: dict | None) -> str:
+    """Pro 模型基于全文（或摘要）生成的结构化解读。"""
+    if not analysis:
+        return ""
+    rows = "".join(
+        '<tr>'
+        f'<td style="vertical-align:top;padding:5px 10px 5px 0;white-space:nowrap;font-size:12px;font-weight:600;color:#4338ca;">{label}</td>'
+        f'<td style="vertical-align:top;padding:5px 0;font-size:13px;color:#1f2937;line-height:1.7;">{_esc(analysis.get(key))}</td>'
+        '</tr>'
+        for key, label in _ANALYSIS_SECTIONS if analysis.get(key)
+    )
+    if not rows:
+        return ""
+    source = "全文" if analysis.get("based_on") == "full_text" else "摘要（未获取到全文）"
+    return (
+        '<div style="margin-top:12px;border:1px solid #e0e7ff;border-radius:10px;padding:12px 14px;background:#fafaff;">'
+        '<div style="font-size:13px;font-weight:700;color:#312e81;margin-bottom:6px;">论文解读</div>'
+        f'<table role="presentation" style="border-collapse:collapse;width:100%;">{rows}</table>'
+        f'<div style="font-size:11px;color:#9ca3af;margin-top:6px;">由 DeepSeek V4 Pro 基于{source}生成，仅供快速了解，引用前请核对原文</div>'
+        '</div>'
+    )
+
+
+def _progress_html(progress: dict | None, search_home: str | None) -> str:
+    """订阅进度：总数、今天推了几篇、还剩几篇、按当前进度推到哪天；快推完时提醒订阅新方向。"""
+    if not progress:
+        return ""
+    def fmt_date(d: str | None) -> str:
+        if not d:
+            return ""
+        try:
+            y, m, dd = d.split("-")
+            return f"{int(m)} 月 {int(dd)} 日"
+        except ValueError:
+            return d
+
+    remaining = progress.get("remaining", 0)
+    cells = [
+        ("本订阅共", f'{progress.get("total", 0)} 篇'),
+        ("已推送", f'{progress.get("sent", 0)} 篇'),
+        ("今日推送", f'{progress.get("today", 0)} 篇'),
+        ("待推送", f"{remaining} 篇"),
+    ]
+    stat_cells = "".join(
+        '<td style="text-align:center;padding:8px 4px;">'
+        f'<div style="font-size:16px;font-weight:700;color:#111827;">{_esc(v)}</div>'
+        f'<div style="font-size:11px;color:#6b7280;margin-top:2px;">{_esc(k)}</div></td>'
+        for k, v in cells
+    )
+    if remaining > 0 and progress.get("last_date"):
+        timeline = f"按每天 {progress.get('daily_limit', 1)} 篇的节奏，当前队列会推送到 <strong>{fmt_date(progress['last_date'])}</strong>。"
+    else:
+        timeline = "当前队列已经推送完毕。"
+    timeline += "队列快用完时会自动搜索补充新发表的论文。"
+
+    reminder = ""
+    if remaining <= 3:
+        link = f'<a href="{search_home}" style="color:#b45309;font-weight:600;">去 ScholarScout 订阅新方向</a>' if search_home else "登录 ScholarScout 订阅新方向"
+        reminder = (
+            '<div style="margin-top:10px;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:9px 11px;'
+            f'font-size:12px;color:#92400e;line-height:1.7;">这个订阅的论文快推完了（剩 {remaining} 篇）。'
+            f'如果研究方向有变化，或者想同时关注别的主题，可以{link}。</div>'
+        )
+
+    since = f"订阅于 {_esc(progress['since'])} · " if progress.get("since") else ""
+    return (
+        '<div style="border:1px solid #e5e7eb;border-radius:12px;padding:12px 14px;margin-bottom:20px;background:#fff;">'
+        f'<div style="font-size:13px;font-weight:700;color:#111827;margin-bottom:4px;">订阅进度</div>'
+        f'<table role="presentation" style="border-collapse:collapse;width:100%;"><tr>{stat_cells}</tr></table>'
+        f'<div style="font-size:12px;color:#6b7280;line-height:1.7;margin-top:4px;">{since}{timeline}</div>'
+        f'{reminder}</div>'
+    )
+
+
 def _paper_card_html(paper: Paper, expand_abstract: bool = False, search_url: str | None = None) -> str:
     """一篇论文的卡片。中文一句话总结放最前面：非英语母语的读者扫一眼就知道值不值得点开。"""
     link = _paper_link(paper)
@@ -95,12 +178,23 @@ def _paper_card_html(paper: Paper, expand_abstract: bool = False, search_url: st
             f'font-size:13px;color:#5b21b6;line-height:1.6;"><strong>为什么推荐：</strong>{_esc(paper.relevance_reason)}{_esc(score)}</div>'
         )
 
+    analysis_html = _analysis_html(paper.analysis)
+
+    abstract_zh_html = (
+        '<div style="margin-top:12px;">'
+        '<div style="font-size:12px;font-weight:600;color:#374151;margin-bottom:4px;">中文摘要</div>'
+        f'<div style="font-size:13px;color:#374151;line-height:1.75;">{_esc(paper.abstract_zh)}</div></div>'
+        if paper.abstract_zh else ""
+    )
+
+    # 单篇推送时英文摘要完整展示（读者可以对照原文）；多篇时截短，避免邮件过长
     abstract_text = (paper.abstract or "").strip()
-    limit = 600 if expand_abstract and not paper.tldr else 220
-    if len(abstract_text) > limit:
-        abstract_text = abstract_text[:limit].rstrip() + "…"
+    if not expand_abstract and len(abstract_text) > 300:
+        abstract_text = abstract_text[:300].rstrip() + "…"
     abstract_html = (
-        f'<div style="font-size:12px;color:#6b7280;line-height:1.6;margin-top:8px;">英文摘要：{_esc(abstract_text)}</div>'
+        '<div style="margin-top:12px;">'
+        '<div style="font-size:12px;font-weight:600;color:#6b7280;margin-bottom:4px;">英文摘要（原文）</div>'
+        f'<div style="font-size:12px;color:#6b7280;line-height:1.7;">{_esc(abstract_text)}</div></div>'
         if abstract_text else ""
     )
 
@@ -113,12 +207,15 @@ def _paper_card_html(paper: Paper, expand_abstract: bool = False, search_url: st
   <div style="font-size:14px;line-height:1.5;margin-bottom:4px;">{title_html}</div>
   <div style="font-size:12px;color:#6b7280;line-height:1.6;">{meta}{unreviewed_tag}</div>
   {reason_html}
+  {analysis_html}
+  {abstract_zh_html}
   {abstract_html}
   <div style="margin-top:6px;">{buttons}</div>
 </div>"""
 
 
-def build_daily_email_html(keywords: list[str], papers: list[Paper], unsubscribe_url: str | None = None) -> str:
+def build_daily_email_html(keywords: list[str], papers: list[Paper], unsubscribe_url: str | None = None,
+                           progress: dict | None = None) -> str:
     """每日推送邮件：1～N 篇（由 daily_limit 决定），摘要展开。"""
     today = date.today().strftime("%Y年%m月%d日")
     kw_str = _esc(" · ".join(keywords))
@@ -161,6 +258,9 @@ def build_daily_email_html(keywords: list[str], papers: list[Paper], unsubscribe
 
   <!-- Paper cards -->
   {cards}
+
+  <!-- Subscription progress -->
+  {_progress_html(progress, _safe_href(f"{APP_BASE_URL}/?from=email"))}
 
   <!-- Footer -->
   <div style="margin-top:24px;padding-top:16px;border-top:1px solid #e5e7eb;font-size:12px;color:#9ca3af;line-height:1.8;">
@@ -421,6 +521,7 @@ async def send_subscription_email(
     keywords: list[str],
     papers: list[Paper],
     unsubscribe_url: str | None = None,
+    progress: dict | None = None,
 ) -> bool:
     if not SMTP_USER or not SMTP_PASS:
         logger.warning("SMTP not configured, skipping email to %s", to_email)
@@ -443,7 +544,7 @@ async def send_subscription_email(
         msg["List-Unsubscribe"] = f"<{unsubscribe_url}>"
         msg["List-Unsubscribe-Post"] = "List-Unsubscribe=One-Click"
 
-    html_body = build_daily_email_html(keywords, papers, unsubscribe_url)
+    html_body = build_daily_email_html(keywords, papers, unsubscribe_url, progress)
     msg.attach(MIMEText(html_body, "html", "utf-8"))
 
     try:

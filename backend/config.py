@@ -49,6 +49,12 @@ ANON_CHAT_PER_IP_DAY = int(_os.environ.get("ANON_CHAT_PER_IP_DAY", "60"))
 CHAT_DAILY_CAP = int(_os.environ.get("CHAT_DAILY_CAP", "500"))
 FREE_CHAT_MAX_TOKENS = int(_os.environ.get("FREE_CHAT_MAX_TOKENS", "900"))
 FREE_CHAT_CONTEXT_CHARS = int(_os.environ.get("FREE_CHAT_CONTEXT_CHARS", "6000"))
+# 订阅推送的论文解读：用最强的模型读全文（拿不到全文时读摘要），每篇只生成一次并缓存
+PUSH_ANALYSIS_MODEL = _os.environ.get("PUSH_ANALYSIS_MODEL", "deepseek-v4-pro")
+PUSH_ANALYSIS_MAX_CHARS = int(_os.environ.get("PUSH_ANALYSIS_MAX_CHARS", "60000"))
+# DeepSeek 余额低于这个数（元）时给站长发告警：余额耗尽后搜索筛选、免费对话、订阅解读都会失败
+DEEPSEEK_BALANCE_ALERT_CNY = float(_os.environ.get("DEEPSEEK_BALANCE_ALERT_CNY", "20"))
+
 # 标题翻译（系统 Key 代付，不占用户额度）：全站每天最多翻译多少批
 TRANSLATE_DAILY_CAP = int(_os.environ.get("TRANSLATE_DAILY_CAP", "300"))
 

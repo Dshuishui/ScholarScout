@@ -14,7 +14,7 @@ from models import ParsedQuery, Paper
 from services.search_service import search_all_sources
 from services.email_service import send_subscription_email
 from services.auth_service import create_unsubscribe_token
-from config import DEEPSEEK_API_KEY, APP_BASE_URL
+from config import DEEPSEEK_API_KEY, DEEPSEEK_SYSTEM_KEY, APP_BASE_URL
 
 logger = logging.getLogger(__name__)
 
@@ -180,19 +180,23 @@ async def _send_from_queue(
                 await populate_queue(sub_fresh, db, now, search_days=90)
             return
 
-        # 构造 Paper 对象
+        # 构造 Paper 对象；推送前补上中文摘要和深度解读（每篇只生成一次，结果写回队列）
         papers = []
         for item in items:
             try:
-                data = json.loads(item.paper_json)
-                papers.append(Paper(**data))
+                paper = Paper(**json.loads(item.paper_json))
             except Exception as e:
                 logger.warning("Bad paper_json in queue item %d: %s", item.id, e)
+                continue
+            paper = await _with_analysis(item, paper)
+            papers.append(paper)
 
         if not papers:
             return
+        await db.commit()  # 保存新生成的解读，即使发信失败下次也不用重新生成
 
-        sent = await send_subscription_email(email, keywords, papers, _unsubscribe_url(sub.id))
+        progress = await _queue_progress(db, sub, today_count=len(items))
+        sent = await send_subscription_email(email, keywords, papers, _unsubscribe_url(sub.id), progress)
 
         if sent:
             sent_dt = now.replace(tzinfo=None)
@@ -220,6 +224,74 @@ async def _send_from_queue(
             sub_fresh2 = sub_result2.scalar_one_or_none()
             if sub_fresh2:
                 await populate_queue(sub_fresh2, db, now, search_days=90)
+
+
+async def _with_analysis(item: SubscriptionQueueItem, paper: Paper) -> Paper:
+    """给即将推送的论文补上 Pro 模型的解读，并写回队列条目（调用方负责 commit）。"""
+    key = DEEPSEEK_API_KEY or DEEPSEEK_SYSTEM_KEY
+    if paper.analysis or not key:
+        return paper
+    from services.paper_analysis import ensure_analysis
+    paper, generated = await ensure_analysis(paper, key)
+    if generated:
+        item.paper_json = json.dumps(paper.model_dump(), ensure_ascii=False, default=str)
+        logger.info("Generated push analysis for queue item %d (%s)", item.id, paper.analysis.get("based_on"))
+    return paper
+
+
+async def _queue_progress(db, sub: Subscription, today_count: int) -> dict:
+    """邮件里的订阅进度：总共多少篇、已推多少、还剩多少、按当前进度推到哪天。"""
+    rows = (await db.execute(
+        select(SubscriptionQueueItem.sent_at, SubscriptionQueueItem.planned_date)
+        .where(SubscriptionQueueItem.subscription_id == sub.id)
+    )).all()
+    total = len(rows)
+    sent_before = sum(1 for sent_at, _ in rows if sent_at is not None)
+    pending_dates = sorted(d for sent_at, d in rows if sent_at is None)
+    remaining = max(0, len(pending_dates) - today_count)  # 今天这几篇发出后还剩的
+    later = pending_dates[today_count:]
+    return {
+        "total": total,
+        "sent": sent_before + today_count,
+        "today": today_count,
+        "remaining": remaining,
+        "last_date": later[-1] if later else None,
+        "daily_limit": max(1, sub.daily_limit or 1),
+        "since": sub.created_at.strftime("%Y-%m-%d") if sub.created_at else None,
+    }
+
+
+async def prepare_push_analyses() -> None:
+    """推送前一小时先把第二天要推的论文解读生成好，08:00 发信时不用现场等大模型。"""
+    key = DEEPSEEK_API_KEY or DEEPSEEK_SYSTEM_KEY
+    if not key:
+        return
+    push_date = (datetime.now(timezone.utc) + timedelta(hours=2)).strftime("%Y-%m-%d")
+    async with AsyncSessionLocal() as db:
+        subs = (await db.execute(select(Subscription).where(Subscription.active == True))).scalars().all()  # noqa: E712
+        prepared = 0
+        for sub in subs:
+            items = (await db.execute(
+                select(SubscriptionQueueItem)
+                .where(
+                    SubscriptionQueueItem.subscription_id == sub.id,
+                    SubscriptionQueueItem.planned_date <= push_date,
+                    SubscriptionQueueItem.sent_at.is_(None),
+                )
+                .order_by(SubscriptionQueueItem.planned_date.asc())
+                .limit(max(1, sub.daily_limit or 1))
+            )).scalars().all()
+            for item in items:
+                try:
+                    paper = Paper(**json.loads(item.paper_json))
+                except Exception:
+                    continue
+                if paper.analysis:
+                    continue
+                if (await _with_analysis(item, paper)).analysis:
+                    prepared += 1
+            await db.commit()
+    logger.info("Prepared %d push analyses for %s", prepared, push_date)
 
 
 # ─────────────────────────────────────────────────────────────
@@ -282,6 +354,13 @@ def setup_scheduler() -> AsyncIOScheduler:
         trigger=IntervalTrigger(hours=1),
         id="health_check",
         replace_existing=True,
+    )
+    scheduler.add_job(
+        prepare_push_analyses,
+        trigger=CronTrigger(hour=23, minute=0, timezone="UTC"),  # 北京时间 07:00，推送前一小时
+        id="prepare_push_analyses",
+        replace_existing=True,
+        misfire_grace_time=3000,
     )
     from services.trial_service import run_purge
     scheduler.add_job(

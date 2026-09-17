@@ -128,6 +128,7 @@ async def test_alert_email_sent_at_most_once_per_day(monitor, monkeypatch):
     monkeypatch.setattr("services.email_service.send_admin_alert", sent)
     monkeypatch.setattr(monitor, "stalled_subscriptions", AsyncMock(return_value=[]))
     monkeypatch.setattr(monitor, "trial_usage_last_day", AsyncMock(return_value=0))
+    monkeypatch.setattr(monitor, "deepseek_balance", AsyncMock(return_value=None))
     await monitor.run_health_check()
     await monitor.run_health_check()
     assert sent.await_count == 1
@@ -168,6 +169,7 @@ async def test_alerts_when_anonymous_trial_nears_daily_cap(monitor, monkeypatch)
     monkeypatch.setattr("services.email_service.send_admin_alert", sent)
     monkeypatch.setattr(monitor, "stalled_subscriptions", AsyncMock(return_value=[]))
     monkeypatch.setattr(monitor.config, "ANON_TRIAL_DAILY_CAP", 100)
+    monkeypatch.setattr(monitor, "deepseek_balance", AsyncMock(return_value=None))
     monkeypatch.setattr(monitor, "trial_usage_last_day", AsyncMock(return_value=79))
     assert await monitor.run_health_check() == []
     monkeypatch.setattr(monitor, "trial_usage_last_day", AsyncMock(return_value=80))
@@ -219,3 +221,12 @@ async def test_alert_cooldown_survives_restart(monitor, monkeypatch):
     assert monitor._should_alert("stalled-subscriptions", now + 3600) is False
     # 过了冷却期照常提醒
     assert monitor._should_alert("stalled-subscriptions", now + monitor.ALERT_COOLDOWN_SEC + 1) is True
+
+
+
+def test_low_deepseek_balance_alert(monitor, monkeypatch):
+    monkeypatch.setattr(monitor.config, "DEEPSEEK_BALANCE_ALERT_CNY", 20.0)
+    assert monitor.balance_problem(None) is None        # 查不到余额时不误报
+    assert monitor.balance_problem(35.5) is None
+    key, msg = monitor.balance_problem(6.8)
+    assert key == "deepseek-balance" and "¥6.80" in msg and "充值" in msg

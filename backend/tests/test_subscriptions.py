@@ -1,3 +1,4 @@
+from unittest.mock import AsyncMock
 import pytest
 from unittest.mock import patch, AsyncMock
 from tests.conftest import make_verified_user
@@ -269,11 +270,45 @@ def test_email_marks_unreviewed_sources_and_escapes_content():
     assert "<script>" not in html and "&lt;script&gt;" in html
 
 
-def test_email_truncates_long_english_abstract_when_summary_exists():
+def test_email_shows_full_abstract_for_single_paper_and_truncates_for_many():
     from services.email_service import build_daily_email_html
     p = _push_paper(tldr="中文总结")
+    single = build_daily_email_html(["x"], [p])
+    assert ("An English abstract. " * 39).strip() in single          # 单篇：英文摘要完整展示
+    many = build_daily_email_html(["x"], [p, _push_paper(paper_id="q")])
+    assert ("An English abstract. " * 39).strip() not in many       # 多篇：截短，避免邮件过长
+
+
+def test_email_includes_analysis_and_chinese_abstract():
+    from services.email_service import build_daily_email_html
+    p = _push_paper(
+        abstract_zh="本文提出一种基于语义相似度的重构工具。",
+        analysis={"problem": "重构容易破坏行为", "method": "测试引导修复", "findings": "修复率提升 30%",
+                  "limitations": "原文未明确说明", "for_whom": "做代码重构的研究生", "based_on": "full_text"},
+    )
     html = build_daily_email_html(["x"], [p])
-    assert "An English abstract. " * 20 not in html   # 有中文总结时英文摘要只保留开头
+    for text in ("论文解读", "研究问题", "重构容易破坏行为", "修复率提升 30%", "中文摘要",
+                 "本文提出一种基于语义相似度的重构工具", "基于全文生成"):
+        assert text in html, text
+    p2 = _push_paper(analysis={"problem": "只看了摘要", "based_on": "abstract"})
+    assert "摘要（未获取到全文）" in build_daily_email_html(["x"], [p2])
+
+
+def test_email_progress_panel_and_resubscribe_reminder():
+    from services.email_service import build_daily_email_html
+    progress = {"total": 30, "sent": 12, "today": 1, "remaining": 18, "last_date": "2026-10-05",
+                "daily_limit": 1, "since": "2026-05-23"}
+    html = build_daily_email_html(["x"], [_push_paper()], progress=progress)
+    for text in ("订阅进度", "30 篇", "12 篇", "18 篇", "10 月 5 日", "订阅于 2026-05-23"):
+        assert text in html, text
+    assert "快推完了" not in html
+
+    ending = dict(progress, remaining=2, last_date="2026-09-19")
+    html = build_daily_email_html(["x"], [_push_paper()], progress=ending)
+    assert "快推完了（剩 2 篇）" in html and "订阅新方向" in html
+
+    done = dict(progress, remaining=0, last_date=None)
+    assert "当前队列已经推送完毕" in build_daily_email_html(["x"], [_push_paper()], progress=done)
 
 
 def test_push_order_prefers_relevant_peer_reviewed_papers():
@@ -286,3 +321,70 @@ def test_push_order_prefers_relevant_peer_reviewed_papers():
     assert order[0] == "s"                     # 高度相关的预印本仍然优先
     assert order.index("j") < order.index("z")  # 同分时正式发表的在前
     assert order[-1] == "w"
+
+
+
+# ── 推送前的论文解读 ──────────────────────────────────────────────────────────
+
+async def test_analyze_paper_uses_pro_model_and_marks_source(monkeypatch):
+    from services import paper_analysis as pa
+    calls = []
+
+    class Resp:
+        usage = type("U", (), {"prompt_tokens": 1200, "completion_tokens": 400})()
+        def __init__(self):
+            self.choices = [type("C", (), {"message": type("M", (), {"content": (
+                '{"abstract_zh": "中文摘要", "problem": "问题", "method": "方法", "findings": "发现",'
+                ' "limitations": "局限", "for_whom": "研究生"}')})()})()]
+
+    async def create(**kw):
+        calls.append(kw)
+        return Resp()
+
+    monkeypatch.setattr(pa.openai, "AsyncOpenAI", lambda **kw: type("C", (), {
+        "chat": type("X", (), {"completions": type("Y", (), {"create": staticmethod(create)})()})()})())
+
+    paper = _push_paper()
+    result = await pa.analyze_paper(paper, "sk-x", full_text="正文内容 " * 1000, fetch_full_text=False)
+    assert calls[0]["model"] == "deepseek-v4-pro"
+    assert result["abstract_zh"] == "中文摘要"
+    assert result["analysis"]["based_on"] == "full_text" and result["analysis"]["findings"] == "发现"
+    assert "【正文（节选）】" in calls[0]["messages"][0]["content"]
+
+    only_abstract = await pa.analyze_paper(paper, "sk-x", fetch_full_text=False)
+    assert only_abstract["analysis"]["based_on"] == "abstract"
+    assert "只拿到了摘要" in calls[1]["messages"][0]["content"]
+
+
+async def test_analysis_is_generated_once(monkeypatch):
+    from services import paper_analysis as pa
+    monkeypatch.setattr(pa, "analyze_paper", AsyncMock(return_value={"abstract_zh": "z", "analysis": {"problem": "p"}}))
+    paper, generated = await pa.ensure_analysis(_push_paper(), "sk-x")
+    assert generated and paper.analysis == {"problem": "p"}
+    again, generated2 = await pa.ensure_analysis(paper, "sk-x")
+    assert not generated2 and pa.analyze_paper.await_count == 1
+
+
+async def test_no_analysis_without_abstract_or_full_text():
+    from services import paper_analysis as pa
+    assert await pa.analyze_paper(_push_paper(abstract=None), "sk-x", fetch_full_text=False) is None
+
+
+async def test_queue_progress_counts(db_session):
+    from datetime import datetime
+    from models_db import Subscription, SubscriptionQueueItem
+    from scheduler import _queue_progress
+    sub = Subscription(user_id=1, keywords_json='["x"]', active=True, daily_limit=1,
+                       created_at=datetime(2026, 5, 23))
+    db_session.add(sub)
+    await db_session.commit()
+    await db_session.refresh(sub)
+    dates = ["2026-09-15", "2026-09-16", "2026-09-17", "2026-09-18", "2026-09-19"]
+    for i, d in enumerate(dates):
+        db_session.add(SubscriptionQueueItem(
+            subscription_id=sub.id, paper_json="{}", paper_id=f"p{i}", planned_date=d,
+            sent_at=datetime(2026, 9, 15 + i) if i < 2 else None))
+    await db_session.commit()
+    progress = await _queue_progress(db_session, sub, today_count=1)
+    assert progress == {"total": 5, "sent": 3, "today": 1, "remaining": 2,
+                        "last_date": "2026-09-19", "daily_limit": 1, "since": "2026-05-23"}
