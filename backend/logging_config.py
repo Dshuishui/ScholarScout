@@ -26,6 +26,9 @@ def setup_logging() -> None:
         structlog.contextvars.merge_contextvars,
         structlog.stdlib.add_logger_name,
         structlog.stdlib.add_log_level,
+        # 少了这个处理器，logger.info("... %s", x) 不会把变量替换进去，
+        # 日志里会留下原始的 %s 和一串 positional_args（实际踩过）
+        structlog.stdlib.PositionalArgumentsFormatter(),
         structlog.processors.TimeStamper(fmt="iso"),
         structlog.processors.StackInfoRenderer(),
     ]

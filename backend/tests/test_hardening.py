@@ -261,3 +261,14 @@ async def test_populate_notification_sends_keywords(monkeypatch, db_engine):
     monkeypatch.setattr("services.ws_manager.manager.send", fake_send)
     await subs._bg_populate_queue(sub_id)
     assert sent == [("user:7", "subscription_ready", {"sub_id": sub_id, "keywords": ["raft", "consensus"], "added": 3})]
+
+
+def test_log_messages_interpolate_arguments(capsys):
+    """logger.info("...%s", x) 必须把变量替换进去，否则日志里只剩 %s 和 positional_args。"""
+    from logging_config import setup_logging, get_logger
+    setup_logging()
+    get_logger("test.logging").info("处理了 %d 篇论文，来源 %s", 42, "OpenAlex")
+    captured = capsys.readouterr()
+    out = captured.err + captured.out
+    assert "处理了 42 篇论文，来源 OpenAlex" in out
+    assert "positional_args" not in out
