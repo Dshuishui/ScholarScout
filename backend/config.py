@@ -58,6 +58,10 @@ DEEPSEEK_BALANCE_ALERT_CNY = float(_os.environ.get("DEEPSEEK_BALANCE_ALERT_CNY",
 # 标题翻译（系统 Key 代付，不占用户额度）：全站每天最多翻译多少批
 TRANSLATE_DAILY_CAP = int(_os.environ.get("TRANSLATE_DAILY_CAP", "300"))
 
+# 磁盘使用率告警阈值（百分比）和"一小时内错误日志条数"告警阈值
+DISK_ALERT_PERCENT = float(_os.environ.get("DISK_ALERT_PERCENT", "90"))
+ERROR_SPIKE_THRESHOLD = int(_os.environ.get("ERROR_SPIKE_THRESHOLD", "30"))
+
 # 站长邮箱：接收新留言通知和运维告警（数据源失效、订阅停推）
 ADMIN_EMAIL = _os.environ.get("ADMIN_EMAIL", "dyucong@email.ncu.edu.cn")
 # 前端地址（邮件验证链接用）

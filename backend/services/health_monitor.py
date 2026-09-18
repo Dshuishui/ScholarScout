@@ -10,6 +10,10 @@
   - 未登录免费体验 24 小时内用到每日上限的 80% → 提醒（系统 Key 花费）
   - 数据库备份超过 36 小时没有成功 → 告警（备份悄悄失效比没有备份更危险）
   - DeepSeek 余额低于阈值 → 告警（余额耗尽后搜索筛选、免费对话、订阅解读全部失败）
+  - 磁盘使用率超过阈值 → 告警（日志和备份会一直涨）
+  - 一小时内错误日志突增 → 告警（功能坏了但没崩的情况）
+  - 订阅推送邮件发送失败 → 告警
+  - 第一次有真实用户完成搜索 → 通知（好消息也要知道）
 同一问题每天最多发一封邮件。统计只在内存里，重启后清空，足够发现持续性故障。
 """
 import json
@@ -151,6 +155,50 @@ def balance_problem(balance: float | None) -> tuple[str, str] | None:
             f"免费论文对话、订阅推送的论文解读都会失败，请尽快到 platform.deepseek.com 充值")
 
 
+def disk_problem() -> tuple[str, str] | None:
+    import shutil
+    try:
+        usage = shutil.disk_usage("/")
+    except OSError:
+        return None
+    used_pct = 100 * usage.used / usage.total
+    if used_pct < config.DISK_ALERT_PERCENT:
+        return None
+    free_gb = usage.free / 1024 ** 3
+    return ("disk", f"服务器磁盘已用 {used_pct:.0f}%，剩余 {free_gb:.1f} GB。"
+                    f"日志和数据库备份会继续增长，建议清理 /var/log 和旧备份")
+
+
+def error_spike_problem(now: float) -> tuple[str, str] | None:
+    """一小时内错误日志条数突增：功能坏了但进程没崩的情况，只看日志很难发现。"""
+    from logging_config import recent_error_count
+    count = recent_error_count(window_sec=3600)
+    if count < config.ERROR_SPIKE_THRESHOLD:
+        return None
+    return ("error-spike", f"最近一小时后端记录了 {count} 条错误日志（阈值 {config.ERROR_SPIKE_THRESHOLD}），"
+                           f"请查看：sudo journalctl -u scholarscout-backend -p err -n 100")
+
+
+async def push_failure_problem(db) -> tuple[str, str] | None:
+    from services import stats
+    counters = await stats.totals(db, days=1)
+    failed = counters.get(stats.PUSH_FAILED, 0)
+    if not failed:
+        return None
+    return ("push-failed", f"过去一天有 {failed} 封订阅推送邮件发送失败。"
+                           f"常见原因：SMTP 授权码失效、对方邮箱拒收")
+
+
+async def first_real_user(db) -> tuple[str, str] | None:
+    """第一次有人完成搜索时通知一次——这是最值得知道的好消息。"""
+    from services import stats
+    total = await stats.all_time(db, stats.SEARCH)
+    if total <= 0:
+        return None
+    return ("first-user", f"有人用了网站：累计已完成 {total} 次搜索。"
+                          f"可以去看看留言板和统计，确认是不是真实用户")
+
+
 def backup_problem(now: float) -> tuple[str, str] | None:
     """备份状态文件里是最后一次成功备份的 unix 时间戳，见 deploy/backup.sh。"""
     path = config.BACKUP_STATUS_FILE
@@ -170,9 +218,15 @@ def backup_problem(now: float) -> tuple[str, str] | None:
     return None
 
 
+# 这类"好消息"只通知一次，不需要每天重复
+ONCE_ONLY_KEYS = {"first-user"}
+
+
 def _should_alert(key: str, now: float) -> bool:
     _load_alert_state()
     last = _last_alert.get(key)
+    if last and key in ONCE_ONLY_KEYS:
+        return False
     if last and now - last < ALERT_COOLDOWN_SEC:
         return False
     _last_alert[key] = now
@@ -210,6 +264,18 @@ async def run_health_check() -> list[str]:
     low_balance = balance_problem(await deepseek_balance())
     if low_balance:
         problems.append(low_balance)
+
+    for check in (disk_problem(), error_spike_problem(now)):
+        if check:
+            problems.append(check)
+
+    try:
+        async with AsyncSessionLocal() as db:
+            for check in (await push_failure_problem(db), await first_real_user(db)):
+                if check:
+                    problems.append(check)
+    except Exception:
+        logger.exception("Health check: failed to query counters")
 
     cap = config.ANON_TRIAL_DAILY_CAP
     if cap > 0 and trial_used >= cap * TRIAL_CAP_ALERT_RATIO:

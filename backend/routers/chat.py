@@ -21,6 +21,7 @@ from logging_config import get_logger
 from models import Paper
 from models_db import User
 from services.rate_limit import rate_ok, client_ip
+from services import stats
 from services.trial_service import anon_status, reserve_anon_search, refund_anon_search, valid_device_id
 
 logger = get_logger(__name__)
@@ -141,6 +142,7 @@ async def paper_chat(
 ):
     """流式返回一条回答。每行一个 SSE 事件：delta（增量文本）/ quota / error。"""
     usage_id, remaining = await _charge_chat(http_request, optional_user, db)
+    await stats.bump(db, stats.CHAT)
     user_id = optional_user.id if optional_user else None
     messages = _build_messages(request)
 

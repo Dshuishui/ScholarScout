@@ -31,6 +31,7 @@ from services.download_service import fetch_pdf_with_fallback
 from services.pdf_finder_service import find_pdfs_with_kimi, generate_fallback_links
 from services.cache_service import get_cached_search, cache_search
 from services.rate_limit import rate_ok, client_ip
+from services import stats
 from services.trial_service import anon_status, reserve_anon_search, refund_anon_search, valid_device_id
 from services.health_monitor import source_stats
 from config import (
@@ -154,6 +155,15 @@ async def _charge_search(
     return _Charge(api_key=DEEPSEEK_SYSTEM_KEY, usage_id=usage_id, remaining=status.remaining - 1)
 
 
+async def _count_search() -> None:
+    """记一次"完成的搜索"。流式响应里请求级会话已不可靠，单独开一个。"""
+    try:
+        async with AsyncSessionLocal() as db:
+            await stats.bump(db, stats.SEARCH)
+    except Exception as e:
+        logger.info("Search counter failed: %s", e)
+
+
 async def _refund(charge: _Charge) -> None:
     """退还本次扣掉的免费次数。流式响应里请求级的 DB 会话已不可靠，单独开一个。"""
     if not charge.is_trial:
@@ -180,6 +190,8 @@ async def trial_status(
     db: AsyncSession = Depends(get_db),
 ):
     """前端展示剩余免费次数用。未登录时按设备标识 + IP 计算。"""
+    # 前端每次打开页面都会调这个接口，用它统计"页面打开次数"（周报用，不记录任何个人信息）
+    await stats.bump(db, stats.PAGE_OPEN)
     enabled = bool(DEEPSEEK_SYSTEM_KEY)
     info = {
         "enabled": enabled,
@@ -384,6 +396,7 @@ async def search(
             accepted, rejected = await validate_papers(papers, request.query, api_key)
             final = rank_accepted(accepted)[:request.validated_limit]
 
+            await _count_search()
             papers_dict = [p.model_dump() for p in final]
             rejected_dict = [p.model_dump() for p in rejected]
             refund_info = {}

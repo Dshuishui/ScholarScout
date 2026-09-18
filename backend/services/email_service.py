@@ -563,6 +563,55 @@ async def send_subscription_email(
         return False
 
 
+def build_weekly_summary_html(stats: dict) -> str:
+    """每周汇总邮件。只在有活动时发送，内容全部来自我们自己的数据库。"""
+    rows = "".join(
+        '<tr>'
+        f'<td style="padding:6px 10px 6px 0;font-size:13px;color:#6b7280;white-space:nowrap;">{_esc(label)}</td>'
+        f'<td style="padding:6px 0;font-size:15px;font-weight:700;color:#111827;">{_esc(str(value))}</td>'
+        '</tr>'
+        for label, value in stats.get("rows", [])
+    )
+    notes = "".join(
+        f'<li style="margin-bottom:4px;">{_esc(n)}</li>' for n in stats.get("notes", [])
+    )
+    notes_html = f'<ul style="margin:10px 0 0;padding-left:18px;font-size:13px;color:#374151;line-height:1.7;">{notes}</ul>' if notes else ""
+    return f"""<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="font-family:-apple-system,Arial,sans-serif;max-width:560px;margin:0 auto;padding:24px;color:#111827;background:#f9fafb;">
+<div style="background:#fff;border-radius:16px;padding:24px;box-shadow:0 1px 3px rgba(0,0,0,0.08);">
+  <div style="font-size:18px;font-weight:700;color:#4f46e5;">ScholarScout 周报</div>
+  <div style="color:#6b7280;font-size:13px;margin-bottom:16px;">{_esc(stats.get("period", ""))}</div>
+  <table role="presentation" style="border-collapse:collapse;width:100%;">{rows}</table>
+  {notes_html}
+  <div style="margin-top:18px;padding-top:12px;border-top:1px solid #e5e7eb;font-size:12px;color:#9ca3af;line-height:1.8;">
+    只在这一周有人使用时才会发这封信，没有活动就不打扰。<br>
+    网站：<a href="{_esc(APP_BASE_URL)}" style="color:#6b7280;">{_esc(APP_BASE_URL)}</a>
+  </div>
+</div></body></html>"""
+
+
+async def send_weekly_summary(stats: dict) -> bool:
+    """把周报发给站长。"""
+    if not SMTP_USER or not SMTP_PASS:
+        logger.warning("SMTP not configured, skipping weekly summary")
+        return False
+    msg = MIMEMultipart("alternative")
+    msg["Subject"] = f"[ScholarScout 周报] {stats.get('headline', '本周使用情况')}"
+    msg["From"] = f"{SMTP_FROM_NAME} <{SMTP_USER}>"
+    msg["To"] = ADMIN_EMAIL
+    msg["Date"] = formatdate(localtime=True)
+    msg.attach(MIMEText(build_weekly_summary_html(stats), "html", "utf-8"))
+    try:
+        await aiosmtplib.send(msg, hostname=SMTP_HOST, port=SMTP_PORT, use_tls=True,
+                              username=SMTP_USER, password=SMTP_PASS)
+        logger.info("Weekly summary sent to %s", ADMIN_EMAIL)
+        return True
+    except Exception as e:
+        logger.error("Failed to send weekly summary: %s", e)
+        return False
+
+
 async def send_admin_alert(message: str) -> bool:
     """给站长发运维告警（数据源失效、订阅停推等）。"""
     if not SMTP_USER or not SMTP_PASS:

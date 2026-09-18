@@ -80,6 +80,17 @@ async def test_delete_account_removes_data_and_anonymizes_feedback(client, db_se
 
 # ── 数据源健康监控 ────────────────────────────────────────────────────────────
 
+def _isolate_environment_checks(monitor, monkeypatch, keep_trial: bool = False):
+    """run_health_check 会查磁盘、错误数、数据库计数——测告警逻辑时把这些环境相关的检查关掉。"""
+    if not keep_trial:
+        monkeypatch.setattr(monitor, "trial_usage_last_day", AsyncMock(return_value=0))
+    monkeypatch.setattr(monitor, "deepseek_balance", AsyncMock(return_value=None))
+    monkeypatch.setattr(monitor, "disk_problem", lambda: None)
+    monkeypatch.setattr(monitor, "error_spike_problem", lambda now: None)
+    monkeypatch.setattr(monitor, "push_failure_problem", AsyncMock(return_value=None))
+    monkeypatch.setattr(monitor, "first_real_user", AsyncMock(return_value=None))
+
+
 @pytest.fixture
 def monitor(tmp_path, monkeypatch):
     from services import health_monitor as hm
@@ -127,8 +138,7 @@ async def test_alert_email_sent_at_most_once_per_day(monitor, monkeypatch):
     sent = AsyncMock(return_value=True)
     monkeypatch.setattr("services.email_service.send_admin_alert", sent)
     monkeypatch.setattr(monitor, "stalled_subscriptions", AsyncMock(return_value=[]))
-    monkeypatch.setattr(monitor, "trial_usage_last_day", AsyncMock(return_value=0))
-    monkeypatch.setattr(monitor, "deepseek_balance", AsyncMock(return_value=None))
+    _isolate_environment_checks(monitor, monkeypatch)
     await monitor.run_health_check()
     await monitor.run_health_check()
     assert sent.await_count == 1
@@ -169,7 +179,7 @@ async def test_alerts_when_anonymous_trial_nears_daily_cap(monitor, monkeypatch)
     monkeypatch.setattr("services.email_service.send_admin_alert", sent)
     monkeypatch.setattr(monitor, "stalled_subscriptions", AsyncMock(return_value=[]))
     monkeypatch.setattr(monitor.config, "ANON_TRIAL_DAILY_CAP", 100)
-    monkeypatch.setattr(monitor, "deepseek_balance", AsyncMock(return_value=None))
+    _isolate_environment_checks(monitor, monkeypatch, keep_trial=True)
     monkeypatch.setattr(monitor, "trial_usage_last_day", AsyncMock(return_value=79))
     assert await monitor.run_health_check() == []
     monkeypatch.setattr(monitor, "trial_usage_last_day", AsyncMock(return_value=80))
@@ -230,3 +240,86 @@ def test_low_deepseek_balance_alert(monitor, monkeypatch):
     assert monitor.balance_problem(35.5) is None
     key, msg = monitor.balance_problem(6.8)
     assert key == "deepseek-balance" and "¥6.80" in msg and "充值" in msg
+
+
+# ── 低维护模式：磁盘、错误突增、推送失败、首个用户、周报 ─────────────────────
+
+def test_disk_alert(monitor, monkeypatch):
+    import collections
+    monkeypatch.setattr(monitor.config, "DISK_ALERT_PERCENT", 90.0)
+    Usage = collections.namedtuple("Usage", "total used free")
+    monkeypatch.setattr("shutil.disk_usage", lambda p: Usage(100, 80, 20))
+    assert monitor.disk_problem() is None
+    monkeypatch.setattr("shutil.disk_usage", lambda p: Usage(100 * 1024**3, 93 * 1024**3, 7 * 1024**3))
+    key, msg = monitor.disk_problem()
+    assert key == "disk" and "93%" in msg
+
+
+def test_error_spike_alert(monitor, monkeypatch):
+    monkeypatch.setattr(monitor.config, "ERROR_SPIKE_THRESHOLD", 5)
+    monkeypatch.setattr("logging_config.recent_error_count", lambda window_sec=3600: 4)
+    assert monitor.error_spike_problem(time.time()) is None
+    monkeypatch.setattr("logging_config.recent_error_count", lambda window_sec=3600: 9)
+    key, msg = monitor.error_spike_problem(time.time())
+    assert key == "error-spike" and "9 条错误" in msg
+
+
+def test_error_counter_counts_only_errors():
+    import logging
+    from logging_config import setup_logging, get_logger, recent_error_count, _error_times
+    setup_logging()
+    _error_times.clear()
+    log = get_logger("test.errors")
+    log.info("普通日志")
+    log.warning("警告")
+    log.error("出错了")
+    logging.getLogger("other").error("另一个模块出错")
+    assert recent_error_count() == 2
+
+
+async def test_push_failure_and_first_user_alerts(db_session, monitor):
+    from services import stats
+    assert await monitor.push_failure_problem(db_session) is None
+    assert await monitor.first_real_user(db_session) is None
+
+    await stats.bump(db_session, stats.PUSH_FAILED)
+    key, msg = await monitor.push_failure_problem(db_session)
+    assert key == "push-failed" and "1 封" in msg
+
+    await stats.bump(db_session, stats.SEARCH, 3)
+    key, msg = await monitor.first_real_user(db_session)
+    assert key == "first-user" and "3 次搜索" in msg
+
+
+def test_first_user_alert_fires_only_once(monitor):
+    now = time.time()
+    assert monitor._should_alert("first-user", now) is True
+    assert monitor._should_alert("first-user", now + 10 * 86400) is False   # 不再重复
+    assert monitor._should_alert("disk", now) is True
+    assert monitor._should_alert("disk", now + 2 * 86400) is True           # 普通告警按天重复
+
+
+async def test_weekly_report_skipped_without_activity(db_session, monkeypatch):
+    from services import weekly_report
+    data = await weekly_report.collect(db_session, days=7)
+    assert data["has_activity"] is False
+
+    from services import stats
+    await stats.bump(db_session, stats.SEARCH, 2)
+    await stats.bump(db_session, stats.PAGE_OPEN, 9)
+    data = await weekly_report.collect(db_session, days=7)
+    assert data["has_activity"] is True and data["search"] == 2 and data["page_open"] == 9
+
+
+def test_weekly_summary_email_content():
+    from datetime import datetime
+    from services.weekly_report import _format
+    from services.email_service import build_weekly_summary_html
+    data = {"page_open": 120, "search": 14, "chat": 6, "register": 2, "feedback": 1, "push_failed": 1,
+            "free_searches": 9, "free_chats": 4, "new_users": 2, "new_feedback": 1, "new_saved": 3,
+            "new_sessions": 5, "new_subs": 1, "pushed": 21, "total_users": 26, "active_subs": 3}
+    stats = _format(data, 56.66, datetime(2026, 9, 21))
+    html = build_weekly_summary_html(stats)
+    for text in ("周报", "14 次", "2 人", "¥56.66", "发送失败", "2026-09-14 至 2026-09-21"):
+        assert text in html, text
+    assert stats["headline"] == "本周 14 次搜索 · 2 人注册"

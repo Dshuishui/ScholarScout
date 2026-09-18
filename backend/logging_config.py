@@ -13,6 +13,8 @@ Usage:
 import logging
 import os
 import sys
+import time
+from collections import deque
 
 import structlog
 
@@ -63,11 +65,27 @@ def setup_logging() -> None:
     root = logging.getLogger()
     root.handlers.clear()
     root.addHandler(handler)
+    root.addHandler(_ErrorCounter())  # 只数错误条数，用于"错误突增"告警
     root.setLevel(LOG_LEVEL)
 
     # Quieten noisy third-party loggers
     for name in ("uvicorn.access", "httpx", "chromadb", "openai"):
         logging.getLogger(name).setLevel(logging.WARNING)
+
+
+# 最近的错误日志时间戳，用于"错误突增"告警（只存时间，不存内容）
+_error_times: "deque[float]" = deque(maxlen=2000)
+
+
+class _ErrorCounter(logging.Handler):
+    def emit(self, record: logging.LogRecord) -> None:
+        if record.levelno >= logging.ERROR:
+            _error_times.append(time.time())
+
+
+def recent_error_count(window_sec: int = 3600) -> int:
+    cutoff = time.time() - window_sec
+    return sum(1 for t in _error_times if t >= cutoff)
 
 
 def get_logger(name: str = __name__) -> structlog.stdlib.BoundLogger:

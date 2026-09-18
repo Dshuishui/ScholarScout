@@ -111,6 +111,19 @@ class TrialUsage(Base):
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
 
 
+class SiteCounter(Base):
+    """按天累计的站点计数（页面打开、搜索、对话、注册…），用于每周汇总邮件。
+
+    只存数量，不存任何个人信息；进程重启不丢，比内存计数可靠。
+    """
+    __tablename__ = "site_counters"
+    id = Column(Integer, primary_key=True)
+    day = Column(String(10), nullable=False, index=True)   # YYYY-MM-DD（UTC）
+    name = Column(String(32), nullable=False, index=True)
+    count = Column(Integer, default=0, nullable=False)
+    __table_args__ = (UniqueConstraint("day", "name"),)
+
+
 class SearchSession(Base):
     """搜索快照：保存用户每次搜索的关键词、结果和多论文分析。"""
     __tablename__ = "search_sessions"

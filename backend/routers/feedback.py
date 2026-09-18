@@ -147,6 +147,8 @@ async def submit_feedback(
     await db.refresh(fb)
 
     if not is_author:
+        from services import stats
+        await stats.bump(db, stats.FEEDBACK)
         asyncio.create_task(send_feedback_notification(fb.content, location, category))
 
     if req.reply_to_id:

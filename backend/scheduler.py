@@ -198,6 +198,11 @@ async def _send_from_queue(
         progress = await _queue_progress(db, sub, today_count=len(items))
         sent = await send_subscription_email(email, keywords, papers, _unsubscribe_url(sub.id), progress)
 
+        if not sent:
+            # 发信失败（SMTP 故障、对方拒收等）：计数，健康检查会据此告警
+            from services import stats
+            await stats.bump(db, stats.PUSH_FAILED)
+            logger.error("Subscription email failed for sub %d (%s)", sub.id, email)
         if sent:
             sent_dt = now.replace(tzinfo=None)
             for item in items:
@@ -361,6 +366,15 @@ def setup_scheduler() -> AsyncIOScheduler:
         id="prepare_push_analyses",
         replace_existing=True,
         misfire_grace_time=3000,
+    )
+    from services.weekly_report import run_weekly_report
+    scheduler.add_job(
+        run_weekly_report,
+        # 每周一北京时间 09:00；这一周没人用就不会发信
+        trigger=CronTrigger(day_of_week="mon", hour=1, minute=0, timezone="UTC"),
+        id="weekly_report",
+        replace_existing=True,
+        misfire_grace_time=6 * 3600,
     )
     from services.trial_service import run_purge
     scheduler.add_job(

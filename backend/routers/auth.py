@@ -140,6 +140,9 @@ async def verify_email(token: str, db: AsyncSession = Depends(get_db)):
     )
     await db.commit()
 
+    from services import stats
+    await stats.bump(db, stats.REGISTER)
+
     access_token = create_access_token(user.id, user.token_version or 0)
     return {
         "access_token": access_token,
