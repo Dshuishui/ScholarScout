@@ -323,3 +323,13 @@ def test_weekly_summary_email_content():
     for text in ("周报", "14 次", "2 人", "¥56.66", "发送失败", "2026-09-14 至 2026-09-21"):
         assert text in html, text
     assert stats["headline"] == "本周 14 次搜索 · 2 人注册"
+
+
+async def test_first_user_check_stops_after_notifying(db_session, monitor):
+    """通知过之后不再重复检查，否则每小时都会往日志里记一条 warning。"""
+    from services import stats
+    await stats.bump(db_session, stats.SEARCH)
+    assert await monitor.first_real_user(db_session) is not None
+
+    monitor._should_alert("first-user", time.time())   # 模拟已经发过通知
+    assert await monitor.first_real_user(db_session) is None

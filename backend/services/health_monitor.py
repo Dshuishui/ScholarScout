@@ -189,8 +189,18 @@ async def push_failure_problem(db) -> tuple[str, str] | None:
                            f"常见原因：SMTP 授权码失效、对方邮箱拒收")
 
 
+def already_notified(key: str) -> bool:
+    _load_alert_state()
+    return key in _last_alert
+
+
 async def first_real_user(db) -> tuple[str, str] | None:
-    """第一次有人完成搜索时通知一次——这是最值得知道的好消息。"""
+    """第一次有人完成搜索时通知一次——这是最值得知道的好消息。
+
+    通知过就不再检查：否则此后每小时都会记一条 warning，把日志刷满（实际发生过两天）。
+    """
+    if already_notified("first-user"):
+        return None
     from services import stats
     total = await stats.all_time(db, stats.SEARCH)
     if total <= 0:
