@@ -12,3 +12,9 @@ backend/chroma_db/
 context/
 backend/.alert_state.json
 backend/.healthcheck_state.json
+
+# 内部运维与上下文文档：含服务器地址、路径、邮箱，只留本地（2026-10-17）
+CONTEXT.md
+docs/backup.md
+docs/operations.md
+.claude/
