@@ -1,5 +1,5 @@
 {
-  "_doc": "检索回归测试集。keywords 模拟 parse_query 的输出（核心词在前 + 同义词/上位概念），固定下来以排除大模型的随机性。user_date_from 为用户明确指定的起始日期，null 表示用户没说时间。",
+  "_doc": "检索回归测试集。keywords、concepts 模拟 parse_query 的输出（keywords：核心词在前 + 同义词/上位概念；concepts：要同时满足的概念组，单一主题只有一组），固定下来以排除大模型的随机性。user_date_from 为用户明确指定的起始日期，null 表示用户没说时间。前 16 条是各领域的奠基论文；kind 为 intersection 的是\"A 用于 B\"类工程交叉题，target 是一篇确定切题的论文。",
   "cases": [
     {
       "id": "rag-survey",
@@ -11,6 +11,12 @@
         "RAG",
         "large language model",
         "knowledge retrieval"
+      ],
+      "concepts": [
+        [
+          "retrieval-augmented generation",
+          "RAG"
+        ]
       ],
       "target": "Retrieval-Augmented Generation for Large Language Models: A Survey"
     },
@@ -24,6 +30,12 @@
         "LoRA",
         "parameter-efficient fine-tuning",
         "large language model"
+      ],
+      "concepts": [
+        [
+          "low-rank adaptation",
+          "LoRA"
+        ]
       ],
       "target": "LoRA: Low-Rank Adaptation of Large Language Models",
       "doi": "10.48550/arXiv.2106.09685"
@@ -39,6 +51,12 @@
         "large language model",
         "prompt engineering"
       ],
+      "concepts": [
+        [
+          "chain-of-thought prompting",
+          "chain-of-thought reasoning"
+        ]
+      ],
       "target": "Chain-of-Thought Prompting Elicits Reasoning in Large Language Models"
     },
     {
@@ -51,6 +69,12 @@
         "image synthesis",
         "text-to-image generation",
         "generative model"
+      ],
+      "concepts": [
+        [
+          "latent diffusion model",
+          "stable diffusion"
+        ]
       ],
       "target": "High-Resolution Image Synthesis with Latent Diffusion Models"
     },
@@ -65,6 +89,13 @@
         "sequence modeling",
         "selective state spaces"
       ],
+      "concepts": [
+        [
+          "Mamba",
+          "selective state space model",
+          "state space model"
+        ]
+      ],
       "target": "Mamba: Linear-Time Sequence Modeling with Selective State Spaces"
     },
     {
@@ -77,6 +108,16 @@
         "large language model",
         "GPT-3",
         "in-context learning"
+      ],
+      "concepts": [
+        [
+          "GPT-3",
+          "large language model"
+        ],
+        [
+          "few-shot learning",
+          "in-context learning"
+        ]
       ],
       "target": "Language Models are Few-Shot Learners"
     },
@@ -91,6 +132,12 @@
         "bidirectional transformer",
         "natural language understanding"
       ],
+      "concepts": [
+        [
+          "BERT",
+          "bidirectional encoder representations from transformers"
+        ]
+      ],
       "target": "BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding"
     },
     {
@@ -103,6 +150,12 @@
         "attention mechanism",
         "self-attention",
         "neural machine translation"
+      ],
+      "concepts": [
+        [
+          "transformer",
+          "self-attention"
+        ]
       ],
       "target": "Attention Is All You Need"
     },
@@ -117,6 +170,13 @@
         "image recognition",
         "convolutional neural network"
       ],
+      "concepts": [
+        [
+          "residual network",
+          "ResNet",
+          "deep residual learning"
+        ]
+      ],
       "target": "Deep Residual Learning for Image Recognition"
     },
     {
@@ -129,6 +189,12 @@
         "consensus algorithm",
         "distributed systems",
         "replicated log"
+      ],
+      "concepts": [
+        [
+          "Raft",
+          "consensus algorithm"
+        ]
       ],
       "target": "In Search of an Understandable Consensus Algorithm"
     },
@@ -143,6 +209,12 @@
         "deep learning",
         "structural biology"
       ],
+      "concepts": [
+        [
+          "AlphaFold",
+          "protein structure prediction"
+        ]
+      ],
       "target": "Highly accurate protein structure prediction with AlphaFold"
     },
     {
@@ -155,6 +227,13 @@
         "genome editing",
         "RNA-guided endonuclease",
         "gene editing"
+      ],
+      "concepts": [
+        [
+          "CRISPR-Cas9",
+          "RNA-guided endonuclease",
+          "genome editing"
+        ]
       ],
       "target": "A Programmable Dual-RNA-Guided DNA Endonuclease in Adaptive Bacterial Immunity"
     },
@@ -169,6 +248,16 @@
         "obesity",
         "weight loss"
       ],
+      "concepts": [
+        [
+          "semaglutide",
+          "GLP-1 receptor agonist"
+        ],
+        [
+          "obesity",
+          "weight loss"
+        ]
+      ],
       "target": "Once-Weekly Semaglutide in Adults with Overweight or Obesity"
     },
     {
@@ -181,6 +270,16 @@
         "BNT162b2",
         "COVID-19",
         "vaccine efficacy"
+      ],
+      "concepts": [
+        [
+          "BNT162b2",
+          "mRNA vaccine"
+        ],
+        [
+          "COVID-19",
+          "SARS-CoV-2"
+        ]
       ],
       "target": "Safety and Efficacy of the BNT162b2 mRNA Covid-19 Vaccine"
     },
@@ -195,6 +294,12 @@
         "LIGO",
         "general relativity"
       ],
+      "concepts": [
+        [
+          "gravitational waves",
+          "binary black hole merger"
+        ]
+      ],
       "target": "Observation of Gravitational Waves from a Binary Black Hole Merger"
     },
     {
@@ -208,7 +313,125 @@
         "few-step image generation",
         "diffusion model"
       ],
+      "concepts": [
+        [
+          "latent consistency model",
+          "few-step diffusion sampling"
+        ]
+      ],
       "target": "Latent Consistency Models: Synthesizing High-Resolution Images with Few-Step Inference"
+    },
+    {
+      "id": "rl-missile-guidance",
+      "kind": "intersection",
+      "domain": "eng",
+      "year": 2021,
+      "user_date_from": null,
+      "keywords": [
+        "reinforcement learning",
+        "adaptive dynamic programming",
+        "missile guidance",
+        "precision guidance control",
+        "approximate dynamic programming",
+        "optimal control"
+      ],
+      "concepts": [
+        [
+          "reinforcement learning",
+          "adaptive dynamic programming"
+        ],
+        [
+          "missile guidance",
+          "guidance law"
+        ]
+      ],
+      "target": "Computational Missile Guidance: A Deep Reinforcement Learning Approach"
+    },
+    {
+      "id": "stealth-composites",
+      "kind": "intersection",
+      "domain": "chem",
+      "year": 2018,
+      "user_date_from": null,
+      "keywords": [
+        "radar absorbing composites",
+        "structural-functional integration",
+        "high-temperature resistant composites",
+        "load-bearing stealth structures",
+        "electromagnetic wave absorption",
+        "multifunctional composite materials"
+      ],
+      "concepts": [
+        [
+          "high-temperature resistant",
+          "heat-resistant"
+        ],
+        [
+          "load-bearing",
+          "structural composite"
+        ],
+        [
+          "radar absorbing",
+          "microwave absorbing",
+          "stealth"
+        ]
+      ],
+      "target": "Polymer matrix composites as broadband radar absorbing structures for stealth aircrafts"
+    },
+    {
+      "id": "metamorphic-network",
+      "kind": "intersection",
+      "domain": "cs",
+      "year": 2009,
+      "user_date_from": null,
+      "keywords": [
+        "metamorphic testing",
+        "network device configuration",
+        "protocol conformance testing",
+        "router and switch testing",
+        "network configuration verification",
+        "test oracle problem"
+      ],
+      "concepts": [
+        [
+          "metamorphic testing",
+          "metamorphic relation"
+        ],
+        [
+          "network device",
+          "router",
+          "switch"
+        ]
+      ],
+      "target": "Conformance Testing of Network Simulators Based on Metamorphic Testing Technique"
+    },
+    {
+      "id": "fiber-dielectric",
+      "kind": "intersection",
+      "domain": "chem",
+      "year": 2017,
+      "user_date_from": null,
+      "keywords": [
+        "dielectric anisotropy",
+        "fibrous materials",
+        "axial dielectric constant",
+        "transverse dielectric constant",
+        "anisotropic permittivity",
+        "fiber reinforced composites"
+      ],
+      "concepts": [
+        [
+          "dielectric constant",
+          "permittivity",
+          "dielectric anisotropy"
+        ],
+        [
+          "fiber-reinforced composite",
+          "fibre composite",
+          "fibrous material"
+        ]
+      ],
+      "target": "Dielectric constant of a three-dimensional woven glass fibre composite: Analysis and measurement"
     }
   ]
 }

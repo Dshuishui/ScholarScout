@@ -94,7 +94,7 @@ export type SearchEvent = SearchPartialEvent | SearchQuotaEvent | SearchProgress
 
 export type ParseResult =
   | { intent: 'chat'; reply: string }
-  | { intent: 'search'; keywords: string[]; date_from: string | null; date_to: string | null; domains?: string[] }
+  | { intent: 'search'; keywords: string[]; date_from: string | null; date_to: string | null; domains?: string[]; concepts?: string[][] }
 
 export interface SearchSessionItem {
   id: number

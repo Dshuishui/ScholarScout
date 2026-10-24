@@ -8,6 +8,7 @@
     uv run python eval/retrieval_benchmark.py --legacy-5y        # 模拟旧行为：用户没说时间时默认只搜近 5 年
     uv run python eval/retrieval_benchmark.py --only lora,raft   # 只跑部分用例
     uv run python eval/retrieval_benchmark.py --no-domains       # 不按领域选源（查全部数据源）
+    uv run python eval/retrieval_benchmark.py --no-concepts      # 不做概念交集、按被引排序这两路（旧行为）
 结果以 JSON 行输出，最后一行是汇总。
 """
 import argparse
@@ -31,7 +32,7 @@ def _norm(text: str | None) -> str:
     return re.sub(r"[^a-z0-9]+", " ", (text or "").lower()).strip()
 
 
-async def run_case(case: dict, limit: int, legacy_5y: bool, use_domains: bool) -> dict:
+async def run_case(case: dict, limit: int, legacy_5y: bool, use_domains: bool, use_concepts: bool) -> dict:
     date_from = case["user_date_from"]
     if date_from is None and legacy_5y:
         date_from = f"{date.today().year - 5}-01-01"
@@ -44,7 +45,8 @@ async def run_case(case: dict, limit: int, legacy_5y: bool, use_domains: bool) -
     started = time.monotonic()
     papers = await search_all_sources(
         ParsedQuery(keywords=case["keywords"], date_from=date_from,
-                    domains=[case["domain"]] if use_domains else []),
+                    domains=[case["domain"]] if use_domains else [],
+                    concepts=case.get("concepts", []) if use_concepts else []),
         limit_per_source=limit,
         on_source_done=on_done,
     )
@@ -76,6 +78,7 @@ async def main() -> None:
     ap.add_argument("--legacy-5y", action="store_true", help="模拟旧的默认近 5 年时间窗")
     ap.add_argument("--only", default="", help="逗号分隔的用例 id")
     ap.add_argument("--no-domains", action="store_true", help="不按领域选源")
+    ap.add_argument("--no-concepts", action="store_true", help="不用概念组（旧行为）")
     ap.add_argument("--pause", type=float, default=3.0, help="用例之间的间隔秒数，避免触发限流")
     args = ap.parse_args()
 
@@ -88,7 +91,7 @@ async def main() -> None:
     for i, case in enumerate(cases):
         if i:
             await asyncio.sleep(args.pause)
-        r = await run_case(case, args.limit, args.legacy_5y, not args.no_domains)
+        r = await run_case(case, args.limit, args.legacy_5y, not args.no_domains, not args.no_concepts)
         results.append(r)
         print(json.dumps(r, ensure_ascii=False), flush=True)
 
@@ -101,6 +104,7 @@ async def main() -> None:
         "avg_off_topic_pct": round(sum(r["off_topic_pct"] for r in results) / max(len(results), 1)),
         "legacy_5y": args.legacy_5y,
         "domains": not args.no_domains,
+        "concepts": not args.no_concepts,
     }, ensure_ascii=False), flush=True)
 
 

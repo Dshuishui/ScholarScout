@@ -267,6 +267,7 @@ async def parse(
         "date_from": parsed.date_from,
         "date_to": parsed.date_to,
         "domains": parsed.domains,
+        "concepts": parsed.concepts,
     }
 
 
@@ -303,6 +304,7 @@ async def search(
                     date_to=request.date_to,
                     max_results=request.limit_per_source,
                     domains=request.domains or [],
+                    concepts=request.concepts or [],
                 )
             else:
                 # 旧路径：兼容不带关键词的调用

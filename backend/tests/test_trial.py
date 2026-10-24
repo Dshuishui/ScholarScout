@@ -294,3 +294,11 @@ async def test_search_validates_and_finds_pdfs_concurrently(client, trial):
                 if block.startswith("event: done"))
     pdfs = {p["paper_id"]: p["pdf_url"] for p in done["papers"]}
     assert pdfs == {"p1": "https://oa.example/1.pdf", "p2": None}
+
+
+async def test_search_passes_confirmed_concepts_to_retrieval(client, trial):
+    """前端确认后带回的概念组要传给检索，用来做概念交集检索。"""
+    body = {**SEARCH_BODY, "concepts": [["reinforcement learning"], ["missile guidance", "guidance law"]]}
+    await _search(client, body=body)
+    parsed = trial["search_all_sources"].call_args.args[0]
+    assert parsed.concepts == [["reinforcement learning"], ["missile guidance", "guidance law"]]

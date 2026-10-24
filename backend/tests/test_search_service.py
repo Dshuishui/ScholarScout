@@ -487,6 +487,103 @@ async def test_search_cache_respects_ttl_and_capacity():
     assert len(cs._memory_cache) <= cs._MEMORY_CACHE_MAX  # 有容量上限，不会无限增长
 
 
+# ── 概念交集 + 按被引排序 ─────────────────────────────────────────────────────
+
+def test_parsed_query_normalizes_concepts():
+    """大模型返回的格式不规整时不能让整次搜索报错。"""
+    assert ParsedQuery(keywords=["x"], concepts=None).concepts == []
+    assert ParsedQuery(keywords=["x"], concepts=["raft", ["consensus", " ", 3]]).concepts == [["raft"], ["consensus"]]
+    many = ParsedQuery(keywords=["x"], concepts=[[f"c{i}", "a", "b", "c", "d"] for i in range(5)]).concepts
+    assert len(many) == 3 and all(len(g) == 4 for g in many)
+
+
+def test_concept_query_ands_groups_and_ors_synonyms():
+    from services.search_service import _concept_query
+    q = _concept_query([["reinforcement learning", "ADP"], ["missile guidance"]])
+    assert q == '("reinforcement learning" OR ADP) AND ("missile guidance")'
+
+
+async def test_openalex_title_abstract_request_uses_filter_and_sort():
+    from services import search_service as s
+    sent = {}
+
+    class Resp:
+        status_code = 200
+        def raise_for_status(self): pass
+        def json(self): return {"results": []}
+
+    class Client:
+        async def get(self, url, **kw):
+            sent.update(kw.get("params", {}))
+            return Resp()
+
+    parsed = ParsedQuery(keywords=["raft"], date_from="2015-01-01")
+    await s._openalex_request(Client(), s.OPENALEX_TITLE_ABSTRACT, "(raft, consensus)", parsed, 10,
+                              sort="cited_by_count:desc")
+    assert "search" not in sent  # search 参数连全文一起匹配
+    assert sent["filter"] == "title_and_abstract.search:(raft  consensus),publication_date:>2015-01-01"
+    assert sent["sort"] == "cited_by_count:desc"
+
+
+def _fake_openalex(results: dict, calls: list):
+    async def fake_request(client, param, query, parsed, limit, sort=None):
+        name = "cited" if sort else ("intersection" if " AND " in query or query.startswith("(") else param)
+        calls.append((name, query))
+        return results.get(name, [])
+    return fake_request
+
+
+async def test_openalex_with_concepts_adds_intersection_and_cited(monkeypatch, stub_httpx):
+    from services import search_service as s
+    kw = [make_paper(f"K{i}", f"Keyword {i}", source="OpenAlex") for i in range(5)]
+    results = {
+        "search": kw,
+        "intersection": [make_paper("I1", "Intersection hit", source="OpenAlex")],
+        "cited": [make_paper("C1", "Classic", source="OpenAlex"), kw[0]],
+    }
+    calls = []
+    monkeypatch.setattr(s, "OPENALEX_API_KEY", "k")
+    monkeypatch.setattr(s, "_openalex_request", _fake_openalex(results, calls))
+    parsed = ParsedQuery(keywords=["rl", "guidance"], concepts=[["rl"], ["missile guidance"]])
+    ids = [p.paper_id for p in await s._search_openalex(parsed, 5)]
+    assert "I1" in ids                      # 交集检索参与融合
+    assert ids[-1] == "C1" and len(ids) == 6  # 按被引那一路追加在后面，不被截掉，也不重复
+    assert ("cited", '(rl) AND ("missile guidance")') in calls
+
+
+async def test_openalex_single_concept_skips_intersection(monkeypatch, stub_httpx):
+    from services import search_service as s
+    calls = []
+    monkeypatch.setattr(s, "OPENALEX_API_KEY", "k")
+    monkeypatch.setattr(s, "_openalex_request", _fake_openalex({}, calls))
+    await s._search_openalex(ParsedQuery(keywords=["transformer"], concepts=[["transformer", "self-attention"]]), 10)
+    assert sorted(name for name, _ in calls) == ["cited", "search", "search.semantic"]
+
+
+async def test_openalex_without_key_ignores_concepts(monkeypatch, stub_httpx):
+    from services import search_service as s
+    calls = []
+    monkeypatch.setattr(s, "OPENALEX_API_KEY", "")
+    monkeypatch.setattr(s, "_openalex_request", _fake_openalex({}, calls))
+    await s._search_openalex(ParsedQuery(keywords=["rl"], concepts=[["rl"], ["guidance"]]), 10)
+    assert [name for name, _ in calls] == ["search"]
+
+
+async def test_openalex_intersection_drops_last_concept_when_too_few(stub_httpx, monkeypatch):
+    from services import search_service as s
+    queries = []
+    async def fake_request(client, param, query, parsed, limit, sort=None):
+        queries.append(query)
+        if query.count(" AND ") == 2:
+            return [make_paper("S1", "Strict", source="OpenAlex")]
+        return [make_paper("S1", "Strict", source="OpenAlex"), make_paper("L1", "Looser", source="OpenAlex")]
+    monkeypatch.setattr(s, "_openalex_request", fake_request)
+    parsed = ParsedQuery(keywords=["x"], concepts=[["a"], ["b"], ["c"]])
+    papers = await s._openalex_intersection(None, parsed, 50)
+    assert [p.paper_id for p in papers] == ["S1", "L1"]  # 严格交集排前面，放宽后的补在后面
+    assert queries == ["(a) AND (b) AND (c)", "(a) AND (b)"]
+
+
 # ── 标题清洗 ──────────────────────────────────────────────────────────────────
 
 def test_clean_title_decodes_entities_and_inline_tags():

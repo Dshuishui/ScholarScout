@@ -24,6 +24,8 @@ interface PendingSearch {
   date_from: string | null
   date_to: string | null
   domains?: string[]
+  /** 解析出的概念组，后端用来取交集检索；用户改了关键词就不再适用 */
+  concepts?: string[][]
   query: string
   history: { role: string; content: string }[]
 }
@@ -133,7 +135,7 @@ export function useSearch(apiKey: string, settings: SearchSettings, model?: stri
     try {
       for await (const event of searchPapers(
         pending.query, apiKey, pending.history, settings,
-        { keywords, date_from: pending.date_from, date_to: pending.date_to, domains: pending.domains },
+        { keywords, date_from: pending.date_from, date_to: pending.date_to, domains: pending.domains, concepts: pending.concepts },
         model,
         trialAuth,
       )) {
@@ -264,6 +266,7 @@ export function useSearch(apiKey: string, settings: SearchSettings, model?: stri
           date_from: result.date_from,
           date_to: result.date_to,
           domains: result.domains,
+          concepts: result.concepts,
           query,
           history,
         }
@@ -280,7 +283,8 @@ export function useSearch(apiKey: string, settings: SearchSettings, model?: stri
 
   const reSearch = async (keywords: string[]) => {
     if (!lastConfirmed || !guard()) return
-    const newConfirmed = { ...lastConfirmed, keywords }
+    const keywordsEdited = keywords.join(',') !== lastConfirmed.keywords.join(',')
+    const newConfirmed = { ...lastConfirmed, keywords, ...(keywordsEdited && { concepts: undefined }) }
     setLastConfirmed(newConfirmed)
 
     const assistantId = Date.now().toString()

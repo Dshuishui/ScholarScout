@@ -28,7 +28,8 @@ PARSE_SYSTEM = """你是学术搜索助手。结合对话历史，将用户的�
   "date_from": "YYYY-01-01 或 null",
   "date_to": "YYYY-12-31 或 null",
   "max_results": 30,
-  "domains": ["cs"]
+  "domains": ["cs"],
+  "concepts": [["概念A的英文说法1", "说法2"], ["概念B的英文说法1"]]
 }
 
 规则：
@@ -38,6 +39,11 @@ PARSE_SYSTEM = """你是学术搜索助手。结合对话历史，将用户的�
 - 保证关键词多样性，避免完全重复的词
 - domains 是需求涉及的学科，只能从这些值里选：cs（计算机/人工智能/软件）、math、physics、astro（天文/地球科学）、bio（生物/生命科学）、med（医学/药学/公共卫生）、chem（化学/材料）、eng（工程）、social（经济/心理/教育/社会学）、humanities
   交叉学科要把涉及的学科都列上，例如"深度学习用于医学影像" → ["cs", "med"]；拿不准时返回 []
+- concepts 是需求里必须同时满足的几个概念，用来取交集检索：1-3 组，每组是同一个概念的 1-3 种英文说法，最常用的放第一个
+  同一个主题的不同说法放在同一组；只有需求是几样不同东西的结合（A 用于 B、A 对 B 的影响、兼具 A 和 B）才分成多组
+  "综述""应用""方法""研究""原理""机制""效果"这类词不算概念
+  例如"强化学习用于导弹制导"→ [["reinforcement learning", "adaptive dynamic programming"], ["missile guidance", "guidance law"]]
+  例如"transformer 自注意力"→ [["transformer", "self-attention"]]
 - 用户未提时间则 date_from/date_to 为 null
 - "最近两年" 相对今天计算
 - 若用户说"找更多"或"换个方向"，结合历史推断搜索主题"""

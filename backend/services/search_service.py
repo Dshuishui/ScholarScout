@@ -187,16 +187,35 @@ def _openalex_item_to_paper(item: dict) -> Paper:
 
 
 OPENALEX_SEMANTIC_MAX_PER_PAGE = 50
+# 只匹配标题和摘要的检索（以 filter 形式传）。`search` 参数连全文一起匹配，按被引排序时
+# 排在前面的是正文里顺带提到关键词的高被引论文：搜 Raft 共识算法，前几名是细胞膜"脂筏"（lipid raft）
+OPENALEX_TITLE_ABSTRACT = "title_and_abstract.search"
+OPENALEX_CITED_EXTRA = 10       # 按被引排序那一路取多少篇
+OPENALEX_MIN_INTERSECTION = 10  # 概念交集少于这么多篇时，去掉最后一个概念再查一次
+
+
+def _concept_query(concepts: list[list[str]]) -> str:
+    """概念组之间取交集，组内各种说法取并集：(a OR "b c") AND (d OR e)。"""
+    return " AND ".join(f"({_quoted_or(g)})" for g in concepts)
 
 
 async def _openalex_request(client: httpx.AsyncClient, search_param: str, query: str,
-                            parsed: ParsedQuery, limit: int) -> list[Paper]:
-    params = {search_param: query, "per_page": limit, "select": _OPENALEX_SELECT}
+                            parsed: ParsedQuery, limit: int, sort: str | None = None) -> list[Paper]:
+    params = {"per_page": limit, "select": _OPENALEX_SELECT}
+    filters = []
+    if search_param == OPENALEX_TITLE_ABSTRACT:
+        filters.append(f"{search_param}:{query.replace(',', ' ')}")  # filter 里逗号是分隔符
+    else:
+        params[search_param] = query
     # 语义检索不支持日期类 filter（带上会整个请求 400），拿回来再按日期筛。
     # 它每页最多 50 篇：以前有时间范围时多取到 100，结果每次都 400，语义检索整路丢失
     semantic = search_param == "search.semantic"
     if parsed.date_from and not semantic:
-        params["filter"] = f"publication_date:>{parsed.date_from}"
+        filters.append(f"publication_date:>{parsed.date_from}")
+    if filters:
+        params["filter"] = ",".join(filters)
+    if sort:
+        params["sort"] = sort
     if semantic:
         params["per_page"] = min(limit * 2 if parsed.date_from else limit, OPENALEX_SEMANTIC_MAX_PER_PAGE)
     if OPENALEX_API_KEY:
@@ -230,30 +249,52 @@ def _rrf_fuse(ranked_lists: list[list[Paper]], limit: int, k: int = 10) -> list[
     return [first_seen[pid] for pid in ordered[:limit]]
 
 
+async def _openalex_intersection(client: httpx.AsyncClient, parsed: ParsedQuery, limit: int) -> list[Paper]:
+    """概念交集检索。三个概念同时满足的论文常常只有几篇（实测"蜕变测试 × 协议一致性 × 路由器配置"只有 11 篇），
+    太少时去掉最后一个概念再查一次，补在后面。"""
+    papers = await _openalex_request(client, "search", _concept_query(parsed.concepts), parsed, limit)
+    if len(papers) < OPENALEX_MIN_INTERSECTION and len(parsed.concepts) > 2:
+        seen = {p.paper_id for p in papers}
+        looser = await _openalex_request(client, "search", _concept_query(parsed.concepts[:2]), parsed, limit)
+        papers += [p for p in looser if p.paper_id not in seen]
+    return papers[:limit]
+
+
 async def _search_openalex(parsed: ParsedQuery, limit: int) -> list[Paper]:
-    """关键词检索 + （配置了 API key 时）语义检索，RRF 融合。
+    """关键词检索 + （配置了 API key 时）语义检索、概念交集检索，RRF 融合；再追加按被引排序的几篇。
 
     关键词用 OR 连接：空格拼接会被当成"所有词都要出现"，同义词一多经典论文就被漏掉
     （实测潜在扩散模型、思维链由"前 50 条没有"变成排第 1）。
     语义检索（OpenAlex 用 GTE-large 对标题+摘要做了向量化）补上用词不同的论文：
     实测 GPT-3 从第 16 升到第 1；但它会漏掉思维链（关键词检索排第 1），所以两路融合而不是替换。
-    语义检索每次多一次计费调用，无 key 时每天只有 0.1 美元额度，所以只在配置 key 后启用。
+    概念交集：OR 检索遇到"A 用于 B"会被宽的那个概念带偏（"强化学习用于导弹制导"前 50 条大多是泛泛的强化学习），
+    把需求拆成几个概念再 AND 起来，前排基本都切题。只有一个概念时它和关键词检索差不多，不查。
+    按被引排序：奠基论文按文字匹配度排不进前 50（Attention Is All You Need、司美格鲁肽 STEP 1 试验都是"前 50 没有"），
+    在概念范围内按被引排序分别排第 1。这一路无关的高被引论文也多，只取前几篇、不参与融合，追加在后面交给 AI 筛选。
+    后三路每次各多一次计费调用，无 key 时每天只有 0.1 美元额度，所以只在配置 key 后启用。
     """
     try:
         async with httpx.AsyncClient(timeout=20) as client:
             keyword_task = _openalex_request(client, "search", _quoted_or(parsed.keywords), parsed, limit)
             if not OPENALEX_API_KEY:
                 return await keyword_task
-            keyword_res, semantic_res = await asyncio.gather(
-                keyword_task,
-                _openalex_request(client, "search.semantic", ", ".join(parsed.keywords), parsed, limit),
-                return_exceptions=True,
-            )
-        lists = [r for r in (keyword_res, semantic_res) if isinstance(r, list)]
-        for r in (keyword_res, semantic_res):
+            tasks = {
+                "keyword": keyword_task,
+                "semantic": _openalex_request(client, "search.semantic", ", ".join(parsed.keywords), parsed, limit),
+            }
+            if len(parsed.concepts) >= 2:
+                tasks["intersection"] = _openalex_intersection(client, parsed, limit)
+            if parsed.concepts:
+                tasks["cited"] = _openalex_request(client, OPENALEX_TITLE_ABSTRACT, _concept_query(parsed.concepts),
+                                                   parsed, OPENALEX_CITED_EXTRA, sort="cited_by_count:desc")
+            results = dict(zip(tasks, await asyncio.gather(*tasks.values(), return_exceptions=True)))
+        for name, r in results.items():
             if isinstance(r, Exception):
-                logger.warning("OpenAlex sub-search error: %s", r)
-        return _rrf_fuse(lists, limit)
+                logger.warning("OpenAlex %s sub-search error: %s", name, r)
+        ok = {name: r for name, r in results.items() if isinstance(r, list)}
+        fused = _rrf_fuse([ok[n] for n in ("keyword", "semantic", "intersection") if n in ok], limit)
+        seen = {p.paper_id for p in fused}
+        return fused + [p for p in ok.get("cited", []) if p.paper_id not in seen]
     except Exception as e:
         logger.warning("OpenAlex search error: %s", e)
         return []

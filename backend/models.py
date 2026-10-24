@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from typing import Optional
 from config import SEARCH_LIMIT_PER_SOURCE, VALIDATED_LIMIT
 
@@ -24,6 +24,7 @@ class SearchRequest(BaseModel):
     date_to: Optional[str] = Field(default=None, max_length=20)
     sources: Optional[list[str]] = Field(default=None, max_length=15)
     domains: Optional[list[str]] = Field(default=None, max_length=10)  # parse 阶段识别的学科领域，用于选源
+    concepts: Optional[list[list[str]]] = Field(default=None, max_length=10)  # parse 阶段拆出的概念组，用于取交集检索
     model: Optional[str] = Field(default=None, max_length=100)
 
 
@@ -53,9 +54,30 @@ class ValidateKeyRequest(BaseModel):
     api_key: str = Field(max_length=200)
 
 
+MAX_CONCEPT_GROUPS = 3
+MAX_TERMS_PER_CONCEPT = 4
+
+
 class ParsedQuery(BaseModel):
     keywords: list[str]
     date_from: Optional[str] = None
     date_to: Optional[str] = None
     max_results: int = 30
     domains: list[str] = []  # 学科领域，空表示未知（查全部数据源）
+    # 需求里要同时满足的几个概念，每组是同一概念的几种英文说法，
+    # 如 [["reinforcement learning"], ["missile guidance", "guidance law"]]；空表示不做交集检索
+    concepts: list[list[str]] = []
+
+    @field_validator("concepts", mode="before")
+    @classmethod
+    def _normalize_concepts(cls, v):
+        """大模型偶尔把某组写成字符串、返回 null 或给太多组：整理成规整的二维列表，不让整次搜索因为格式报错。"""
+        if not isinstance(v, list):
+            return []
+        groups = []
+        for g in v:
+            terms = [g] if isinstance(g, str) else g if isinstance(g, list) else []
+            terms = [t.strip()[:100] for t in terms if isinstance(t, str) and t.strip()]
+            if terms:
+                groups.append(terms[:MAX_TERMS_PER_CONCEPT])
+        return groups[:MAX_CONCEPT_GROUPS]
