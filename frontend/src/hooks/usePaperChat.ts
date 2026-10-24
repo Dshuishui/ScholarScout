@@ -33,8 +33,9 @@ export function usePaperChat(apiKey: string, model: string = 'deepseek-v4-flash'
   // 从后端加载对话记录和 PDF 文本（登录后恢复）
   useEffect(() => {
     if (!isLoggedIn || !token) return
+    // 凭证失效时接口返回 401 和错误对象，以前直接当数组遍历，整个页面崩成白屏（登录过期的老用户回访时遇到）
     fetch('/api/user/chats', { headers: { Authorization: `Bearer ${token}` } })
-      .then(r => r.json())
+      .then(r => (r.ok ? r.json() : []))
       .then((items: { paper_id_hash: string; paper: Paper; messages: ChatMessage[]; pdf_text: string | null }[]) => {
         const newStatuses = new Map<string, PdfStatus>()
         setHistories(prev => {
