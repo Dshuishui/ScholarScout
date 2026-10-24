@@ -146,17 +146,32 @@ async def test_alert_email_sent_at_most_once_per_day(monitor, monkeypatch):
 
 async def test_stalled_subscription_detection(db_session):
     from datetime import datetime, timedelta
-    from models_db import Subscription
+    from models_db import Subscription, SubscriptionQueueItem
     from services.health_monitor import stalled_subscriptions
     old = datetime.utcnow() - timedelta(days=10)
-    db_session.add_all([
+    subs = [
         Subscription(user_id=1, keywords_json='["a"]', active=True, created_at=old, last_sent=old),              # 停推
         Subscription(user_id=1, keywords_json='["b"]', active=True, created_at=old, last_sent=datetime.utcnow()),  # 正常
         Subscription(user_id=1, keywords_json='["c"]', active=False, created_at=old, last_sent=old),              # 已停用
         Subscription(user_id=1, keywords_json='["d"]', active=True, created_at=datetime.utcnow()),               # 刚创建
+        Subscription(user_id=1, keywords_json='["e"]', active=True, created_at=old, last_sent=old),              # 队列空：没有新论文
+        Subscription(user_id=1, keywords_json='["f"]', active=True, created_at=old, last_sent=old),              # 刚补进明天的论文
+    ]
+    db_session.add_all(subs)
+    await db_session.flush()
+    yesterday = (datetime.utcnow() - timedelta(days=1)).date().isoformat()
+    tomorrow = (datetime.utcnow() + timedelta(days=1)).date().isoformat()
+    db_session.add_all([
+        SubscriptionQueueItem(subscription_id=subs[0].id, paper_json="{}", planned_date=yesterday),
+        SubscriptionQueueItem(subscription_id=subs[1].id, paper_json="{}", planned_date=yesterday),
+        SubscriptionQueueItem(subscription_id=subs[2].id, paper_json="{}", planned_date=yesterday),
+        SubscriptionQueueItem(subscription_id=subs[4].id, paper_json="{}", planned_date=yesterday,
+                              sent_at=old),  # 已发过的不算
+        SubscriptionQueueItem(subscription_id=subs[5].id, paper_json="{}", planned_date=tomorrow),
     ])
     await db_session.commit()
-    assert len(await stalled_subscriptions(db_session)) == 1
+    stalled = await stalled_subscriptions(db_session)
+    assert [sub_id for sub_id, _ in stalled] == [subs[0].id]
 
 
 async def test_search_records_source_results(monitor):

@@ -6,7 +6,8 @@
   - 某个源在上一个时间窗有结果、这个时间窗调用多次却一篇都没有 → 告警（状态变化才告警，
     arXiv 这种一直被限流的源不会天天发邮件）
   - 所有源最近多次调用合计一篇都没有 → 告警（代理失效这类全局故障）
-  - 启用中的订阅超过 3 天没推送 → 告警
+  - 启用中的订阅超过 3 天没推送，且队列里有到期没发出去的论文 → 告警
+    （队列空了只说明这个方向暂时没有新论文，不是故障，不告警）
   - 未登录免费体验 24 小时内用到每日上限的 80% → 提醒（系统 Key 花费）
   - 数据库备份超过 36 小时没有成功 → 告警（备份悄悄失效比没有备份更危险）
   - DeepSeek 余额低于阈值 → 告警（余额耗尽后搜索筛选、免费对话、订阅解读全部失败）
@@ -113,16 +114,28 @@ async def trial_usage_last_day(db) -> int:
 
 
 async def stalled_subscriptions(db) -> list[tuple[int, str | None]]:
-    """启用中、但超过 STALLED_SUB_DAYS 天没有成功推送的订阅 [(id, last_sent)]。刚创建的不算。"""
-    from sqlalchemy import select, or_, and_
-    from models_db import Subscription
-    cutoff = datetime.utcnow() - timedelta(days=STALLED_SUB_DAYS)
+    """推送坏了的订阅 [(id, last_sent)]：启用中、超过 STALLED_SUB_DAYS 天没有成功推送，
+    而且队列里有计划日期已过、还没发出的论文。刚创建的不算。
+
+    队列空着只说明这个方向近期没有新的相关论文（2026-10 有订阅因此每天收到误报），
+    不是故障。补队列时论文最早排到明天，所以"计划日期早于今天还没发"就说明当天的推送没成功。
+    """
+    from sqlalchemy import select, or_, and_, exists
+    from models_db import Subscription, SubscriptionQueueItem
+    now = datetime.utcnow()
+    cutoff = now - timedelta(days=STALLED_SUB_DAYS)
+    overdue = exists().where(
+        SubscriptionQueueItem.subscription_id == Subscription.id,
+        SubscriptionQueueItem.sent_at.is_(None),
+        SubscriptionQueueItem.planned_date < now.date().isoformat(),
+    )
     rows = (await db.execute(
         select(Subscription.id, Subscription.last_sent).where(
             Subscription.active == True,  # noqa: E712
             Subscription.created_at < cutoff,
             or_(Subscription.last_sent.is_(None), and_(Subscription.last_sent < cutoff)),
-        )
+            overdue,
+        ).order_by(Subscription.id)
     )).all()
     return [(r.id, r.last_sent.isoformat() if r.last_sent else None) for r in rows]
 
@@ -260,7 +273,7 @@ async def run_health_check() -> list[str]:
     if stalled:
         ids = ", ".join(str(i) for i, _ in stalled)
         problems.append(("stalled-subscriptions",
-                         f"{len(stalled)} 个启用中的订阅超过 {STALLED_SUB_DAYS} 天没有推送（订阅 id：{ids}）"))
+                         f"{len(stalled)} 个订阅有到期的论文没发出去，已超过 {STALLED_SUB_DAYS} 天没有推送成功（订阅 id：{ids}）"))
     try:
         async with AsyncSessionLocal() as db:
             trial_used = await trial_usage_last_day(db)
