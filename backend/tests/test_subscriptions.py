@@ -390,6 +390,50 @@ async def test_queue_progress_counts(db_session):
                         "last_date": "2026-09-19", "daily_limit": 1, "since": "2026-05-23"}
 
 
+async def _fill_queue_with(db_session, monkeypatch, validate):
+    """用给定的 validate_papers 替身跑一次 populate_queue，返回入队的 paper_id。"""
+    from datetime import datetime, timezone
+    from sqlalchemy import select
+    import scheduler
+    from services import llm_service
+    from models_db import Subscription, SubscriptionQueueItem
+    sub = Subscription(user_id=1, keywords_json='["Raft"]', active=True, daily_limit=1)
+    db_session.add(sub)
+    await db_session.commit()
+    await db_session.refresh(sub)
+    found = [_push_paper(paper_id=f"p{i}") for i in range(3)]
+    monkeypatch.setattr(scheduler, "search_all_sources", AsyncMock(return_value=found))
+    monkeypatch.setattr(scheduler, "DEEPSEEK_API_KEY", "sk-x")
+    monkeypatch.setattr(llm_service, "validate_papers", validate)
+    await scheduler.populate_queue(sub, db_session, datetime.now(timezone.utc))
+    rows = await db_session.execute(select(SubscriptionQueueItem.paper_id))
+    return sorted(rows.scalars().all())
+
+
+async def test_queue_skips_papers_when_ai_validation_failed(db_session, monkeypatch):
+    """余额用完时筛选整批失败、论文原样返回（没有打分），不能把它们塞进订阅队列。"""
+    async def unscored(papers, query, key):
+        return list(papers), []
+    assert await _fill_queue_with(db_session, monkeypatch, unscored) == []
+
+
+async def test_queue_skips_papers_when_ai_rejects_all_or_errors(db_session, monkeypatch):
+    async def reject_all(papers, query, key):
+        return [], list(papers)
+    assert await _fill_queue_with(db_session, monkeypatch, reject_all) == []
+
+
+async def test_queue_skips_papers_when_validation_raises(db_session, monkeypatch):
+    assert await _fill_queue_with(db_session, monkeypatch, AsyncMock(side_effect=RuntimeError("402"))) == []
+
+
+async def test_queue_keeps_only_scored_papers(db_session, monkeypatch):
+    async def partial(papers, query, key):
+        papers[0].relevance_score = 8.0          # 第一批打了分；第二批失败，原样返回
+        return [papers[0], papers[1]], [papers[2]]
+    assert await _fill_queue_with(db_session, monkeypatch, partial) == ["p0"]
+
+
 async def test_analysis_retries_when_reasoning_exhausts_token_budget(monkeypatch):
     """推理模型把 max_tokens 花在思考上、正文为空时，要加大上限再试一次。"""
     from services import paper_analysis as pa

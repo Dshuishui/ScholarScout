@@ -62,15 +62,19 @@ async def populate_queue(
         logger.warning("Search failed for sub %d: %s", sub.id, e)
         return 0
 
-    # 可选 AI 过滤
+    # 可选 AI 过滤：只让打过分的论文入队。筛选失败时 validate_papers 会把论文原样返回（不打分），
+    # 2026-10-24 余额用完那次因此一下塞进了 64 篇没筛过的论文；这种情况宁可这次不补，下次再补。
     if DEEPSEEK_API_KEY and all_papers:
         try:
             from services.llm_service import validate_papers
             accepted, _ = await validate_papers(all_papers, " ".join(keywords), DEEPSEEK_API_KEY)
-            if accepted:
-                all_papers = accepted
         except Exception as e:
-            logger.warning("AI validation skipped for sub %d: %s", sub.id, e)
+            logger.warning("AI validation failed for sub %d, queue not refilled: %s", sub.id, e)
+            return 0
+        all_papers = [p for p in accepted if p.relevance_score is not None]
+        unscored = len(accepted) - len(all_papers)
+        if unscored:
+            logger.warning("AI validation failed for %d papers of sub %d, not queued", unscored, sub.id)
 
     # 获取已存在的 paper_id（已发和待发都算）
     existing_result = await db.execute(
