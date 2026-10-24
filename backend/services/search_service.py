@@ -1,4 +1,5 @@
 import asyncio
+import html
 import random
 import logging
 import re
@@ -757,9 +758,20 @@ async def enhance_with_unpaywall(papers: list[Paper]) -> list[Paper]:
     ]
 
 
+# 上下标、斜体这类行内标签直接去掉、不留空格：SiO<sub>2</sub> → SiO2（JATS 里写成 <jats:sub>）
+_INLINE_TAGS = re.compile(r"</?(?:\w+:)?(?:sub|sup|i|b|em|strong|italic|bold|sc|scp|u)\b[^>]*>", re.I)
+# 有的记录把整条参考文献当成了标题：Conformance testing of ... technique,” in Formal Techniques for ...
+_CITATION_TAIL = re.compile(r"[,.]\s*[”\"]\s*,?\s*in\s.*$")
+
+
 def _clean_title(title: str) -> str:
-    """去除 HTML/XML 标签（如 CrossRef 返回的 JATS 标签），压缩空白。"""
-    t = re.sub(r"<[^>]+>", " ", title)
+    """解码 HTML 实体（Europe PMC 返回 SiO&lt;sub&gt;2&lt;/sub&gt;），去除 HTML/XML 标签（如 CrossRef 的 JATS 标签），
+    截掉误收进来的参考文献尾巴，压缩空白。"""
+    t = _INLINE_TAGS.sub("", html.unescape(title))
+    t = re.sub(r"<[^>]+>", " ", t)
+    m = _CITATION_TAIL.search(t)
+    if m and m.start() >= 20:
+        t = t[:m.start()].lstrip("“\"")
     return re.sub(r"\s+", " ", t).strip()
 
 

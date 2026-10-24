@@ -485,3 +485,23 @@ async def test_search_cache_respects_ttl_and_capacity():
     for i in range(cs._MEMORY_CACHE_MAX + 5):
         await cs.cache_search([f"kw{i}"], ["OpenAlex"], [{"paper_id": str(i)}], "", "")
     assert len(cs._memory_cache) <= cs._MEMORY_CACHE_MAX  # 有容量上限，不会无限增长
+
+
+# ── 标题清洗 ──────────────────────────────────────────────────────────────────
+
+def test_clean_title_decodes_entities_and_inline_tags():
+    from services.search_service import _clean_title
+    assert _clean_title("Wood Carbon Sponge/SiO&lt;sub&gt;2&lt;/sub&gt; Aerogel") == "Wood Carbon Sponge/SiO2 Aerogel"
+    assert _clean_title("<jats:title>Growth of <jats:italic>E. coli</jats:italic></jats:title>") == "Growth of E. coli"
+    assert _clean_title("Rock &amp; Roll") == "Rock & Roll"
+
+
+def test_clean_title_cuts_citation_tail_so_duplicates_merge():
+    from services.search_service import _clean_title, _sanitize_paper
+    junk = "Conformance testing of network simulators based on metamorphic testing technique,” in Formal Techniques for Distributed Systems"
+    assert _clean_title(junk) == "Conformance testing of network simulators based on metamorphic testing technique"
+    assert _clean_title('The word "cloud" in computing') == 'The word "cloud" in computing'
+    good = make_paper("W1", "Conformance Testing of Network Simulators Based on Metamorphic Testing Technique",
+                      source="OpenAlex", citations=29)
+    bad = make_paper("W2", junk, source="OpenAlex")
+    assert len(deduplicate([_sanitize_paper(good), _sanitize_paper(bad)])) == 1
