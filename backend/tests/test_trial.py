@@ -330,9 +330,12 @@ async def test_search_sends_citation_expansion_after_results(client, trial, monk
         return [_paper(1).model_copy(update={"paper_id": "x1", "title": "Cited"}),
                 _paper(2).model_copy(update={"paper_id": "x2", "title": "Unscored"})]
 
+    import services.expansion as ex
     trial["validate_papers"].side_effect = validate
+    monkeypatch.setattr(ex, "validate_papers", validate)
+    monkeypatch.setattr(ex, "enhance_with_unpaywall", AsyncMock(side_effect=lambda p: p))
     monkeypatch.setattr(sr, "citation_expansion_available", lambda: True)
-    monkeypatch.setattr(sr, "expand_citations", expand)
+    monkeypatch.setattr(ex, "expand_citations", expand)
     events = _events(await _search(client))
     names = [n for n, _ in events]
     assert names.index("done") < names.index("expanding") < names.index("more_papers")
@@ -351,9 +354,10 @@ async def test_search_expansion_failure_keeps_results(client, trial, monkeypatch
     async def expand(seeds, pool, parsed):
         raise RuntimeError("openalex down")
 
+    import services.expansion as ex
     trial["validate_papers"].side_effect = validate
     monkeypatch.setattr(sr, "citation_expansion_available", lambda: True)
-    monkeypatch.setattr(sr, "expand_citations", expand)
+    monkeypatch.setattr(ex, "expand_citations", expand)
     events = dict(_events(await _search(client)))
     assert "error" not in events
     assert events["more_papers"]["papers"] == []
@@ -361,9 +365,10 @@ async def test_search_expansion_failure_keeps_results(client, trial, monkeypatch
 
 async def test_search_skips_expansion_without_strong_results(client, trial, monkeypatch):
     import routers.search as sr
+    import services.expansion as ex
     expand = AsyncMock(return_value=[])
     monkeypatch.setattr(sr, "citation_expansion_available", lambda: True)
-    monkeypatch.setattr(sr, "expand_citations", expand)
+    monkeypatch.setattr(ex, "expand_citations", expand)
     names = [n for n, _ in _events(await _search(client))]  # 默认的验证结果没有打分
     assert "expanding" not in names and "more_papers" not in names
     expand.assert_not_called()

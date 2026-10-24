@@ -26,8 +26,9 @@ from models_db import User
 from services.llm_service import classify_intent, parse_query, validate_papers, rank_accepted
 from services.search_service import (
     search_all_sources, enhance_with_unpaywall, get_source_names, available_sources, deduplicate,
-    expand_citations, citation_expansion_available, EXPANSION_MIN_SCORE,
+    citation_expansion_available, EXPANSION_MIN_SCORE,
 )
+from services.expansion import expand_and_validate
 from services.download_service import fetch_pdf_with_fallback
 from services.pdf_finder_service import find_pdfs_with_kimi, generate_fallback_links
 from services.cache_service import get_cached_search, cache_search
@@ -272,29 +273,6 @@ async def parse(
     }
 
 
-async def _expand_results(final: list, pool: list, parsed: ParsedQuery, query: str, api_key: str) -> list:
-    """从高分论文出发沿引用关系找候选，经 AI 筛选后返回。打分失败的不补：宁可少，不能混进没把关的论文。"""
-    seeds = [p for p in final if (p.relevance_score or 0) >= EXPANSION_MIN_SCORE]
-    candidates = await expand_citations(seeds, pool, parsed)
-    if not candidates:
-        return []
-    (accepted, _), enhanced = await asyncio.gather(
-        validate_papers(candidates, query, api_key),
-        enhance_with_unpaywall(candidates),
-    )
-    pdf_map = {p.paper_id: p.pdf_url for p in enhanced if p.pdf_url}
-    more = []
-    for p in rank_accepted(accepted):
-        if p.relevance_score is None:
-            continue
-        pdf_url = p.pdf_url or pdf_map.get(p.paper_id)
-        more.append(p.model_copy(update={
-            "pdf_url": pdf_url,
-            "fallback_links": [] if pdf_url else generate_fallback_links(p),
-        }))
-    return more
-
-
 @router.post("/search")
 async def search(
     request: SearchRequest,
@@ -489,7 +467,7 @@ async def search(
             if citation_expansion_available() and any((p.relevance_score or 0) >= EXPANSION_MIN_SCORE for p in final):
                 yield sse("expanding", {"message": "正在顺着引用关系找更多相关论文..."})
                 try:
-                    more = await _expand_results(final, papers, parsed, request.query, api_key)
+                    more = await expand_and_validate(final, papers, parsed, request.query, api_key)
                 except Exception as e:  # 补充失败不能把已经给出的结果变成"搜索出错"
                     logger.warning("Citation expansion failed: %s", e)
                     more = []
