@@ -404,8 +404,14 @@ export function ResultsPanel({ papers, availableSources, previewPapers = [], pre
     }
   }
 
-  // 新搜索完成时重置到筛选后视图
+  // 新搜索完成时重置到筛选后视图。补 PDF 链接、顺着引用关系追加论文不算新结果：
+  // 原来的论文都还在就不重置，否则用户翻到第 2 页、勾了几篇时会被打回第 1 页
+  const prevPaperIds = useRef<Set<string>>(new Set())
   useEffect(() => {
+    const prev = prevPaperIds.current
+    prevPaperIds.current = new Set(papers.map(p => p.paper_id))
+    const continuation = prev.size > 0 && [...prev].every(id => prevPaperIds.current.has(id))
+    if (continuation) return
     setCurrentPage(1)
     setSelectedIds(new Set())
     setAppliedSettings(settings)

@@ -121,3 +121,25 @@ async def test_delete_nonexistent_session(client, db_session):
     headers = await _headers(db_session)
     r = await client.delete("/api/user/sessions/99999", headers=headers)
     assert r.status_code == 404
+
+
+# ── PATCH /api/user/sessions/{id}/papers ──────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_update_session_papers_replaces_list(client, db_session):
+    headers = await _headers(db_session)
+    sid = (await client.post("/api/user/sessions", json=SESSION_BODY, headers=headers)).json()["id"]
+    more = {**PAPER, "paper_id": "W2", "title": "Found via citations"}
+    r = await client.patch(f"/api/user/sessions/{sid}/papers", json={"papers": [PAPER, more]}, headers=headers)
+    assert r.status_code == 200
+    saved = (await client.get("/api/user/sessions", headers=headers)).json()[0]
+    assert [p["paper_id"] for p in saved["papers"]] == ["arxiv-001", "W2"]
+
+
+@pytest.mark.asyncio
+async def test_update_session_papers_only_own_session(client, db_session):
+    owner = await _headers(db_session, email="owner@test.com")
+    other = await _headers(db_session, email="other@test.com")
+    sid = (await client.post("/api/user/sessions", json=SESSION_BODY, headers=owner)).json()["id"]
+    r = await client.patch(f"/api/user/sessions/{sid}/papers", json={"papers": []}, headers=other)
+    assert r.status_code == 404

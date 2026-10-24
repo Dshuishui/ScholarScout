@@ -2,7 +2,7 @@ import json
 import hashlib
 from typing import Any
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete
 from database import get_db
@@ -150,6 +150,10 @@ class SessionCreateBody(BaseModel):
     papers: list[dict[str, Any]]
 
 
+class SessionPapersBody(BaseModel):
+    papers: list[dict[str, Any]] = Field(max_length=300)
+
+
 class SessionAnalysisBody(BaseModel):
     mode: str
     content: str
@@ -196,6 +200,25 @@ async def create_session(body: SessionCreateBody, user: User = Depends(get_curre
     await db.commit()
     await db.refresh(session)
     return {"id": session.id}
+
+
+@router.patch("/sessions/{session_id}/papers")
+async def update_session_papers(
+    session_id: int,
+    body: SessionPapersBody,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """搜索结果出来后还会顺着引用关系补一批论文，补完把快照里的论文换成完整列表。"""
+    result = await db.execute(
+        select(SearchSession).where(SearchSession.id == session_id, SearchSession.user_id == user.id)
+    )
+    session = result.scalar_one_or_none()
+    if not session:
+        raise HTTPException(status_code=404, detail="未找到")
+    session.papers_json = json.dumps(body.papers, ensure_ascii=False)
+    await db.commit()
+    return {"ok": True}
 
 
 @router.patch("/sessions/{session_id}/analysis")

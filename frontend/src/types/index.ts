@@ -90,7 +90,20 @@ export type SourceDoneEvent = {
   count: number
 }
 
-export type SearchEvent = SearchPartialEvent | SearchQuotaEvent | SearchProgressEvent | SearchDoneEvent | SearchErrorEvent | SearchChatEvent | SearchPdfFindingEvent | SearchPdfUpdateEvent | SearchStartEvent | SourceDoneEvent
+/** 结果给出后，后端顺着引用关系再找一批 */
+export type SearchExpandingEvent = {
+  type: 'expanding'
+  message: string
+}
+
+/** 顺着引用关系补到的论文（已经过 AI 筛选），追加到结果里 */
+export type SearchMorePapersEvent = {
+  type: 'more_papers'
+  papers: Paper[]
+  message: string
+}
+
+export type SearchEvent = SearchPartialEvent | SearchQuotaEvent | SearchProgressEvent | SearchDoneEvent | SearchErrorEvent | SearchChatEvent | SearchPdfFindingEvent | SearchPdfUpdateEvent | SearchStartEvent | SourceDoneEvent | SearchExpandingEvent | SearchMorePapersEvent
 
 export type ParseResult =
   | { intent: 'chat'; reply: string }

@@ -602,3 +602,49 @@ def test_clean_title_cuts_citation_tail_so_duplicates_merge():
                       source="OpenAlex", citations=29)
     bad = make_paper("W2", junk, source="OpenAlex")
     assert len(deduplicate([_sanitize_paper(good), _sanitize_paper(bad)])) == 1
+
+
+# ── 沿引用链扩展 ──────────────────────────────────────────────────────────────
+
+def _oa_item(wid, title, cites=0, doi=None):
+    return {"id": f"https://openalex.org/{wid}", "title": title, "cited_by_count": cites,
+            "doi": f"https://doi.org/{doi}" if doi else None, "authorships": []}
+
+
+async def test_expand_citations_ranks_co_cited_refs_and_skips_known(monkeypatch, stub_httpx):
+    from services import search_service as s
+    sent = []
+
+    async def fake_get(client, params):
+        sent.append(params)
+        f = params["filter"]
+        if f.startswith("openalex:W1"):          # 种子的参考文献列表
+            return [{"id": "https://openalex.org/W1", "referenced_works": [
+                "https://openalex.org/R1", "https://openalex.org/R2", "https://openalex.org/R3"]}]
+        if f.startswith("doi:"):
+            return [{"id": "https://openalex.org/W2", "referenced_works": ["https://openalex.org/R2"]}]
+        if f.startswith("cites:"):
+            return [_oa_item("C1", "Citing paper"), _oa_item("W1", "Seed itself")]
+        if f.startswith("openalex:"):            # 参考文献的元数据
+            return [_oa_item("R1", "Ref one", cites=900), _oa_item("R2", "Ref two", cites=5),
+                    _oa_item("R3", "Already Known", cites=50)]
+        raise AssertionError(f)
+
+    monkeypatch.setattr(s, "OPENALEX_API_KEY", "k")
+    monkeypatch.setattr(s, "_openalex_get", fake_get)
+    seeds = [make_paper("W1", "Seed", source="OpenAlex"), make_paper("2101.00001", "Seed two", doi="10.1/two")]
+    known = seeds + [make_paper("X9", "already known.", source="CrossRef")]
+    parsed = ParsedQuery(keywords=["rl", "missile guidance"], date_from="2020-01-01")
+    papers = await s.expand_citations(seeds, known, parsed)
+    assert [p.paper_id for p in papers] == ["R2", "R1", "C1"]  # R2 被两篇种子引用排第一；已有的、种子本身不要
+    cites = next(p for p in sent if p["filter"].startswith("cites:"))
+    assert cites["filter"] == "cites:W1|W2,is_retracted:false,publication_date:>2020-01-01"
+    assert cites["search"] == 'rl OR "missile guidance"'
+
+
+async def test_expand_citations_needs_key_and_seeds(monkeypatch):
+    from services import search_service as s
+    monkeypatch.setattr(s, "OPENALEX_API_KEY", "")
+    assert await s.expand_citations([make_paper("W1", "Seed")], [], ParsedQuery(keywords=["x"])) == []
+    monkeypatch.setattr(s, "OPENALEX_API_KEY", "k")
+    assert await s.expand_citations([], [], ParsedQuery(keywords=["x"])) == []

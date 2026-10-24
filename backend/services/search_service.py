@@ -1,5 +1,6 @@
 import asyncio
 import html
+from collections import Counter
 import random
 import logging
 import re
@@ -199,6 +200,19 @@ def _concept_query(concepts: list[list[str]]) -> str:
     return " AND ".join(f"({_quoted_or(g)})" for g in concepts)
 
 
+async def _openalex_get(client: httpx.AsyncClient, params: dict) -> list[dict]:
+    if OPENALEX_API_KEY:
+        params = {**params, "api_key": OPENALEX_API_KEY}
+    resp = await _get_with_retry(
+        client,
+        "https://api.openalex.org/works",
+        params=params,
+        headers={"User-Agent": f"ScholarScout/1.0 (mailto:{POLITE_EMAIL})"},
+    )
+    resp.raise_for_status()
+    return resp.json().get("results", [])
+
+
 async def _openalex_request(client: httpx.AsyncClient, search_param: str, query: str,
                             parsed: ParsedQuery, limit: int, sort: str | None = None) -> list[Paper]:
     params = {"per_page": limit, "select": _OPENALEX_SELECT}
@@ -218,16 +232,7 @@ async def _openalex_request(client: httpx.AsyncClient, search_param: str, query:
         params["sort"] = sort
     if semantic:
         params["per_page"] = min(limit * 2 if parsed.date_from else limit, OPENALEX_SEMANTIC_MAX_PER_PAGE)
-    if OPENALEX_API_KEY:
-        params["api_key"] = OPENALEX_API_KEY
-    resp = await _get_with_retry(
-        client,
-        "https://api.openalex.org/works",
-        params=params,
-        headers={"User-Agent": f"ScholarScout/1.0 (mailto:{POLITE_EMAIL})"},
-    )
-    resp.raise_for_status()
-    papers = [_openalex_item_to_paper(it) for it in resp.json().get("results", [])]
+    papers = [_openalex_item_to_paper(it) for it in await _openalex_get(client, params)]
     if parsed.date_from and semantic:
         papers = [p for p in papers if not p.published_date or p.published_date >= parsed.date_from][:limit]
     return papers
@@ -298,6 +303,101 @@ async def _search_openalex(parsed: ParsedQuery, limit: int) -> list[Paper]:
     except Exception as e:
         logger.warning("OpenAlex search error: %s", e)
         return []
+
+
+# ── 沿引用链扩展 ──────────────────────────────────────────────────────────────
+
+EXPANSION_SEEDS = 5        # 从 AI 打分最高的几篇出发
+EXPANSION_MIN_SCORE = 8
+EXPANSION_REFS = 15        # 参考文献里取多少篇
+EXPANSION_CITING = 15      # 引用了种子的论文里取多少篇
+_OPENALEX_WORK_ID = re.compile(r"^W\d+$")
+
+
+def _short_openalex_id(url: str) -> str:
+    return url.rsplit("/", 1)[-1]
+
+
+async def _openalex_seed_works(client: httpx.AsyncClient, seeds: list[Paper]) -> list[dict]:
+    """查种子论文在 OpenAlex 里的 id 和参考文献。非 OpenAlex 来源的论文按 DOI 找。"""
+    ids = [p.paper_id for p in seeds if _OPENALEX_WORK_ID.match(p.paper_id)]
+    dois = [p.doi for p in seeds if not _OPENALEX_WORK_ID.match(p.paper_id) and p.doi]
+    select = "id,referenced_works"
+    queries = [{"filter": f"openalex:{'|'.join(ids)}", "per_page": len(ids), "select": select}] if ids else []
+    if dois:
+        queries.append({"filter": f"doi:{'|'.join(d.replace(',', ' ') for d in dois)}",
+                        "per_page": len(dois), "select": select})
+    results = await asyncio.gather(*(_openalex_get(client, q) for q in queries))
+    return [w for works in results for w in works]
+
+
+def citation_expansion_available() -> bool:
+    return bool(OPENALEX_API_KEY)
+
+
+async def expand_citations(seeds: list[Paper], known: list[Paper], parsed: ParsedQuery) -> list[Paper]:
+    """从 AI 打了高分的论文出发，沿引用关系向外找一层，返回候选池里还没有的论文（还没经过 AI 筛选）。
+
+    交叉题用关键词能搜到的切题论文常常只有几十篇，它们的参考文献和后续引用里还有不少同方向的论文
+    （PaSa、Asta Paper Finder、PaperSeek 都这么找）。
+    - 参考文献：被几篇种子同时引用的排前面，其次看被引数
+    - 引用了种子的论文：再按关键词相关度排。只按被引数排会拿到大量顺带引用一下的高被引论文
+    排除已撤稿的论文（OpenAlex 里标题会变成 "REMOVED: ..."）。和关键词检索一样只在配置 key 后启用。
+    """
+    if not OPENALEX_API_KEY or not seeds:
+        return []
+    try:
+        async with httpx.AsyncClient(timeout=20) as client:
+            seed_works = await _openalex_seed_works(client, seeds[:EXPANSION_SEEDS])
+            seed_ids = {_short_openalex_id(w["id"]) for w in seed_works if w.get("id")}
+            if not seed_ids:
+                return []
+            co_cited = Counter(_short_openalex_id(r) for w in seed_works for r in (w.get("referenced_works") or []))
+            ref_ids = [rid for rid, _ in co_cited.most_common(100) if rid not in seed_ids]
+            common = ["is_retracted:false"] + ([f"publication_date:>{parsed.date_from}"] if parsed.date_from else [])
+            tasks = [_openalex_get(client, {
+                "filter": ",".join([f"cites:{'|'.join(sorted(seed_ids))}"] + common),
+                "search": _quoted_or(parsed.keywords), "per_page": 50, "select": _OPENALEX_SELECT,
+            })]
+            if ref_ids:
+                tasks.append(_openalex_get(client, {
+                    "filter": ",".join([f"openalex:{'|'.join(ref_ids)}"] + common),
+                    "per_page": len(ref_ids), "select": _OPENALEX_SELECT,
+                }))
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+    except Exception as e:
+        logger.warning("OpenAlex citation expansion error: %s", e)
+        return []
+    for r in results:
+        if isinstance(r, Exception):
+            logger.warning("OpenAlex citation expansion sub-request error: %s", r)
+    citing = [_openalex_item_to_paper(it) for it in results[0]] if isinstance(results[0], list) else []
+    refs = [_openalex_item_to_paper(it) for it in results[1]] if len(results) > 1 and isinstance(results[1], list) else []
+    refs.sort(key=lambda p: (co_cited[p.paper_id], p.citations), reverse=True)
+
+    seen_ids = {p.paper_id for p in known}
+    seen_dois = {p.doi.lower() for p in known if p.doi}
+    seen_titles = {_normalize_title(p.title) for p in known}
+    fresh: list[Paper] = []
+
+    def take(papers: list[Paper], n: int) -> None:
+        added = 0
+        for p in map(_sanitize_paper, papers):
+            if added >= n:
+                return
+            title = _normalize_title(p.title)
+            if not title or p.paper_id in seen_ids or (p.doi and p.doi.lower() in seen_dois) or title in seen_titles:
+                continue
+            seen_ids.add(p.paper_id)
+            seen_titles.add(title)
+            if p.doi:
+                seen_dois.add(p.doi.lower())
+            fresh.append(p.model_copy(update={"source_links": [{"source": p.source, "url": p.url}] if p.url else []}))
+            added += 1
+
+    take(refs, EXPANSION_REFS)
+    take(citing, EXPANSION_CITING)
+    return fresh
 
 
 async def _search_pubmed(parsed: ParsedQuery, limit: int) -> list[Paper]:

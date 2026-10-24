@@ -26,6 +26,7 @@ from models_db import User
 from services.llm_service import classify_intent, parse_query, validate_papers, rank_accepted
 from services.search_service import (
     search_all_sources, enhance_with_unpaywall, get_source_names, available_sources, deduplicate,
+    expand_citations, citation_expansion_available, EXPANSION_MIN_SCORE,
 )
 from services.download_service import fetch_pdf_with_fallback
 from services.pdf_finder_service import find_pdfs_with_kimi, generate_fallback_links
@@ -271,6 +272,29 @@ async def parse(
     }
 
 
+async def _expand_results(final: list, pool: list, parsed: ParsedQuery, query: str, api_key: str) -> list:
+    """从高分论文出发沿引用关系找候选，经 AI 筛选后返回。打分失败的不补：宁可少，不能混进没把关的论文。"""
+    seeds = [p for p in final if (p.relevance_score or 0) >= EXPANSION_MIN_SCORE]
+    candidates = await expand_citations(seeds, pool, parsed)
+    if not candidates:
+        return []
+    (accepted, _), enhanced = await asyncio.gather(
+        validate_papers(candidates, query, api_key),
+        enhance_with_unpaywall(candidates),
+    )
+    pdf_map = {p.paper_id: p.pdf_url for p in enhanced if p.pdf_url}
+    more = []
+    for p in rank_accepted(accepted):
+        if p.relevance_score is None:
+            continue
+        pdf_url = p.pdf_url or pdf_map.get(p.paper_id)
+        more.append(p.model_copy(update={
+            "pdf_url": pdf_url,
+            "fallback_links": [] if pdf_url else generate_fallback_links(p),
+        }))
+    return more
+
+
 @router.post("/search")
 async def search(
     request: SearchRequest,
@@ -460,6 +484,26 @@ async def search(
                         f"未找到新 PDF，已为 {len(updates)} 篇论文提供备用查找入口。"
                     ),
                 })
+
+            # ── 沿引用链补一批（结果已经给出，不拖慢首屏）──────────────────
+            if citation_expansion_available() and any((p.relevance_score or 0) >= EXPANSION_MIN_SCORE for p in final):
+                yield sse("expanding", {"message": "正在顺着引用关系找更多相关论文..."})
+                try:
+                    more = await _expand_results(final, papers, parsed, request.query, api_key)
+                except Exception as e:  # 补充失败不能把已经给出的结果变成"搜索出错"
+                    logger.warning("Citation expansion failed: %s", e)
+                    more = []
+                more_dict = [p.model_dump() for p in more]
+                yield sse("more_papers", {
+                    "papers": more_dict,
+                    "message": f"顺着引用关系又找到 {len(more)} 篇相关论文。" if more else "顺着引用关系没有找到更多相关论文。",
+                })
+                if more:
+                    asyncio.create_task(_index_papers_async(more_dict))
+                    asyncio.create_task(cache_search(
+                        parsed.keywords, source_names,
+                        papers_dict + more_dict, parsed.date_from or "", parsed.date_to or "",
+                    ))
 
         except Exception as e:
             logger.error("Search pipeline error: %s", e, exc_info=True)

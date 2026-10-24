@@ -302,3 +302,68 @@ async def test_search_passes_confirmed_concepts_to_retrieval(client, trial):
     await _search(client, body=body)
     parsed = trial["search_all_sources"].call_args.args[0]
     assert parsed.concepts == [["reinforcement learning"], ["missile guidance", "guidance law"]]
+
+
+def _events(resp) -> list[tuple[str, dict]]:
+    import json
+    out = []
+    for block in resp.text.split("\n\n"):
+        if block.startswith("event: "):
+            name, _, data = block.partition("\ndata: ")
+            out.append((name.removeprefix("event: "), json.loads(data)))
+    return out
+
+
+async def test_search_sends_citation_expansion_after_results(client, trial, monkeypatch):
+    """结果先给出，再顺着引用关系补一批经 AI 打过分的论文；打分失败的不补。"""
+    import routers.search as sr
+    calls = []
+
+    async def validate(papers, query, key):
+        if papers[0].paper_id.startswith("x"):
+            scored = papers[0].model_copy(update={"relevance_score": 7.0})
+            return [scored, papers[1]], []  # 第二篇没打上分（验证失败时原样保留）
+        return [p.model_copy(update={"relevance_score": 9.0}) for p in papers], []
+
+    async def expand(seeds, pool, parsed):
+        calls.append(([p.paper_id for p in seeds], len(pool)))
+        return [_paper(1).model_copy(update={"paper_id": "x1", "title": "Cited"}),
+                _paper(2).model_copy(update={"paper_id": "x2", "title": "Unscored"})]
+
+    trial["validate_papers"].side_effect = validate
+    monkeypatch.setattr(sr, "citation_expansion_available", lambda: True)
+    monkeypatch.setattr(sr, "expand_citations", expand)
+    events = _events(await _search(client))
+    names = [n for n, _ in events]
+    assert names.index("done") < names.index("expanding") < names.index("more_papers")
+    more = dict(events)["more_papers"]
+    assert [p["paper_id"] for p in more["papers"]] == ["x1"]
+    assert more["papers"][0]["fallback_links"]  # 没有 PDF 的也给备用查找入口
+    assert calls == [(["p1", "p2"], 2)]
+
+
+async def test_search_expansion_failure_keeps_results(client, trial, monkeypatch):
+    import routers.search as sr
+
+    async def validate(papers, query, key):
+        return [p.model_copy(update={"relevance_score": 9.0}) for p in papers], []
+
+    async def expand(seeds, pool, parsed):
+        raise RuntimeError("openalex down")
+
+    trial["validate_papers"].side_effect = validate
+    monkeypatch.setattr(sr, "citation_expansion_available", lambda: True)
+    monkeypatch.setattr(sr, "expand_citations", expand)
+    events = dict(_events(await _search(client)))
+    assert "error" not in events
+    assert events["more_papers"]["papers"] == []
+
+
+async def test_search_skips_expansion_without_strong_results(client, trial, monkeypatch):
+    import routers.search as sr
+    expand = AsyncMock(return_value=[])
+    monkeypatch.setattr(sr, "citation_expansion_available", lambda: True)
+    monkeypatch.setattr(sr, "expand_citations", expand)
+    names = [n for n, _ in _events(await _search(client))]  # 默认的验证结果没有打分
+    assert "expanding" not in names and "more_papers" not in names
+    expand.assert_not_called()

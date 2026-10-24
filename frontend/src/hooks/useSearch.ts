@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { parseQuery, searchPapers, createSession, ApiError } from '../api/client'
+import { useRef, useState } from 'react'
+import { parseQuery, searchPapers, createSession, updateSessionPapers, ApiError } from '../api/client'
 import type { Message, Paper, SearchSessionItem } from '../types'
 import type { SearchSettings } from './useSettings'
 import { useSearchHistory } from './useSearchHistory'
@@ -54,6 +54,8 @@ export function useSearch(apiKey: string, settings: SearchSettings, model?: stri
   const [papers, setPapers] = useState<Paper[]>([])
   const [rejectedPapers, setRejectedPapers] = useState<Paper[]>([])
   const [isLoading, setIsLoading] = useState(false)
+  // 每次换一组结果就加 1：上一次搜索 done 之后还在补论文，用户这时开始新搜索或打开历史，旧流后面的事件都要丢掉
+  const resultsGen = useRef(0)
   const [statusMessage, setStatusMessage] = useState('')
   const [lastConfirmed, setLastConfirmed] = useState<PendingSearch | null>(null)
   const [sourceStatuses, setSourceStatuses] = useState<Record<string, SourceStatus>>({})
@@ -131,6 +133,12 @@ export function useSearch(apiKey: string, settings: SearchSettings, model?: stri
     setStatusMessage('')
     setHasSearchError(false)
     updateAssistant(assistantId, { content: '正在搜索...', isLoading: true })
+    // done 之后还会补一批论文：补完要更新历史记录、搜索快照和这条回复
+    let shownPapers: Paper[] = []
+    let doneContent = ''
+    let sessionReq: Promise<{ id: number } | null> | null = null
+    const gen = ++resultsGen.current
+    const stale = () => gen !== resultsGen.current
 
     try {
       for await (const event of searchPapers(
@@ -139,6 +147,7 @@ export function useSearch(apiKey: string, settings: SearchSettings, model?: stri
         model,
         trialAuth,
       )) {
+        if (stale()) break
         if (event.type === 'quota') {
           applyRemaining(event.kind, event.remaining)
         } else if (event.type === 'partial') {
@@ -176,15 +185,36 @@ export function useSearch(apiKey: string, settings: SearchSettings, model?: stri
           track('search_done', { mode, count: event.papers.length })
           const note = event.refunded ? '\n\n（没有找到相关论文，本次不计免费次数）' : ''
           const tip = event.papers.length > 0 ? nextStepsTip() : ''
-          updateAssistant(assistantId, { content: event.message + note + tip, isLoading: false, papers: event.papers })
+          shownPapers = event.papers
+          doneContent = event.message + note + tip
+          updateAssistant(assistantId, { content: doneContent, isLoading: false, papers: event.papers })
           saveResults(keywords, event.papers)
           // 登录用户自动保存搜索快照
           if (token && event.papers.length > 0) {
-            createSession(token, {
+            sessionReq = createSession(token, {
               query: pending.query,
               keywords: pending.keywords,
               papers: event.papers,
-            }).then(res => { if (res?.id) setCurrentSessionId(res.id) })
+            })
+            sessionReq.then(res => { if (res?.id) setCurrentSessionId(res.id) })
+          }
+        } else if (event.type === 'expanding') {
+          setStatusMessage(event.message)
+        } else if (event.type === 'more_papers') {
+          setStatusMessage(event.message)
+          const known = new Set(shownPapers.map(p => p.paper_id))
+          const added = event.papers.filter(p => !known.has(p.paper_id))
+          if (added.length > 0) {
+            shownPapers = [...shownPapers, ...added]
+            const merged = shownPapers
+            setPapers(prev => [...prev, ...added.filter(p => !prev.some(x => x.paper_id === p.paper_id))])
+            doneContent += `\n\n顺着引用关系又补充了 ${added.length} 篇。`
+            updateAssistant(assistantId, { content: doneContent, papers: merged })
+            saveResults(keywords, merged)
+            track('search_more', { count: added.length })
+            if (token && sessionReq) {
+              sessionReq.then(res => { if (res?.id) updateSessionPapers(token, res.id, merged) })
+            }
           }
         } else if (event.type === 'pdf_finding') {
           setStatusMessage(event.message)
@@ -216,8 +246,9 @@ export function useSearch(apiKey: string, settings: SearchSettings, model?: stri
         }
       }
       // 流结束了却没收到 done：连接被中途切断，保留已搜到的结果
-      keepPreviewAsResults()
+      if (!stale()) keepPreviewAsResults()
     } catch (err) {
+      if (stale()) return
       setHasSearchError(true)
       const kept = keepPreviewAsResults()
       updateAssistant(assistantId, {
@@ -225,7 +256,7 @@ export function useSearch(apiKey: string, settings: SearchSettings, model?: stri
         isLoading: false,
       })
     } finally {
-      setIsLoading(false)
+      if (!stale()) setIsLoading(false)
     }
   }
 
@@ -300,6 +331,8 @@ export function useSearch(apiKey: string, settings: SearchSettings, model?: stri
   const loadSession = (session: SearchSessionItem) => {
     const assistantId = Date.now().toString()
     const userMsgId = (Date.now() - 1).toString()
+    resultsGen.current++
+    setIsLoading(false)  // 正在进行的那次搜索作废了，它不会再来关掉加载状态
     setPapers(session.papers)
     setRejectedPapers([])
     setCurrentSessionId(session.id)
@@ -328,10 +361,12 @@ export function useSearch(apiKey: string, settings: SearchSettings, model?: stri
 
   const searchFromHistory = async (item: HistoryItem) => {
     const { keywords, papers: saved } = item
+    resultsGen.current++
     const assistantId = Date.now().toString()
     const userMsgId = (Date.now() - 1).toString()
     // 有上次的结果就直接打开：2026-10 有访客隔 3 天重搜同一组关键词，又等了一两分钟、又花了一次次数
     if (saved?.length) {
+      setIsLoading(false)
       setPapers(saved)
       setPreviewPapers([])
       setRejectedPapers([])

@@ -146,6 +146,19 @@ export async function createSession(
   }
 }
 
+export async function updateSessionPapers(token: string, sessionId: number, papers: Paper[]): Promise<boolean> {
+  try {
+    const r = await fetch(`${API_BASE}/user/sessions/${sessionId}/papers`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ papers }),
+    })
+    return r.ok
+  } catch {
+    return false
+  }
+}
+
 export async function saveSessionAnalysis(
   token: string,
   sessionId: number,
