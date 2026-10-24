@@ -37,12 +37,12 @@ ScholarScout is a full-stack academic paper search platform. Describe what you'r
 - **Natural language queries**: "Find papers on LLM hallucination after 2023" — no Boolean syntax needed
 - **Editable keyword chips**: AI extracts keywords before searching; edit or remove them, then re-search at any time
 - **10-source concurrent search**: arXiv, Semantic Scholar, OpenAlex, PubMed, Europe PMC, INSPIRE-HEP, CrossRef work without keys; CORE, NASA ADS and Google Scholar (via SerpAPI) are enabled when their keys are configured
-- **Hybrid retrieval**: OpenAlex keyword search (boolean OR over the extracted synonyms) fused with OpenAlex semantic search via Reciprocal Rank Fusion (semantic search is enabled with `OPENALEX_API_KEY`)
+- **Hybrid retrieval**: OpenAlex keyword search (boolean OR over the extracted synonyms), semantic search and a concept-intersection search (an "A for B" request split into concepts and ANDed) fused via Reciprocal Rank Fusion, plus the most-cited papers within those concepts, which recovers seminal papers that text relevance ranks too low (the last three are enabled with `OPENALEX_API_KEY`)
 - **Domain-aware source routing**: the LLM tags the query's fields, so a pure CS query skips PubMed / Europe PMC and a non-physics query skips INSPIRE-HEP / NASA ADS
 - **Citation-aware ranking**: LLM relevance score plus a capped citation bonus, so seminal papers win ties
 - **No hidden year window**: results are only date-filtered when the query asks for it
-- **Smart deduplication**: DOI exact match + normalised title comparison; duplicates are merged, preserving the best fields (PDF, abstract, citations)
-- **AI relevance filtering**: LLM second-pass validation; toggle between "AI filtered" and "all results"
+- **Smart deduplication**: DOI exact match + normalised title comparison; duplicates are merged, preserving the best fields (PDF, abstract, citations). Titles are cleaned of HTML entities and stray citation tails first
+- **AI relevance filtering**: LLM second-pass validation; toggle between "AI filtered" and "all results". Weak matches (score 5) are folded at the end of the list
 
 ### PDF Access
 - **Deep PDF search**: Papers without a PDF link are automatically searched via Kimi for open-access versions
@@ -89,7 +89,7 @@ ScholarScout is a full-stack academic paper search platform. Describe what you'r
 
 ### Reliability & Security
 - **Source health monitoring**: every source call is recorded; an hourly check emails the admin when a previously healthy source starts returning nothing, when all sources return nothing, or when subscriptions stop delivering (at most one email per issue per day). Live stats at `/api/health`
-- **Retrieval regression benchmark**: `backend/eval/retrieval_benchmark.py` checks whether 16 landmark papers across CS / biomedicine / physics reach the candidate pool, without calling the LLM
+- **Retrieval regression benchmark**: `backend/eval/retrieval_benchmark.py` checks whether 16 landmark papers across CS / biomedicine / physics, plus target papers for 4 "A for B" engineering questions, reach the candidate pool, without calling the LLM
 - **Hardened PDF proxy**: DNS-resolved SSRF checks on every redirect hop, 50 MB cap, bounded download concurrency
 - **Abuse limits**: rate limits keyed on the real client IP (`X-Real-IP` set by nginx), per-user caps on trial LLM calls and subscription work
 - **Token revocation**: `users.token_version` is embedded in every JWT and bumped on password change / reset
@@ -147,6 +147,8 @@ ScholarScout is a full-stack academic paper search platform. Describe what you'r
 13. **Alembic must not own logging**: `alembic/env.py` skips `fileConfig()` when migrations run from the app. Otherwise it resets the root level to WARNING and disables every existing logger, which silently hides all application warnings in production.
 
 14. **Revocable JWTs without a session table**: tokens carry `ver`; the dependency compares it with `users.token_version`. Legacy tokens without `ver` count as version 0, so introducing revocation didn't sign anyone out.
+
+15. **Citation-sorted search matches title and abstract only**: OpenAlex's `search` parameter also matches full text, so sorting by citations surfaces highly cited papers that merely mention a term (searching for the Raft consensus algorithm returns cell-membrane "lipid raft" papers). With the `title_and_abstract.search` filter, Attention Is All You Need and the semaglutide STEP 1 trial both rank #1, and benchmark recall went from 16/20 to 20/20.
 
 ---
 
