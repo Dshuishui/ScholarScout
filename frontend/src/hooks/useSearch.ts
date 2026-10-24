@@ -3,6 +3,7 @@ import { parseQuery, searchPapers, createSession, ApiError } from '../api/client
 import type { Message, Paper, SearchSessionItem } from '../types'
 import type { SearchSettings } from './useSettings'
 import { useSearchHistory } from './useSearchHistory'
+import type { HistoryItem } from './useSearchHistory'
 import { useAuth } from './useAuth'
 import { useAccess } from './useAccess'
 import type { GateReason } from './useAccess'
@@ -29,6 +30,23 @@ interface PendingSearch {
 
 export type SourceStatus = { status: 'pending' | 'done'; count: number }
 
+const NEXT_STEPS_KEY = 'ss_next_steps_shown'
+
+/** 第一次搜到结果时提示接下来能做什么：2026-10 的真实访客搜完都直接离开，没人用过 AI 对话、中文标题和订阅 */
+function nextStepsTip(): string {
+  try {
+    if (localStorage.getItem(NEXT_STEPS_KEY)) return ''
+    localStorage.setItem(NEXT_STEPS_KEY, '1')
+  } catch { return '' }
+  return '\n\n接下来可以：点论文下方的 **AI 对话**，让 AI 帮你读这篇；点结果上方的 **中文标题**，一键翻译全部标题；' +
+    '点 **订阅更新**（需登录），每天早上把这个方向的新论文发到邮箱。'
+}
+
+function daysAgo(timestamp: number): string {
+  const days = Math.floor((Date.now() - timestamp) / 86_400_000)
+  return days <= 0 ? '今天' : `${days} 天前`
+}
+
 export function useSearch(apiKey: string, settings: SearchSettings, model?: string) {
   const [messages, setMessages] = useState<Message[]>([WELCOME])
   const [papers, setPapers] = useState<Paper[]>([])
@@ -42,7 +60,7 @@ export function useSearch(apiKey: string, settings: SearchSettings, model?: stri
   const [previewTotal, setPreviewTotal] = useState(0)
   const [hasSearchError, setHasSearchError] = useState(false)
   const [currentSessionId, setCurrentSessionId] = useState<number | null>(null)
-  const { history, addHistory, removeHistory } = useSearchHistory()
+  const { history, addHistory, saveResults, removeHistory } = useSearchHistory()
   const { token } = useAuth()
   const { deviceId, mode, trial, freeRemaining, applyRemaining, openGate, refreshTrial } = useAccess()
   // 没有自己的 Key 时：登录用户用账号免费次数，未登录访客用设备标识领体验次数
@@ -155,7 +173,9 @@ export function useSearch(apiKey: string, settings: SearchSettings, model?: stri
           }
           track('search_done', { mode, count: event.papers.length })
           const note = event.refunded ? '\n\n（没有找到相关论文，本次不计免费次数）' : ''
-          updateAssistant(assistantId, { content: event.message + note, isLoading: false, papers: event.papers })
+          const tip = event.papers.length > 0 ? nextStepsTip() : ''
+          updateAssistant(assistantId, { content: event.message + note + tip, isLoading: false, papers: event.papers })
+          saveResults(keywords, event.papers)
           // 登录用户自动保存搜索快照
           if (token && event.papers.length > 0) {
             createSession(token, {
@@ -302,10 +322,34 @@ export function useSearch(apiKey: string, settings: SearchSettings, model?: stri
     ])
   }
 
-  const searchFromHistory = async (keywords: string[]) => {
-    if (!guard()) return
+  const searchFromHistory = async (item: HistoryItem) => {
+    const { keywords, papers: saved } = item
     const assistantId = Date.now().toString()
     const userMsgId = (Date.now() - 1).toString()
+    // 有上次的结果就直接打开：2026-10 有访客隔 3 天重搜同一组关键词，又等了一两分钟、又花了一次次数
+    if (saved?.length) {
+      setPapers(saved)
+      setPreviewPapers([])
+      setRejectedPapers([])
+      setCurrentSessionId(null)
+      setSearchDateRange(null)
+      setSourceStatuses({})
+      setHasSearchError(false)
+      setLastConfirmed({ assistantId, keywords, date_from: null, date_to: null, query: keywords.join(' '), history: [] })
+      setMessages(prev => [
+        ...prev,
+        { id: userMsgId, role: 'user', content: `历史搜索：${keywords.join('、')}` },
+        {
+          id: assistantId,
+          role: 'assistant',
+          content: `已打开${daysAgo(item.timestamp)}的搜索结果，共 ${saved.length} 篇（没有重新搜索）。想看最新论文，在输入框里重新描述一次需求即可。`,
+          isLoading: false,
+          papers: saved,
+        },
+      ])
+      return
+    }
+    if (!guard()) return
     const query = keywords.join(' ')
     const confirmed: PendingSearch = {
       assistantId,
