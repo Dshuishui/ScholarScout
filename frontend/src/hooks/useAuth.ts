@@ -1,8 +1,9 @@
-import { useState, useCallback, createContext, useContext, createElement } from 'react'
+import { useState, useCallback, useEffect, createContext, useContext, createElement } from 'react'
 import type { ReactNode } from 'react'
 
 const STORAGE_KEY = 'scholarscout_token'
 const USER_KEY = 'scholarscout_user'
+const SESSION_EXPIRED = '__SESSION_EXPIRED__'
 
 export interface AuthUser {
   id: number
@@ -58,9 +59,12 @@ function useAuthState(): AuthContextValue {
   }, [])
 
   const _fetchMe = useCallback(async (t: string): Promise<AuthUser> => {
-    const me = await fetch('/api/auth/me', {
+    const r = await fetch('/api/auth/me', {
       headers: { Authorization: `Bearer ${t}` },
-    }).then(r => r.json())
+    })
+    if (r.status === 401) throw new Error(SESSION_EXPIRED)
+    if (!r.ok) throw new Error('获取账号信息失败')
+    const me = await r.json()
     return {
       id: me.id,
       email: me.email,
@@ -108,8 +112,18 @@ function useAuthState(): AuthContextValue {
       const me = await _fetchMe(token)
       setUser(me)
       localStorage.setItem(USER_KEY, JSON.stringify(me))
-    } catch { /* ignore */ }
-  }, [token, _fetchMe])
+    } catch (e) {
+      // 网络问题不算过期，只有服务端明确拒绝凭证才退出登录
+      if (e instanceof Error && e.message === SESSION_EXPIRED) sessionExpired()
+    }
+  }, [token, _fetchMe, sessionExpired])
+
+  // 打开页面时核对本地保存的登录凭证。凭证 30 天过期、改密码后也会失效，以前页面仍显示已登录，
+  // 收藏、对话、订阅静默加载失败，也不提示重新登录（2026-10 老用户回访时遇到）。
+  useEffect(() => {
+    refreshCredits()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const setFreeSearches = useCallback((n: number) => {
     setUser(prev => {

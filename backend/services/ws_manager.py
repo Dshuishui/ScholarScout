@@ -24,6 +24,11 @@ class ConnectionManager:
                 del self._connections[client_key]
         logger.debug("WS disconnected: %s (total=%d)", client_key, self.connection_count)
 
+    def move(self, ws: WebSocket, old_key: str, new_key: str) -> None:
+        """连接建立后改换分组（匿名连接发来登录凭证后改按用户推送）。"""
+        self.disconnect(ws, old_key)
+        self._connections.setdefault(new_key, set()).add(ws)
+
     async def send(self, client_key: str, event: str, data: dict) -> None:
         """Send an event to all connections belonging to one client."""
         conns = self._connections.get(client_key)

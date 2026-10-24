@@ -25,8 +25,8 @@ export function useWebSocket() {
     if (retryCount.current >= MAX_RETRIES) return
 
     const proto = window.location.protocol === 'https:' ? 'wss' : 'ws'
+    // 登录凭证不放进 URL（nginx 和后端会把 URL 原样写进访问日志），连上后用第一条消息发送
     const params = new URLSearchParams()
-    if (token) params.set('token', token)
     params.set('cid', Math.random().toString(36).slice(2))
 
     const ws = new WebSocket(`${proto}://${window.location.host}/ws?${params}`)
@@ -34,6 +34,7 @@ export function useWebSocket() {
     setStatus('connecting')
 
     ws.onopen = () => {
+      if (token) ws.send(JSON.stringify({ type: 'auth', token }))
       setStatus('connected')
       retryDelay.current = 1000
       retryCount.current = 0
@@ -42,7 +43,7 @@ export function useWebSocket() {
     ws.onmessage = (e: MessageEvent) => {
       try {
         const msg = JSON.parse(e.data as string) as WsMessage
-        if (msg.event !== 'pong' && msg.event !== 'connected') {
+        if (msg.event !== 'pong' && msg.event !== 'connected' && msg.event !== 'authenticated') {
           setLastMessage(msg)
         }
       } catch { /* noop */ }

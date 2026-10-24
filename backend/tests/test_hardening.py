@@ -272,3 +272,59 @@ def test_log_messages_interpolate_arguments(capsys):
     out = captured.err + captured.out
     assert "处理了 42 篇论文，来源 OpenAlex" in out
     assert "positional_args" not in out
+
+
+class _FakeWebSocket:
+    """按顺序收到给定消息后断开；记录服务端发出的消息和各时刻的分组。"""
+    def __init__(self, incoming):
+        self.incoming = list(incoming)
+        self.sent = []
+
+    async def accept(self):
+        pass
+
+    async def send_text(self, text):
+        import json
+        self.sent.append(json.loads(text))
+
+    async def receive_text(self):
+        from fastapi import WebSocketDisconnect
+        if not self.incoming:
+            raise WebSocketDisconnect()
+        import json
+        return json.dumps(self.incoming.pop(0))
+
+
+async def test_ws_auth_message_switches_to_user_pushes(monkeypatch, db_engine, db_session):
+    """登录凭证不放在 URL 里（会被 nginx/uvicorn 写进访问日志），连上后用 auth 消息发送。"""
+    from sqlalchemy.ext.asyncio import AsyncSession
+    from sqlalchemy.orm import sessionmaker
+    from routers.ws_router import websocket_endpoint
+    from services.ws_manager import manager
+    user, token = await make_verified_user(db_session)
+    monkeypatch.setattr("database.AsyncSessionLocal", sessionmaker(db_engine, class_=AsyncSession, expire_on_commit=False))
+
+    seen_keys = []
+    orig_move = manager.move
+    def spy_move(ws, old, new):
+        orig_move(ws, old, new)
+        seen_keys.append(set(manager._connections))
+    monkeypatch.setattr(manager, "move", spy_move)
+
+    ws = _FakeWebSocket([{"type": "auth", "token": token}, {"type": "ping"}])
+    await websocket_endpoint(ws, cid="abc")
+    assert ws.sent[0]["data"]["client_key"] == "anon:abc"
+    assert ws.sent[1] == {"event": "authenticated", "data": {"client_key": f"user:{user.id}"}}
+    assert ws.sent[2]["event"] == "pong"
+    assert f"user:{user.id}" in seen_keys[0] and "anon:abc" not in seen_keys[0]
+    assert manager.connection_count == 0
+
+
+async def test_ws_bad_token_stays_anonymous(monkeypatch, db_engine):
+    from sqlalchemy.ext.asyncio import AsyncSession
+    from sqlalchemy.orm import sessionmaker
+    from routers.ws_router import websocket_endpoint
+    monkeypatch.setattr("database.AsyncSessionLocal", sessionmaker(db_engine, class_=AsyncSession, expire_on_commit=False))
+    ws = _FakeWebSocket([{"type": "auth", "token": "not-a-jwt"}])
+    await websocket_endpoint(ws, cid="xyz")
+    assert ws.sent[1] == {"event": "authenticated", "data": {"client_key": "anon:xyz"}}
