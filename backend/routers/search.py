@@ -389,11 +389,20 @@ async def search(
                                    **_refund_note(charge)})
                 return
 
-            yield sse("progress", {"message": f"找到 {len(papers)} 篇论文，正在补全 PDF 链接..."})
-            papers = await enhance_with_unpaywall(papers)
+            # 相关性验证和补全 PDF 链接互不依赖，同时进行（以前先补链接再验证，各要 20 秒左右）
+            yield sse("progress", {"message": f"找到 {len(papers)} 篇论文，正在验证相关性..."})
+            (accepted, rejected), enhanced = await asyncio.gather(
+                validate_papers(papers, request.query, api_key),
+                enhance_with_unpaywall(papers),
+            )
+            pdf_map = {p.paper_id: p.pdf_url for p in enhanced if p.pdf_url}
 
-            yield sse("progress", {"message": f"正在验证相关性..."})
-            accepted, rejected = await validate_papers(papers, request.query, api_key)
+            def with_pdf(p):
+                if p.pdf_url or p.paper_id not in pdf_map:
+                    return p
+                return p.model_copy(update={"pdf_url": pdf_map[p.paper_id]})
+            accepted = [with_pdf(p) for p in accepted]
+            rejected = [with_pdf(p) for p in rejected]
             final = rank_accepted(accepted)[:request.validated_limit]
 
             await _count_search()

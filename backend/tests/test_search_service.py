@@ -436,6 +436,7 @@ async def test_openalex_semantic_filters_dates_client_side(monkeypatch):
     parsed = ParsedQuery(keywords=["diffusion"], date_from="2023-01-01")
     papers = await s._openalex_request(Client(), "search.semantic", "diffusion", parsed, 50)
     assert "filter" not in sent                     # 不能带日期 filter
+    assert sent["per_page"] <= 50                   # 语义检索每页最多 50，超过整个请求 400
     assert [p.title for p in papers] == ["新的"]     # 旧的在本地筛掉
 
     sent.clear()

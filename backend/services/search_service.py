@@ -58,7 +58,9 @@ async def _search_arxiv(parsed: ParsedQuery, limit: int) -> list[Paper]:
         # 有时间范围也按相关性排：按日期排拿回的是"最新的、沾点边的"，不是最相关的
         sort_by = "relevance"
 
-        async with httpx.AsyncClient(timeout=25) as client:
+        # arXiv 要么几秒内返回，要么一直卡到超时（2026-10 实测 4 次里 3 次卡满 25 秒），
+        # 整个搜索要等最慢的源，超时设短一些
+        async with httpx.AsyncClient(timeout=15) as client:
             resp = await _get_with_retry(
                 client,
                 "https://export.arxiv.org/api/query",
@@ -183,15 +185,19 @@ def _openalex_item_to_paper(item: dict) -> Paper:
     )
 
 
+OPENALEX_SEMANTIC_MAX_PER_PAGE = 50
+
+
 async def _openalex_request(client: httpx.AsyncClient, search_param: str, query: str,
                             parsed: ParsedQuery, limit: int) -> list[Paper]:
     params = {search_param: query, "per_page": limit, "select": _OPENALEX_SELECT}
-    # 语义检索不支持日期类 filter（带上会整个请求 400），改成多取一些、拿回来再按日期筛
+    # 语义检索不支持日期类 filter（带上会整个请求 400），拿回来再按日期筛。
+    # 它每页最多 50 篇：以前有时间范围时多取到 100，结果每次都 400，语义检索整路丢失
     semantic = search_param == "search.semantic"
     if parsed.date_from and not semantic:
         params["filter"] = f"publication_date:>{parsed.date_from}"
-    if parsed.date_from and semantic:
-        params["per_page"] = min(limit * 2, 200)
+    if semantic:
+        params["per_page"] = min(limit * 2 if parsed.date_from else limit, OPENALEX_SEMANTIC_MAX_PER_PAGE)
     if OPENALEX_API_KEY:
         params["api_key"] = OPENALEX_API_KEY
     resp = await _get_with_retry(
@@ -724,7 +730,7 @@ async def enhance_with_unpaywall(papers: list[Paper]) -> list[Paper]:
     if not to_enhance:
         return papers
 
-    sem = asyncio.Semaphore(5)
+    sem = asyncio.Semaphore(10)
 
     async def fetch_pdf(paper: Paper) -> tuple[str, str | None]:
         async with sem:

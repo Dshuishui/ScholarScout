@@ -38,7 +38,7 @@ async def run_case(case: dict, limit: int, legacy_5y: bool, use_domains: bool) -
 
     per_source: dict[str, int] = {}
 
-    async def on_done(name: str, count: int) -> None:
+    async def on_done(name: str, count: int, _papers: list | None = None) -> None:
         per_source[name] = count
 
     started = time.monotonic()

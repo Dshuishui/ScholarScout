@@ -270,3 +270,27 @@ async def test_cache_hit_does_not_consume_a_free_search(client, db_session, tria
     assert "event: cache_hit" in r.text
     assert '"refunded": true, "remaining": 2' in r.text
     assert await _usage_count(db_session) == 0
+
+
+async def test_search_validates_and_finds_pdfs_concurrently(client, trial):
+    """相关性验证和 Unpaywall 补 PDF 链接同时进行（以前先补链接再验证，白等 20 秒），补到的链接要进最终结果。"""
+    import asyncio
+    import json
+    validation_started = asyncio.Event()
+
+    async def enhance(papers):
+        await asyncio.wait_for(validation_started.wait(), 2)  # 两步串行时在这里超时
+        return [p.model_copy(update={"pdf_url": "https://oa.example/1.pdf"}) if p.paper_id == "p1" else p
+                for p in papers]
+
+    async def validate(papers, query, key):
+        validation_started.set()
+        return [p.model_copy(update={"relevance_score": 0.9}) for p in papers], []
+
+    trial["enhance_with_unpaywall"].side_effect = enhance
+    trial["validate_papers"].side_effect = validate
+    resp = await _search(client)
+    done = next(json.loads(block.split("data: ", 1)[1]) for block in resp.text.split("\n\n")
+                if block.startswith("event: done"))
+    pdfs = {p["paper_id"]: p["pdf_url"] for p in done["papers"]}
+    assert pdfs == {"p1": "https://oa.example/1.pdf", "p2": None}
