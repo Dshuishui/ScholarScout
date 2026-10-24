@@ -7,6 +7,8 @@ import type { SourceStatus } from '../hooks/useSearch'
 import type { ChatMessage } from '../hooks/usePaperChat'
 import { ALL_SOURCES } from '../hooks/useSettings'
 import { PaperCard } from './PaperCard'
+import { toBibTeX, toRIS, downloadText } from '../lib/citationExport'
+import { track } from '../lib/analytics'
 import { PaperCardSkeleton } from './PaperCardSkeleton'
 import { getDownloadUrl } from '../api/client'
 import { TrialHint } from './TrialHint'
@@ -249,7 +251,7 @@ export function ResultsPanel({ papers, availableSources, previewPapers = [], pre
   const [showCompare, setShowCompare] = useState(false)
   const [showAuthModal, setShowAuthModal] = useState(false)
   const [showExportModal, setShowExportModal] = useState(false)
-  const [exportOpts, setExportOpts] = useState({ aiOnly: true, aiAnalysis: true, translate: true, chats: true })
+  const [exportOpts, setExportOpts] = useState({ format: 'csv' as 'csv' | 'bib' | 'ris', aiOnly: true, aiAnalysis: true, translate: true, chats: true })
   const [exporting, setExporting] = useState(false)
   const [exportStatus, setExportStatus] = useState('')
 
@@ -343,6 +345,17 @@ export function ResultsPanel({ papers, availableSources, previewPapers = [], pre
     try {
       const dateStr = new Date().toISOString().slice(0, 10)
       const exportPapers = exportOpts.aiOnly ? papers : [...papers, ...rejectedPapers]
+      if (exportOpts.format !== 'csv') {
+        const bib = exportOpts.format === 'bib'
+        downloadText(
+          bib ? toBibTeX(exportPapers, exportOpts.aiAnalysis) : toRIS(exportPapers, exportOpts.aiAnalysis),
+          `scholarscout-${dateStr}.${bib ? 'bib' : 'ris'}`,
+          bib ? 'application/x-bibtex' : 'application/x-research-info-systems',
+        )
+        track('export', { format: exportOpts.format, count: exportPapers.length })
+        setShowExportModal(false)
+        return
+      }
       const headers: string[] = ['标题', '作者', '年份', '来源', '引用数', '摘要', '论文链接', 'PDF链接']
       // 翻译标题要调用 DeepSeek，没有自己的 Key 时不加这一列，免得导出一整列空白
       const translate = exportOpts.translate && !!apiKey
@@ -816,7 +829,7 @@ const addKeyword = () => {
               <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
               </svg>
-              导出为 CSV
+              导出
             </button>
           </div>
         )}
@@ -1460,11 +1473,29 @@ const addKeyword = () => {
         </Suspense>
       )}
 
-      {/* 导出 CSV 选项弹窗 */}
+      {/* 导出选项弹窗 */}
       {showExportModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30" onClick={() => !exporting && setShowExportModal(false)}>
           <div className="bg-white rounded-2xl shadow-2xl w-80 p-5" onClick={e => e.stopPropagation()}>
-            <h3 className="text-sm font-semibold text-gray-800 mb-1">导出 CSV 选项</h3>
+            <h3 className="text-sm font-semibold text-gray-800 mb-3">导出</h3>
+            <div className="grid grid-cols-3 gap-1 p-1 bg-gray-100 rounded-xl mb-2">
+              {([['csv', 'CSV 表格'], ['bib', 'BibTeX'], ['ris', 'RIS']] as const).map(([f, label]) => (
+                <button
+                  key={f}
+                  onClick={() => setExportOpts(o => ({ ...o, format: f }))}
+                  className={`text-xs font-medium rounded-lg py-1.5 transition-colors ${
+                    exportOpts.format === f ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <p className="text-xs text-gray-400 mb-3">
+              {exportOpts.format === 'csv' ? '用 Excel 打开，适合整理和筛选'
+                : exportOpts.format === 'bib' ? '可导入 Zotero、EndNote、知网研学，或直接用于 LaTeX / Overleaf'
+                : '可导入 EndNote、NoteExpress、Zotero'}
+            </p>
             <p className="text-xs text-gray-400 mb-4">
               将导出{' '}
               <span className="font-medium text-gray-600">
@@ -1499,11 +1530,11 @@ const addKeyword = () => {
                   />
                   <div>
                     <p className="text-sm text-gray-700 group-hover:text-gray-900">包含 AI 相关性分析</p>
-                    <p className="text-xs text-gray-400">每篇论文的 AI 解读说明</p>
+                    <p className="text-xs text-gray-400">{exportOpts.format === 'csv' ? '每篇论文的 AI 解读说明' : '写进每条文献的备注'}</p>
                   </div>
                 </label>
 
-                <label className="flex items-start gap-3 cursor-pointer group">
+                {exportOpts.format === 'csv' && <label className="flex items-start gap-3 cursor-pointer group">
                   <input
                     type="checkbox"
                     checked={exportOpts.translate && !!apiKey}
@@ -1515,9 +1546,9 @@ const addKeyword = () => {
                     <p className="text-sm text-gray-700 group-hover:text-gray-900">翻译标题为中文</p>
                     <p className="text-xs text-gray-400">{apiKey ? 'AI 批量翻译，导出会稍慢' : '需要填写自己的 DeepSeek Key'}</p>
                   </div>
-                </label>
+                </label>}
 
-                {getMessages && (
+                {getMessages && exportOpts.format === 'csv' && (
                   <label className="flex items-start gap-3 cursor-pointer group">
                     <input
                       type="checkbox"
