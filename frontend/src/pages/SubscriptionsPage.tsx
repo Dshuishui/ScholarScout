@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useAuth } from '../hooks/useAuth'
 import { toast } from '../components/Toast'
+import { LibraryImportPanel } from '../components/LibraryImportPanel'
 
 interface Subscription {
   id: number
@@ -287,6 +288,13 @@ export function SubscriptionsPage({ token, onClose, initialExpandId }: Props) {
       </div>
 
       <div className="flex-1 overflow-y-auto p-6 max-w-2xl mx-auto w-full">
+        {!loading && (
+          <LibraryImportPanel<Subscription>
+            token={token}
+            subscribed={subs.map(s => s.keywords)}
+            onSubscribed={sub => setSubs(prev => [sub, ...prev])}
+          />
+        )}
         {loading ? (
           <div className="flex items-center justify-center h-48">
             <div className="w-6 h-6 rounded-full border-2 border-indigo-400 border-t-transparent animate-spin" />

@@ -4,7 +4,7 @@ import html
 import json
 from collections import defaultdict
 from datetime import datetime, timezone
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Query
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Query, UploadFile, File
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -15,6 +15,8 @@ from models_db import Subscription, SubscriptionQueueItem, User
 from dependencies import get_current_user
 from services.auth_service import decode_unsubscribe_token, TokenError
 from services.rate_limit import rate_ok
+from services.library_import import extract_titles, suggest_directions
+import config
 
 router = APIRouter()
 
@@ -26,9 +28,12 @@ DAY = 86400
 CREATE_PER_DAY = 10
 REFRESH_PER_DAY = 5
 TEST_SEND_PER_DAY = 3
+SUGGEST_PER_DAY = 5
+MAX_LIBRARY_BYTES = 5 * 1024 * 1024
 _create_attempts: dict[str, list[float]] = defaultdict(list)
 _refresh_attempts: dict[str, list[float]] = defaultdict(list)
 _test_send_attempts: dict[str, list[float]] = defaultdict(list)
+_suggest_attempts: dict[str, list[float]] = defaultdict(list)
 
 # 后台补充队列串行执行：一次性建很多订阅时不会同时对外发出大量搜索请求
 _populate_locks: dict[asyncio.AbstractEventLoop, asyncio.Lock] = {}
@@ -125,6 +130,29 @@ async def list_subscriptions(
         .order_by(Subscription.created_at.desc())
     )
     return [_to_out(s) for s in result.scalars().all()]
+
+
+@router.post("/subscriptions/suggest-from-library")
+async def suggest_from_library(
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+):
+    """上传 Zotero / EndNote 导出的 BibTeX、RIS 或 CSV，归纳出几组订阅关键词。文件只在内存里读一遍，不保存。"""
+    if not config.DEEPSEEK_SYSTEM_KEY:
+        raise HTTPException(status_code=503, detail="这个功能暂时不可用")
+    content = await file.read(MAX_LIBRARY_BYTES + 1)
+    if len(content) > MAX_LIBRARY_BYTES:
+        raise HTTPException(status_code=413, detail="文件太大（上限 5 MB），可以只导出最近几年的文献")
+    titles = extract_titles(content.decode("utf-8-sig", errors="ignore"))
+    if len(titles) < 3:
+        raise HTTPException(status_code=400, detail="没有从文件里读到足够的论文标题。请在 Zotero 里选中文献，右键「导出条目」，格式选 BibTeX 或 RIS")
+    if not rate_ok(_suggest_attempts, str(current_user.id), limit=SUGGEST_PER_DAY, window_sec=DAY):
+        raise HTTPException(status_code=429, detail="今天导入的次数已达上限，请明天再试")
+    try:
+        directions = await suggest_directions(titles, config.DEEPSEEK_SYSTEM_KEY)
+    except Exception:
+        raise HTTPException(status_code=502, detail="AI 归纳失败，请稍后重试")
+    return {"titles": len(titles), "directions": directions}
 
 
 @router.post("/subscriptions", response_model=SubscriptionOut, status_code=201)
