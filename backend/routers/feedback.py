@@ -12,10 +12,10 @@ from models_db import Feedback, User
 from dependencies import get_optional_user
 from services.email_service import send_feedback_notification, send_reply_notification
 from services.rate_limit import client_ip
+from config import AUTHOR_EMAIL
 
 router = APIRouter()
 
-AUTHOR_EMAIL = "dshuishui168@gmail.com"
 VALID_EMOJIS = {'👍', '❤️', '😂', '🤔'}
 
 
@@ -127,7 +127,7 @@ async def submit_feedback(
     current_user: Optional[User] = Depends(get_optional_user),
 ):
     user_id = current_user.id if current_user else None
-    is_author = bool(current_user and current_user.email == AUTHOR_EMAIL)
+    is_author = bool(current_user and AUTHOR_EMAIL and current_user.email == AUTHOR_EMAIL)
 
     location = await _get_location(client_ip(request))
 

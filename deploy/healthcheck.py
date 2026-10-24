@@ -32,10 +32,6 @@ FAIL_THRESHOLD = 2
 ALERT_INTERVAL_SEC = 3600
 
 
-# backend/config.py 里 ADMIN_EMAIL 有同样的默认值；这里不能 import 后端代码（后端挂了也要能跑）
-DEFAULT_ADMIN_EMAIL = "dyucong@email.ncu.edu.cn"
-
-
 def load_env() -> dict:
     env = {}
     env_file = REPO / "backend" / ".env"
@@ -45,8 +41,10 @@ def load_env() -> dict:
             if line and not line.startswith("#") and "=" in line:
                 k, v = line.split("=", 1)
                 env[k.strip()] = v.strip().strip('"').strip("'")
-    # .env 里没写 ADMIN_EMAIL 时用默认值；再退一步发给发件邮箱自己，总之不能静默丢掉告警
-    env.setdefault("ADMIN_EMAIL", os.environ.get("ADMIN_EMAIL") or DEFAULT_ADMIN_EMAIL or env.get("SMTP_USER", ""))
+    # 和 backend/config.py 的规则一致（这里不能 import 后端代码，后端挂了也要能跑）：
+    # .env 里没写 ADMIN_EMAIL 时发给发件邮箱自己，总之不能静默丢掉告警
+    if not env.get("ADMIN_EMAIL"):
+        env["ADMIN_EMAIL"] = os.environ.get("ADMIN_EMAIL") or env.get("SMTP_USER", "")
     return env
 
 

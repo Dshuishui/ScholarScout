@@ -221,7 +221,9 @@ npm run dev
 | `FREE_SEARCHES_QUOTA` | `3` | 验证邮箱后赠送的免费搜索次数 |
 | `DEEPSEEK_API_KEY` | _(空)_ | 订阅推送 AI 筛选用的服务端 Key |
 | `SMTP_HOST / SMTP_USER / SMTP_PASS` | _(空)_ | 邮件推送配置（QQ 邮箱授权码） |
-| `ADMIN_EMAIL` | _(维护者邮箱)_ | 接收新留言通知和运维告警 |
+| `ADMIN_EMAIL` | `SMTP_USER` | 接收新留言通知和运维告警 |
+| `AUTHOR_EMAIL` | _(空)_ | 用这个账号发的留言会标成"作者" |
+| `POLITE_EMAIL` | _(空)_ | 访问 CrossRef / OpenAlex / Unpaywall 时附带的联系邮箱（礼貌池；Unpaywall 必填） |
 | `APP_BASE_URL` | `http://118.25.192.117` | 邮件链接中的网站地址，也是默认允许的跨域来源 |
 | `CORS_ORIGINS` | `APP_BASE_URL` | 额外允许跨域调用 API 的来源，逗号分隔 |
 

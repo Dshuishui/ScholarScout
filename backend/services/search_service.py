@@ -266,7 +266,7 @@ async def _search_pubmed(parsed: ParsedQuery, limit: int) -> list[Paper]:
             search_params["mindate"] = parsed.date_from[:4]
             search_params["maxdate"] = "3000"
 
-        headers = {"User-Agent": "ScholarScout/1.0 (mailto:sasakinakamura9@gmail.com)"}
+        headers = {"User-Agent": f"ScholarScout/1.0 (mailto:{POLITE_EMAIL})"}
         async with httpx.AsyncClient(timeout=20) as client:
             search_resp = await _get_with_retry(
                 client,

@@ -220,7 +220,9 @@ Copy `backend/.env.example` to `backend/.env`. All variables have sensible defau
 | `FREE_SEARCHES_QUOTA` | `3` | Free searches granted after email verification |
 | `DEEPSEEK_API_KEY` | _(empty)_ | Server-side key for subscription relevance filtering |
 | `SMTP_HOST / SMTP_USER / SMTP_PASS` | _(empty)_ | Email delivery configuration |
-| `ADMIN_EMAIL` | _(maintainer address)_ | Receives feedback notifications and health alerts |
+| `ADMIN_EMAIL` | `SMTP_USER` | Receives feedback notifications and health alerts |
+| `AUTHOR_EMAIL` | _(empty)_ | Feedback posted from this account is labelled as the author's |
+| `POLITE_EMAIL` | _(empty)_ | Contact address sent to CrossRef / OpenAlex / Unpaywall (polite pool; Unpaywall requires it) |
 | `APP_BASE_URL` | `http://118.25.192.117` | Public URL used in emails and as the default CORS origin |
 | `CORS_ORIGINS` | `APP_BASE_URL` | Comma-separated extra origins allowed to call the API |
 

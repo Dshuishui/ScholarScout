@@ -18,7 +18,8 @@ OPENALEX_API_KEY = os.environ.get("OPENALEX_API_KEY", "")
 # Semantic Scholar 无 key 时和全世界共用一个限流池，几乎一直 429；免费申请的 key 有独立额度
 SEMANTIC_SCHOLAR_API_KEY = os.environ.get("SEMANTIC_SCHOLAR_API_KEY", "")
 SEMANTIC_SCHOLAR_HEADERS = {"x-api-key": SEMANTIC_SCHOLAR_API_KEY} if SEMANTIC_SCHOLAR_API_KEY else {}
-POLITE_EMAIL = "sasakinakamura9@gmail.com"  # 用于 CrossRef / OpenAlex / Unpaywall 礼貌池标识
+# 用于 CrossRef / OpenAlex / Unpaywall 礼貌池标识；仓库是公开的，真实邮箱只写在服务器的 .env 里
+POLITE_EMAIL = os.environ.get("POLITE_EMAIL", "")
 SEARCH_LIMIT_PER_SOURCE = 50
 VALIDATED_LIMIT = 50
 
@@ -62,8 +63,10 @@ TRANSLATE_DAILY_CAP = int(_os.environ.get("TRANSLATE_DAILY_CAP", "300"))
 DISK_ALERT_PERCENT = float(_os.environ.get("DISK_ALERT_PERCENT", "90"))
 ERROR_SPIKE_THRESHOLD = int(_os.environ.get("ERROR_SPIKE_THRESHOLD", "30"))
 
-# 站长邮箱：接收新留言通知和运维告警（数据源失效、订阅停推）
-ADMIN_EMAIL = _os.environ.get("ADMIN_EMAIL", "dyucong@email.ncu.edu.cn")
+# 站长邮箱：接收新留言通知和运维告警（数据源失效、订阅停推）。没配置时发给发件邮箱自己，告警不能静默丢掉
+ADMIN_EMAIL = _os.environ.get("ADMIN_EMAIL") or _os.environ.get("SMTP_USER", "")
+# 作者账号的邮箱：用这个账号发的留言会标成"作者"
+AUTHOR_EMAIL = _os.environ.get("AUTHOR_EMAIL", "")
 # 前端地址（邮件验证链接用）
 APP_BASE_URL = _os.environ.get("APP_BASE_URL", "http://118.25.192.117")
 # 允许跨域调用 API 的来源。前端经 nginx 同源访问，本身不需要跨域；
