@@ -29,6 +29,9 @@ const SOURCE_COLORS: Record<string, string> = {
 }
 
 const ITEMS_PER_PAGE = 20
+// AI 评分低于这个分（即只给了 5 分）的论文默认收起：实测一题 42 篇里有 11 篇是 5 分，和切题的论文混在一起显得不专业
+const WEAK_SCORE = 6
+const isWeak = (p: Paper) => p.relevance_score != null && p.relevance_score < WEAK_SCORE
 const DOWNLOAD_CONCURRENCY = 1   // 顺序下载，防止并发触发 arXiv/Sci-Hub 等源的 IP 限流
 const DOWNLOAD_TIMEOUT_MS = 90_000
 
@@ -207,6 +210,7 @@ export function ResultsPanel({ papers, availableSources, previewPapers = [], pre
   const [newKw, setNewKw] = useState('')
   const [sortBy, setSortBy] = useState<SortOption>('relevance')
   const [activeTab, setActiveTab] = useState<'filtered' | 'all'>('filtered')
+  const [showWeak, setShowWeak] = useState(false)
   const [yearFrom, setYearFrom] = useState<number | null>(null)
   const [yearTo, setYearTo] = useState<number | null>(null)
   const [viewMode, setViewMode] = useState<ViewMode>('list')
@@ -407,6 +411,7 @@ export function ResultsPanel({ papers, availableSources, previewPapers = [], pre
     setAppliedSettings(settings)
     setActiveTab('filtered')
     setCollapsedGroups(new Set())
+    setShowWeak(false)
   }, [papers]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // 切换 tab 或排序时回到第一页
@@ -414,10 +419,14 @@ export function ResultsPanel({ papers, availableSources, previewPapers = [], pre
 
   const rejectedIds = useMemo(() => new Set(rejectedPapers.map(p => p.paper_id)), [rejectedPapers])
 
-  const activePapers = useMemo(
-    () => activeTab === 'filtered' ? papers : [...papers, ...rejectedPapers],
-    [activeTab, papers, rejectedPapers]
-  )
+  const weakCount = useMemo(() => papers.filter(isWeak).length, [papers])
+  // 全是 5 分时不收，否则列表是空的
+  const canFoldWeak = activeTab === 'filtered' && weakCount > 0 && weakCount < papers.length
+
+  const activePapers = useMemo(() => {
+    if (activeTab !== 'filtered') return [...papers, ...rejectedPapers]
+    return canFoldWeak && !showWeak ? papers.filter(p => !isWeak(p)) : papers
+  }, [activeTab, papers, rejectedPapers, canFoldWeak, showWeak])
 
   // 年份范围：结果变化时重置
   const availableYears = useMemo(() => {
@@ -1403,6 +1412,18 @@ const addKeyword = () => {
             ))}
             <Pagination current={currentPage} total={totalPages} onChange={p => { setCurrentPage(p); listScrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' }) }} />
           </>
+        )}
+
+        {/* 5 分的论文收在列表末尾 */}
+        {!isLoading && canFoldWeak && (viewMode === 'grouped' || currentPage >= totalPages) && (
+          <button
+            onClick={() => setShowWeak(v => !v)}
+            className="w-full mt-3 py-2.5 rounded-xl border border-dashed border-gray-200 text-xs text-gray-500 hover:text-indigo-600 hover:border-indigo-200 transition-colors"
+          >
+            {showWeak
+              ? `收起 ${weakCount} 篇可能相关的论文`
+              : `还有 ${weakCount} 篇可能相关的论文（AI 评 5 分，满分 10），点击展开`}
+          </button>
         )}
 
         {/* 回到顶部 */}
