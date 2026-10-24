@@ -38,6 +38,7 @@ ScholarScout is a full-stack academic paper search platform. Describe what you'r
 - **Editable keyword chips**: AI extracts keywords before searching; edit or remove them, then re-search at any time
 - **10-source concurrent search**: arXiv, Semantic Scholar, OpenAlex, PubMed, Europe PMC, INSPIRE-HEP, CrossRef work without keys; CORE, NASA ADS and Google Scholar (via SerpAPI) are enabled when their keys are configured
 - **Hybrid retrieval**: OpenAlex keyword search (boolean OR over the extracted synonyms), semantic search and a concept-intersection search (an "A for B" request split into concepts and ANDed) fused via Reciprocal Rank Fusion, plus the most-cited papers within those concepts, which recovers seminal papers that text relevance ranks too low (the last three are enabled with `OPENALEX_API_KEY`)
+- **Citation expansion**: after the results are sent, the top-scored papers seed one OpenAlex hop (references they share and papers citing them); the LLM vets the new candidates and they are appended without delaying the first results (7-13 extra papers scoring 8+ on each of six test questions)
 - **Domain-aware source routing**: the LLM tags the query's fields, so a pure CS query skips PubMed / Europe PMC and a non-physics query skips INSPIRE-HEP / NASA ADS
 - **Citation-aware ranking**: LLM relevance score plus a capped citation bonus, so seminal papers win ties
 - **No hidden year window**: results are only date-filtered when the query asks for it
@@ -46,8 +47,9 @@ ScholarScout is a full-stack academic paper search platform. Describe what you'r
 
 ### PDF Access
 - **Deep PDF search**: Papers without a PDF link are automatically searched via Kimi for open-access versions
-- **Fallback links**: If no PDF is found, 8 platform links are shown (Sci-Hub, ResearchGate, CORE, etc.)
+- **Fallback links**: If no PDF is found, 7 legitimate lookup links are shown (publisher page, Google Scholar, Open Access Button, ResearchGate, etc.)
 - **Batch ZIP download**: Select papers and download all available PDFs in one click; failures are logged inside the archive
+- **Reference manager export**: BibTeX (Zotero, EndNote, Overleaf), RIS (EndNote, NoteExpress) or CSV
 
 ### AI Analysis
 - **Multi-paper analysis**: Select 2+ papers for full-screen AI analysis in three modes:
@@ -70,6 +72,7 @@ ScholarScout is a full-stack academic paper search platform. Describe what you'r
 
 ### Subscriptions & Daily Push
 - **Keyword subscriptions**: Subscribe after any search; the system immediately builds a push queue in the background
+- **Import interests from a library**: upload a BibTeX, RIS or CSV export from Zotero / EndNote; the LLM reads the titles and proposes research directions to subscribe to (the file is not stored)
 - **Daily email**: Delivers one curated paper to your inbox at 08:00 Beijing time; AI filtering ensures relevance
 - **One-click unsubscribe**: Every email has a login-free unsubscribe link plus `List-Unsubscribe` / `List-Unsubscribe-Post` headers
 - **Auto-replenishment**: Queue is refilled automatically when fewer than 5 papers remain; manual refresh also available
@@ -190,6 +193,33 @@ npm run dev
 ```
 
 Open [http://localhost:5173](http://localhost:5173) and enter your DeepSeek API key.
+
+---
+
+## Use from Claude Code / Codex (MCP)
+
+`backend/mcp_server.py` exposes the same retrieval pipeline as an MCP server over stdio:
+
+| Tool | What it does |
+|---|---|
+| `search_papers` | Multi-source search and dedup; with a DeepSeek key it scores each paper's relevance and adds papers found along citations |
+| `related_papers` | Given one paper (DOI or OpenAlex ID), returns the papers it cites and the papers citing it |
+
+Install the backend dependencies as in Local Development (`uv sync`), then register it:
+
+```bash
+# Claude Code
+claude mcp add scholarscout -- uv run --directory /path/to/ScholarScout/backend python mcp_server.py
+```
+
+```toml
+# Codex: ~/.codex/config.toml
+[mcp_servers.scholarscout]
+command = "uv"
+args = ["run", "--directory", "/path/to/ScholarScout/backend", "python", "mcp_server.py"]
+```
+
+Keys go in `backend/.env` and are all optional: `OPENALEX_API_KEY` enables semantic search, concept intersection and citation expansion; `DEEPSEEK_API_KEY` enables relevance scoring (without it you get citation-ranked candidates with abstracts for the calling model to judge). The calling model writes the keywords, so DeepSeek is not required.
 
 ---
 

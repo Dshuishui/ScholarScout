@@ -38,6 +38,7 @@ ScholarScout 是一个全栈学术论文搜索平台。前端用自然语言输�
 - **关键词可视化确认**：AI 提取结果先展示供用户确认，可增删后再搜索，结果页随时调整并重新搜索
 - **10 源并发搜索**：arXiv、Semantic Scholar、OpenAlex、PubMed、Europe PMC、INSPIRE-HEP、CrossRef 无需 Key；CORE、NASA ADS、Google Scholar（经 SerpAPI）配置 Key 后启用
 - **混合检索**：OpenAlex 关键词检索（提取出的同义词用布尔 OR 连接）、语义检索、概念交集检索（把"A 用于 B"拆成几个概念再 AND 起来）用 RRF 融合，再追加概念范围内被引最多的几篇，补上按文字匹配度排不进前列的奠基论文（配置 `OPENALEX_API_KEY` 后启用后三路）
+- **沿引用链扩展**：结果给出后，从 AI 打分最高的几篇出发，在 OpenAlex 上找它们共同引用的论文和后续引用它们的论文，经 AI 筛选后追加到结果里，不拖慢首屏（6 道测试题每题多出 7–13 篇 8 分以上的论文）
 - **按领域选源**：大模型判断需求所属学科，纯计算机问题不查 PubMed / Europe PMC，非物理天文问题不查 INSPIRE-HEP / NASA ADS
 - **引用量参与排序**：大模型相关性评分加上封顶的引用量加分，同分时奠基论文排在前面
 - **不偷偷限定年份**：描述里提到时间才按时间过滤
@@ -46,8 +47,9 @@ ScholarScout 是一个全栈学术论文搜索平台。前端用自然语言输�
 
 ### PDF 获取
 - **PDF 深度查找**：无 PDF 的论文自动通过 Kimi 联网查找开放获取版本
-- **备用入口**：找不到时展示 Sci-Hub、ResearchGate、CORE 等 8 个平台的跳转链接
+- **备用入口**：找不到时给出出版社原文、Google 学术、Open Access Button、ResearchGate 等 7 个合法的查找入口
 - **批量打包下载**：勾选论文后一键下载 ZIP，失败明细写入压缩包内日志
+- **导出到文献管理软件**：结果可导出为 BibTeX（Zotero、EndNote、知网研学、Overleaf）、RIS（EndNote、NoteExpress）或 CSV
 
 ### AI 分析
 - **多论文 AI 分析**：勾选 2 篇以上，支持三种全屏分析模式：
@@ -70,6 +72,7 @@ ScholarScout 是一个全栈学术论文搜索平台。前端用自然语言输�
 
 ### 订阅与每日推送
 - **关键词订阅**：搜索完成后一键订阅，系统立即在后台建立推送队列
+- **从文献库导入兴趣**：上传 Zotero / EndNote 导出的 BibTeX、RIS 或 CSV，AI 读标题归纳出研究方向，一键订阅（文件不保存）
 - **每日推送**：每天北京时间 08:00 从队列取出当天论文发送邮件，AI 过滤确保相关性
 - **一键退订**：每封邮件都带免登录退订链接，并设置 `List-Unsubscribe` / `List-Unsubscribe-Post` 邮件头
 - **队列自动补充**：剩余不足 5 篇时自动后台补搜；也可手动刷新
@@ -191,6 +194,33 @@ npm run dev
 ```
 
 访问 [http://localhost:5173](http://localhost:5173)，输入 DeepSeek API Key 即可使用。
+
+---
+
+## 在 Claude Code / Codex 里使用（MCP）
+
+`backend/mcp_server.py` 把同一套检索流程做成 MCP 服务（stdio），智能体可以直接调用：
+
+| 工具 | 做什么 |
+|---|---|
+| `search_papers` | 多源检索、去重；配置了 DeepSeek Key 时给每篇打相关性分，并沿引用链补一批 |
+| `related_papers` | 给一篇论文（DOI 或 OpenAlex ID），返回它引用的论文和引用它的论文 |
+
+按上面「本地开发」装好后端依赖（`uv sync`），再注册到客户端：
+
+```bash
+# Claude Code
+claude mcp add scholarscout -- uv run --directory /path/to/ScholarScout/backend python mcp_server.py
+```
+
+```toml
+# Codex：~/.codex/config.toml
+[mcp_servers.scholarscout]
+command = "uv"
+args = ["run", "--directory", "/path/to/ScholarScout/backend", "python", "mcp_server.py"]
+```
+
+Key 写在 `backend/.env`，都可以不配：`OPENALEX_API_KEY` 打开语义检索、概念交集和引用链扩展；`DEEPSEEK_API_KEY` 打开相关性打分（不配时返回按被引数排序的候选和摘要，由调用方的模型自己判断）。关键词由调用方的模型给出，所以不需要 DeepSeek 也能用。
 
 ---
 
