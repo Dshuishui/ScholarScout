@@ -40,6 +40,9 @@ def trial(monkeypatch, db_engine):
         "get_cached_search": AsyncMock(return_value=None),
         "cache_search": AsyncMock(),
         "_index_papers_async": AsyncMock(),
+        # 结果少于 10 篇时会换个说法再搜：默认什么也补不到，需要的用例自己改
+        "requery_and_validate": AsyncMock(return_value=[]),
+        "suggest_requery": AsyncMock(return_value=None),
     }
     for name, mock in pipeline.items():
         monkeypatch.setattr(sr, name, mock)
@@ -369,6 +372,49 @@ async def test_search_skips_expansion_without_strong_results(client, trial, monk
     expand = AsyncMock(return_value=[])
     monkeypatch.setattr(sr, "citation_expansion_available", lambda: True)
     monkeypatch.setattr(ex, "expand_citations", expand)
-    names = [n for n, _ in _events(await _search(client))]  # 默认的验证结果没有打分
-    assert "expanding" not in names and "more_papers" not in names
+    events = _events(await _search(client))  # 默认的验证结果没有打分
+    assert [d["message"] for n, d in events if n == "expanding"] == ["高度相关的论文较少，正在换个说法再搜一次..."]
     expand.assert_not_called()
+
+
+async def test_few_results_trigger_requery_before_citation_expansion(client, trial, monkeypatch):
+    """筛完不到 10 篇：先换个说法再搜，补到的高分论文也作为引用链扩展的种子。"""
+    import routers.search as sr
+    import services.expansion as ex
+    from models import Paper
+    extra = Paper(paper_id="r1", title="Found by requery", authors=["A"], source="OpenAlex",
+                  relevance_score=9.0, found_via="requery")
+    trial["requery_and_validate"].return_value = [extra]
+    seen = {}
+
+    async def expand(seeds, pool, parsed):
+        seen["seeds"] = [p.paper_id for p in seeds]
+        seen["pool"] = [p.paper_id for p in pool]
+        return []
+
+    monkeypatch.setattr(sr, "citation_expansion_available", lambda: True)
+    monkeypatch.setattr(ex, "expand_citations", expand)
+    events = _events(await _search(client))
+    more = [d for n, d in events if n == "more_papers"]
+    assert [p["paper_id"] for p in more[0]["papers"]] == ["r1"] and more[0]["papers"][0]["found_via"] == "requery"
+    assert more[0]["message"] == "换个说法又找到 1 篇相关论文。"
+    assert seen == {"seeds": ["r1"], "pool": ["p1", "p2", "r1"]}  # 默认结果没有打分，种子只有补来的那篇
+
+
+async def test_empty_search_retries_with_other_keywords(client, trial):
+    """一篇都没搜到时先换个说法再搜，搜到了就照常筛选、不退次数。"""
+    from models import ParsedQuery
+    found = [_paper(7)]
+    trial["search_all_sources"].side_effect = [[], found]
+    trial["suggest_requery"].return_value = ParsedQuery(keywords=["broader term"])
+    trial["validate_papers"].return_value = (found, [])
+    events = dict(_events(await _search(client)))
+    assert [p["paper_id"] for p in events["done"]["papers"]] == ["p7"]
+    assert not events["done"].get("refunded")
+    assert trial["search_all_sources"].call_args_list[1].args[0].keywords == ["broader term"]
+
+
+async def test_empty_search_without_alternative_refunds(client, trial):
+    trial["search_all_sources"].return_value = []
+    events = dict(_events(await _search(client)))
+    assert events["done"]["papers"] == [] and events["done"]["refunded"]

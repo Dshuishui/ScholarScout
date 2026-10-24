@@ -1018,6 +1018,15 @@ def _merge(existing: Paper, newcomer: Paper) -> Paper:
     })
 
 
+def only_new(papers: list[Paper], known: list[Paper]) -> list[Paper]:
+    """去掉 known 里已有的论文（按 id、DOI、规范化标题判断）。"""
+    ids = {p.paper_id for p in known}
+    dois = {p.doi.lower() for p in known if p.doi}
+    titles = {_normalize_title(p.title) for p in known}
+    return [p for p in papers
+            if p.paper_id not in ids and not (p.doi and p.doi.lower() in dois) and _normalize_title(p.title) not in titles]
+
+
 def deduplicate(papers: list[Paper]) -> list[Paper]:
     """去重并合并：DOI 精确匹配优先，标题规范化兜底；重复时合并最优字段而非丢弃。"""
     seen_dois: dict[str, int] = {}    # doi → result 中的下标

@@ -192,6 +192,16 @@ export function PaperCard({ paper, selected = false, onToggle, isRejected = fals
                 AI 认为不相关
               </span>
             )}
+            {paper.found_via && !isRejected && (
+              <span
+                className="text-xs text-teal-600 bg-teal-50 border border-teal-100 rounded-full px-2 py-0.5"
+                title={paper.found_via === 'citations'
+                  ? '关键词没搜到，是从高分论文的参考文献或后续引用里找到的'
+                  : '第一次结果较少，换了一组检索词后找到的'}
+              >
+                {paper.found_via === 'citations' ? '引用链' : '换词检索'}
+              </span>
+            )}
             {hasChat && (
               <span
                 className="inline-flex items-center gap-0.5 text-xs text-violet-500 bg-violet-50 border border-violet-100 rounded-full px-2 py-0.5"
@@ -263,7 +273,7 @@ export function PaperCard({ paper, selected = false, onToggle, isRejected = fals
           {showAbstract && paper.relevance_reason && (
             <div className="flex items-start gap-1.5 bg-blue-50 border border-blue-100 rounded-lg px-2.5 py-2 mb-3">
               <span className="text-blue-400 flex-shrink-0 mt-px text-xs">✦</span>
-              <p className="text-sm text-blue-700 leading-relaxed">{paper.relevance_reason}</p>
+              <p className="text-sm text-blue-700 leading-relaxed"><span className="font-medium">为什么推荐：</span>{paper.relevance_reason}</p>
             </div>
           )}
 

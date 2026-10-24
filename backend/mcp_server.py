@@ -23,7 +23,7 @@ if __name__ == "__main__":
 
 import config  # noqa: E402
 from models import Paper, ParsedQuery  # noqa: E402
-from services.expansion import expand_and_validate  # noqa: E402
+from services.expansion import FEW_STRONG, expand_and_validate, requery_and_validate, strong_count  # noqa: E402
 from services.llm_service import rank_accepted, validate_papers  # noqa: E402
 from services.search_service import citation_neighbors, search_all_sources  # noqa: E402
 
@@ -110,6 +110,8 @@ def _paper_out(p: Paper, with_abstract: bool) -> dict:
     if p.relevance_score is not None:
         out["relevance_score"] = p.relevance_score
         out["reason"] = p.relevance_reason
+    if p.found_via:
+        out["found_via"] = p.found_via
     if with_abstract and p.abstract:
         out["abstract"] = p.abstract[:600]
     return {k: v for k, v in out.items() if v not in (None, "", [])}
@@ -137,12 +139,17 @@ async def search_papers(args: dict) -> dict:
         pool.sort(key=lambda p: p.citations, reverse=True)
         return {"relevance_scored": False, "candidates_found": len(pool),
                 "papers": [_paper_out(p, with_abstract=True) for p in pool[:limit]]}
-    accepted, _ = await validate_papers(pool, question, api_key)
+    accepted, _ = await validate_papers(pool, question, api_key) if pool else ([], [])
     final = rank_accepted(accepted)
-    more = await expand_and_validate(final, pool, parsed, question, api_key)
-    ranked = rank_accepted(final + more)
+    extra = []
+    if strong_count(final) < FEW_STRONG:  # 高度相关的太少就换一组检索词再搜一次
+        extra = await requery_and_validate(question, parsed, pool, strong_count(final), api_key,
+                                           config.SEARCH_LIMIT_PER_SOURCE)
+    more = await expand_and_validate(final + extra, pool + extra, parsed, question, api_key)
+    ranked = rank_accepted(final + extra + more)
     return {"relevance_scored": True, "candidates_found": len(pool), "relevant": len(ranked),
-            "found_via_citations": len(more), "papers": [_paper_out(p, with_abstract=False) for p in ranked[:limit]]}
+            "found_by_other_keywords": len(extra), "found_via_citations": len(more),
+            "papers": [_paper_out(p, with_abstract=False) for p in ranked[:limit]]}
 
 
 async def related_papers(args: dict) -> dict:

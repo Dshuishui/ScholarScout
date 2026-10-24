@@ -207,6 +207,34 @@ async def validate_papers(
     return accepted, rejected
 
 
+REQUERY_PROMPT = """用户的需求：{query}
+
+第一次用这组英文关键词检索，高度相关的论文只有 {found} 篇：{keywords}
+
+请换一组英文学术检索词再试一次：用这个领域更常见的说法、上位概念或相邻术语，不要重复上面的词。
+返回 JSON（不要额外文字）：
+{{"keywords": ["3-6 个英文检索词"], "concepts": [["必须同时满足的概念组，用法同第一次检索；单一主题只给一组"]]}}"""
+
+
+async def suggest_requery(user_query: str, parsed: ParsedQuery, found: int, api_key: str,
+                          model: str = DEEPSEEK_MODEL) -> ParsedQuery | None:
+    """结果太少时让大模型换一组检索词。换不出新词（和原来的一样）时返回 None。"""
+    client = AsyncOpenAI(api_key=api_key, base_url=DEEPSEEK_BASE_URL)
+    response = await client.chat.completions.create(
+        model=_json_model(model),
+        messages=[{"role": "user", "content": REQUERY_PROMPT.format(
+            query=user_query, found=found, keywords="、".join(parsed.keywords))}],
+        response_format={"type": "json_object"},
+        temperature=TEMPERATURE,
+    )
+    data = json.loads(response.choices[0].message.content or "{}")
+    keywords = [k.strip() for k in data.get("keywords") or [] if isinstance(k, str) and k.strip()][:6]
+    if not keywords or {k.lower() for k in keywords} <= {k.lower() for k in parsed.keywords}:
+        return None
+    return ParsedQuery(keywords=keywords, concepts=data.get("concepts") or [], date_from=parsed.date_from,
+                       date_to=parsed.date_to, domains=parsed.domains)
+
+
 def citation_bonus(citations: int) -> float:
     """引用量加分，0～1 分：100 次 ≈ 0.5，1 万次及以上 = 1。
 

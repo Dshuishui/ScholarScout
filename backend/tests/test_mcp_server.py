@@ -56,13 +56,18 @@ async def test_search_with_llm_key_scores_and_adds_citation_finds(monkeypatch):
     pool = [_paper("W1", "Seed"), _paper("W2", "Off topic")]
     monkeypatch.setattr(m, "search_all_sources", AsyncMock(return_value=pool))
     monkeypatch.setattr(m, "validate_papers", AsyncMock(return_value=([pool[0].model_copy(update={"relevance_score": 9.0})], [pool[1]])))
-    expand = AsyncMock(return_value=[_paper("W3", "Via citations", score=10.0)])
+    via = _paper("W3", "Via citations", score=10.0).model_copy(update={"found_via": "citations"})
+    expand = AsyncMock(return_value=[via])
+    requery = AsyncMock(return_value=[_paper("W4", "Other words", score=8.0)])
     monkeypatch.setattr(m, "expand_and_validate", expand)
+    monkeypatch.setattr(m, "requery_and_validate", requery)
     is_error, data = await _call("search_papers", {"question": "q", "keywords": ["rl"], "concepts": [["rl"], ["guidance"]]})
     assert not is_error
-    assert [p["title"] for p in data["papers"]] == ["Via citations", "Seed"]
-    assert data["found_via_citations"] == 1 and "abstract" not in data["papers"][0]
+    assert [p["title"] for p in data["papers"]] == ["Via citations", "Seed", "Other words"]
+    assert data["found_via_citations"] == 1 and data["found_by_other_keywords"] == 1
+    assert data["papers"][0]["found_via"] == "citations" and "abstract" not in data["papers"][0]
     assert expand.await_args.args[2].concepts == [["rl"], ["guidance"]]
+    assert [p.paper_id for p in expand.await_args.args[0]] == ["W1", "W4"]  # 换词搜到的也当种子
 
 
 async def test_tool_errors_are_reported_in_the_result(monkeypatch):

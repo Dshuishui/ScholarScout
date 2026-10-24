@@ -208,7 +208,7 @@ export function useSearch(apiKey: string, settings: SearchSettings, model?: stri
             shownPapers = [...shownPapers, ...added]
             const merged = shownPapers
             setPapers(prev => [...prev, ...added.filter(p => !prev.some(x => x.paper_id === p.paper_id))])
-            doneContent += `\n\n顺着引用关系又补充了 ${added.length} 篇。`
+            doneContent += `\n\n${event.message}`
             updateAssistant(assistantId, { content: doneContent, papers: merged })
             saveResults(keywords, merged)
             track('search_more', { count: added.length })

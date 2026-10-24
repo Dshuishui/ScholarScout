@@ -23,12 +23,12 @@ from database import get_db, AsyncSessionLocal
 from dependencies import get_optional_user
 from models import SearchRequest, ParseRequest, ParsedQuery, ValidateKeyRequest
 from models_db import User
-from services.llm_service import classify_intent, parse_query, validate_papers, rank_accepted
+from services.llm_service import classify_intent, parse_query, validate_papers, rank_accepted, suggest_requery
 from services.search_service import (
     search_all_sources, enhance_with_unpaywall, get_source_names, available_sources, deduplicate,
     citation_expansion_available, EXPANSION_MIN_SCORE,
 )
-from services.expansion import expand_and_validate
+from services.expansion import FEW_STRONG, expand_and_validate, requery_and_validate, strong_count
 from services.download_service import fetch_pdf_with_fallback
 from services.pdf_finder_service import find_pdfs_with_kimi, generate_fallback_links
 from services.cache_service import get_cached_search, cache_search
@@ -319,6 +319,7 @@ async def search(
                 parsed = await parse_query(request.query, api_key, history)
 
             kw_str = "、".join(parsed.keywords)
+            cache_keywords = parsed.keywords  # 下面可能换一组检索词再搜，缓存仍按用户确认的关键词存
             yield sse("progress", {"message": f"正在搜索关键词：{kw_str}..."})
 
             # 缓存键用实际要查的数据源（已含按领域选源的结果），避免复用未选源时的缓存
@@ -388,6 +389,18 @@ async def search(
 
             papers = await search_task
             if not papers:
+                # 一篇都没搜到（多半是说法太专门）：先换个说法再搜一次，还是没有才结束
+                yield sse("progress", {"message": "没有搜到论文，正在换个说法再搜一次..."})
+                try:
+                    alt = await suggest_requery(request.query, parsed, 0, api_key)
+                    if alt:
+                        papers = await search_all_sources(alt, limit_per_source=request.limit_per_source,
+                                                          sources=request.sources)
+                        if papers:
+                            parsed = alt
+                except Exception as e:
+                    logger.warning("Requery for empty results failed: %s", e)
+            if not papers:
                 await _refund(charge)
                 yield sse("done", {"papers": [], "message": "未找到相关论文，请尝试换个描述方式。",
                                    **_refund_note(charge)})
@@ -430,7 +443,7 @@ async def search(
 
             # Store validated results in Redis (non-blocking)
             asyncio.create_task(cache_search(
-                parsed.keywords, source_names,
+                cache_keywords, source_names,
                 papers_dict, parsed.date_from or "", parsed.date_to or "",
             ))
 
@@ -463,25 +476,42 @@ async def search(
                     ),
                 })
 
-            # ── 沿引用链补一批（结果已经给出，不拖慢首屏）──────────────────
-            if citation_expansion_available() and any((p.relevance_score or 0) >= EXPANSION_MIN_SCORE for p in final):
+            # ── 首屏之后再补两批（结果已经给出，不拖慢首屏）────────────────
+            # 补充失败不能把已经给出的结果变成"搜索出错"，所以各自兜住异常
+            added: list = []
+            if strong_count(final) < FEW_STRONG:
+                yield sse("expanding", {"message": "高度相关的论文较少，正在换个说法再搜一次..."})
+                try:
+                    extra = await requery_and_validate(request.query, parsed, papers, strong_count(final), api_key,
+                                                       request.limit_per_source, request.sources)
+                except Exception as e:
+                    logger.warning("Requery failed: %s", e)
+                    extra = []
+                added += extra
+                yield sse("more_papers", {
+                    "papers": [p.model_dump() for p in extra],
+                    "message": f"换个说法又找到 {len(extra)} 篇相关论文。" if extra else "换个说法也没有找到更多相关论文。",
+                })
+            seeds = final + added
+            if citation_expansion_available() and any((p.relevance_score or 0) >= EXPANSION_MIN_SCORE for p in seeds):
                 yield sse("expanding", {"message": "正在顺着引用关系找更多相关论文..."})
                 try:
-                    more = await expand_and_validate(final, papers, parsed, request.query, api_key)
-                except Exception as e:  # 补充失败不能把已经给出的结果变成"搜索出错"
+                    more = await expand_and_validate(seeds, papers + added, parsed, request.query, api_key)
+                except Exception as e:
                     logger.warning("Citation expansion failed: %s", e)
                     more = []
-                more_dict = [p.model_dump() for p in more]
+                added += more
                 yield sse("more_papers", {
-                    "papers": more_dict,
+                    "papers": [p.model_dump() for p in more],
                     "message": f"顺着引用关系又找到 {len(more)} 篇相关论文。" if more else "顺着引用关系没有找到更多相关论文。",
                 })
-                if more:
-                    asyncio.create_task(_index_papers_async(more_dict))
-                    asyncio.create_task(cache_search(
-                        parsed.keywords, source_names,
-                        papers_dict + more_dict, parsed.date_from or "", parsed.date_to or "",
-                    ))
+            if added:
+                added_dict = [p.model_dump() for p in added]
+                asyncio.create_task(_index_papers_async(added_dict))
+                asyncio.create_task(cache_search(
+                    cache_keywords, source_names,
+                    papers_dict + added_dict, parsed.date_from or "", parsed.date_to or "",
+                ))
 
         except Exception as e:
             logger.error("Search pipeline error: %s", e, exc_info=True)

@@ -15,6 +15,8 @@ export interface Paper {
   source_links?: { source: string; url: string }[]
   venue?: string
   fallback_links?: { name: string; url: string }[]
+  /** 首屏之后补来的：citations 沿引用链找到，requery 换个说法再搜找到 */
+  found_via?: 'citations' | 'requery'
 }
 
 export interface Message {
