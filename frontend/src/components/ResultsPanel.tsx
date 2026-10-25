@@ -148,6 +148,12 @@ ${sections.join('\n')}
 </body></html>`
 }
 
+/** 导出发生在浏览器里：除了 Umami，也让后端记一次，周报才知道有没有人用（失败无所谓） */
+function countExport(format: string, count: number) {
+  track('export', { format, count })
+  fetch('/api/events/export', { method: 'POST' }).catch(() => {})
+}
+
 function downloadCSV(rows: string[][], filename: string) {
   const csv = rows
     .map(row => row.map(cell => `"${cell.replace(/"/g, '""')}"`).join(','))
@@ -352,7 +358,7 @@ export function ResultsPanel({ papers, availableSources, previewPapers = [], pre
           `scholarscout-${dateStr}.${bib ? 'bib' : 'ris'}`,
           bib ? 'application/x-bibtex' : 'application/x-research-info-systems',
         )
-        track('export', { format: exportOpts.format, count: exportPapers.length })
+        countExport(exportOpts.format, exportPapers.length)
         setShowExportModal(false)
         return
       }
@@ -411,6 +417,7 @@ export function ResultsPanel({ papers, availableSources, previewPapers = [], pre
         downloadCSV([headers, ...rows], `scholarscout-${dateStr}.csv`)
       }
 
+      countExport('csv', exportPapers.length)
       setShowExportModal(false)
     } finally {
       setExporting(false)

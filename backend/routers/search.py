@@ -157,13 +157,13 @@ async def _charge_search(
     return _Charge(api_key=DEEPSEEK_SYSTEM_KEY, usage_id=usage_id, remaining=status.remaining - 1)
 
 
-async def _count_search() -> None:
-    """记一次"完成的搜索"。流式响应里请求级会话已不可靠，单独开一个。"""
+async def _count(name: str, n: int = 1) -> None:
+    """记计数（周报用）。流式响应里请求级会话已不可靠，单独开一个。"""
     try:
         async with AsyncSessionLocal() as db:
-            await stats.bump(db, stats.SEARCH)
+            await stats.bump(db, name, n)
     except Exception as e:
-        logger.info("Search counter failed: %s", e)
+        logger.info("Counter %s failed: %s", name, e)
 
 
 async def _refund(charge: _Charge) -> None:
@@ -183,6 +183,17 @@ async def _refund(charge: _Charge) -> None:
                 await db.commit()
     except Exception as e:
         logger.warning("Refund free search failed: %s", e)
+
+
+_export_events: dict[str, list[float]] = defaultdict(list)
+
+
+@router.post("/events/export", status_code=204)
+async def count_export(http_request: Request, db: AsyncSession = Depends(get_db)):
+    """导出发生在浏览器里，前端导出后调一下这个接口，周报才知道有没有人用。只记次数，按 IP 限流防刷。"""
+    if rate_ok(_export_events, client_ip(http_request), limit=50, window_sec=86400):
+        await stats.bump(db, stats.EXPORT)
+    return Response(status_code=204)
 
 
 @router.get("/trial/status")
@@ -430,7 +441,7 @@ async def search(
             rejected = [with_pdf(p) for p in rejected]
             final = rank_accepted(accepted)[:request.validated_limit]
 
-            await _count_search()
+            await _count(stats.SEARCH)
             papers_dict = [p.model_dump() for p in final]
             rejected_dict = [p.model_dump() for p in rejected]
             refund_info = {}
@@ -514,6 +525,7 @@ async def search(
                     "message": f"顺着引用关系又找到 {len(more)} 篇相关论文。" if more else "顺着引用关系没有找到更多相关论文。",
                 })
             if added:
+                await _count(stats.MORE_PAPERS, len(added))
                 added_dict = [p.model_dump() for p in added]
                 asyncio.create_task(_index_papers_async(added_dict))
                 asyncio.create_task(cache_search(

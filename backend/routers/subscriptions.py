@@ -16,6 +16,7 @@ from dependencies import get_current_user
 from services.auth_service import decode_unsubscribe_token, TokenError
 from services.rate_limit import rate_ok
 from services.library_import import extract_titles, suggest_directions
+from services import stats
 import config
 
 router = APIRouter()
@@ -136,6 +137,7 @@ async def list_subscriptions(
 async def suggest_from_library(
     file: UploadFile = File(...),
     current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
 ):
     """上传 Zotero / EndNote 导出的 BibTeX、RIS 或 CSV，归纳出几组订阅关键词。文件只在内存里读一遍，不保存。"""
     if not config.DEEPSEEK_SYSTEM_KEY:
@@ -152,6 +154,7 @@ async def suggest_from_library(
         directions = await suggest_directions(titles, config.DEEPSEEK_SYSTEM_KEY)
     except Exception:
         raise HTTPException(status_code=502, detail="AI 归纳失败，请稍后重试")
+    await stats.bump(db, stats.LIBRARY_IMPORT)
     return {"titles": len(titles), "directions": directions}
 
 

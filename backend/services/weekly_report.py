@@ -38,6 +38,9 @@ async def collect(db, days: int = 7, now: datetime | None = None) -> dict:
         "register": counters.get(stats_service.REGISTER, 0),
         "feedback": counters.get(stats_service.FEEDBACK, 0),
         "push_failed": counters.get(stats_service.PUSH_FAILED, 0),
+        "export": counters.get(stats_service.EXPORT, 0),
+        "library_import": counters.get(stats_service.LIBRARY_IMPORT, 0),
+        "more_papers": counters.get(stats_service.MORE_PAPERS, 0),
         "free_searches": free_searches,
         "free_chats": free_chats,
         "new_users": await count(User, User.created_at),
@@ -50,11 +53,12 @@ async def collect(db, days: int = 7, now: datetime | None = None) -> dict:
         "active_subs": int(await db.scalar(
             select(func.count()).select_from(Subscription).where(Subscription.active == True)) or 0),  # noqa: E712
     }
-    data["has_activity"] = any(data[k] for k in ("search", "chat", "register", "feedback", "new_users", "new_saved"))
+    data["has_activity"] = any(data[k] for k in ("search", "chat", "register", "feedback", "new_users", "new_saved",
+                                                 "export", "library_import"))
     return data
 
 
-def _format(data: dict, balance: float | None, now: datetime) -> dict:
+def _format(data: dict, balance: float | None, now: datetime, openalex: dict | None = None) -> dict:
     start = (now - timedelta(days=7)).strftime("%Y-%m-%d")
     rows = [
         ("打开网站", f"{data['page_open']} 次"),
@@ -64,13 +68,19 @@ def _format(data: dict, balance: float | None, now: datetime) -> dict:
         ("新留言", f"{data['new_feedback']} 条"),
         ("收藏论文", f"{data['new_saved']} 篇"),
         ("订阅推送", f"{data['pushed']} 篇"),
+        ("导出文献", f"{data.get('export', 0)} 次"),
+        ("从 Zotero 导入", f"{data.get('library_import', 0)} 次"),
     ]
     notes = [
         f"免费额度消耗：搜索 {data['free_searches']} 次、对话 {data['free_chats']} 次（未登录访客）",
         f"累计注册 {data['total_users']} 人 · 启用中的订阅 {data['active_subs']} 个",
     ]
+    if data.get("more_papers"):
+        notes.append(f"首批结果之后又补充了 {data['more_papers']} 篇论文（引用链 + 换词检索）")
     if balance is not None:
         notes.append(f"DeepSeek 余额：¥{balance:.2f}")
+    if openalex:
+        notes.append(f"OpenAlex 今日剩余额度：${openalex['remaining']:.3f} / ${openalex['limit']:.2f}")
     if data["push_failed"]:
         notes.append(f"⚠️ 有 {data['push_failed']} 封订阅推送邮件发送失败，需要检查")
     if data["search"] and not data["register"]:
@@ -85,7 +95,7 @@ async def run_weekly_report(force: bool = False) -> bool:
     """定时任务入口。返回是否真的发出了邮件。"""
     from database import AsyncSessionLocal
     from services.email_service import send_weekly_summary
-    from services.health_monitor import deepseek_balance
+    from services.health_monitor import deepseek_balance, openalex_budget
 
     now = datetime.utcnow()
     async with AsyncSessionLocal() as db:
@@ -94,4 +104,4 @@ async def run_weekly_report(force: bool = False) -> bool:
         logger.info("Weekly summary skipped: no activity")
         return False
     balance = await deepseek_balance()
-    return await send_weekly_summary(_format(data, balance, now))
+    return await send_weekly_summary(_format(data, balance, now, openalex_budget()))

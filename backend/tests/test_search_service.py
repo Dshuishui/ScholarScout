@@ -421,6 +421,7 @@ async def test_openalex_semantic_filters_dates_client_side(monkeypatch):
 
     class Resp:
         status_code = 200
+        headers = {}
         def raise_for_status(self): pass
         def json(self):
             return {"results": [
@@ -509,6 +510,7 @@ async def test_openalex_title_abstract_request_uses_filter_and_sort():
 
     class Resp:
         status_code = 200
+        headers = {}
         def raise_for_status(self): pass
         def json(self): return {"results": []}
 

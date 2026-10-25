@@ -9,7 +9,7 @@ import xml.etree.ElementTree as ET
 import feedparser
 import httpx
 from models import Paper, ParsedQuery
-from services.health_monitor import record_source_result
+from services.health_monitor import record_openalex_budget, record_source_result
 import config
 from config import (
     CORE_API_KEY, NASA_ADS_API_KEY, SERPAPI_KEY, OPENALEX_API_KEY, SEMANTIC_SCHOLAR_HEADERS, POLITE_EMAIL,
@@ -212,6 +212,7 @@ async def _openalex_get(client: httpx.AsyncClient, params: dict) -> list[dict]:
         params=params,
         headers={"User-Agent": f"ScholarScout/1.0 (mailto:{POLITE_EMAIL})"},
     )
+    record_openalex_budget(resp.headers)
     resp.raise_for_status()
     return resp.json().get("results", [])
 

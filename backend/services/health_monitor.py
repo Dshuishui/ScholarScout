@@ -15,6 +15,7 @@
   - 一小时内错误日志突增 → 告警（功能坏了但没崩的情况）
   - 订阅推送邮件发送失败 → 告警
   - 第一次有真实用户完成搜索 → 通知（好消息也要知道）
+  - OpenAlex 当天额度剩不到 20% → 告警（每次搜索要调用 OpenAlex 5-12 次，额度用完后结果会明显变差）
 同一问题每天最多发一封邮件。统计只在内存里，重启后清空，足够发现持续性故障。
 """
 import json
@@ -34,6 +35,8 @@ MIN_CALLS = 5                  # 窗口内至少调用这么多次才下结论�
 STALLED_SUB_DAYS = 3
 ALERT_COOLDOWN_SEC = 24 * 3600
 TRIAL_CAP_ALERT_RATIO = 0.8    # 未登录体验用到每日上限的 80% 就提醒
+OPENALEX_BUDGET_ALERT_RATIO = 0.2  # OpenAlex 当天额度剩不到 20% 就提醒
+OPENALEX_READING_MAX_AGE = 2 * 3600  # 太久没调用 OpenAlex 时，旧读数（可能已经重置）不作数
 
 # 源名 → deque[(时间戳, 返回篇数)]，保留最近两个窗口
 _calls: dict[str, deque] = defaultdict(lambda: deque(maxlen=2000))
@@ -61,6 +64,40 @@ def _save_alert_state() -> None:
         ALERT_STATE_FILE.write_text(json.dumps(_last_alert))
     except OSError as e:
         logger.warning("Failed to persist alert state: %s", e)
+
+
+_openalex_budget: dict = {}
+
+
+def record_openalex_budget(headers) -> None:
+    """记下 OpenAlex 响应头里当天的额度（美元）。读不到就忽略。"""
+    try:
+        limit = float(headers.get("x-ratelimit-limit-usd"))
+        remaining = float(headers.get("x-ratelimit-remaining-usd"))
+    except (TypeError, ValueError):
+        return
+    reset = str(headers.get("x-ratelimit-reset") or "")
+    _openalex_budget.update(limit=limit, remaining=remaining,
+                            reset_sec=int(reset) if reset.isdigit() else None, at=time.time())
+
+
+def openalex_budget(now: float | None = None) -> dict | None:
+    """最近一次读到的 OpenAlex 额度；太久没有新读数时返回 None。"""
+    now = now or time.time()
+    if not _openalex_budget or now - _openalex_budget["at"] > OPENALEX_READING_MAX_AGE:
+        return None
+    return dict(_openalex_budget)
+
+
+def openalex_budget_problem(now: float) -> tuple[str, str] | None:
+    b = openalex_budget(now)
+    if not b or b["limit"] <= 0 or b["remaining"] >= b["limit"] * OPENALEX_BUDGET_ALERT_RATIO:
+        return None
+    reset = f"，约 {b['reset_sec'] // 3600} 小时后重置" if b.get("reset_sec") else ""
+    return ("openalex-budget",
+            f"OpenAlex 今天的额度只剩 ${b['remaining']:.3f}（共 ${b['limit']:.2f}{reset}）。用完后 OpenAlex 会拒绝请求，"
+            f"搜索只剩其他来源，结果会明显变差。每次搜索要调用 OpenAlex 5-12 次；访问量一直这么大的话，"
+            f"需要向 OpenAlex 申请更高额度")
 
 
 def record_source_result(source: str, count: int) -> None:
@@ -288,7 +325,7 @@ async def run_health_check() -> list[str]:
     if low_balance:
         problems.append(low_balance)
 
-    for check in (disk_problem(), error_spike_problem(now)):
+    for check in (disk_problem(), error_spike_problem(now), openalex_budget_problem(now)):
         if check:
             problems.append(check)
 

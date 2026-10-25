@@ -19,6 +19,10 @@ CHAT = "chat"
 REGISTER = "register"
 FEEDBACK = "feedback"
 PUSH_FAILED = "push_failed"
+# 2026-10 新功能有没有人用：导出文献、从 Zotero 导入订阅方向、首屏之后补来的论文篇数
+EXPORT = "export"
+LIBRARY_IMPORT = "library_import"
+MORE_PAPERS = "more_papers"
 
 
 async def bump(db: AsyncSession, name: str, n: int = 1, day: str | None = None) -> None:

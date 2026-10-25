@@ -348,3 +348,33 @@ async def test_first_user_check_stops_after_notifying(db_session, monitor):
 
     monitor._should_alert("first-user", time.time())   # 模拟已经发过通知
     assert await monitor.first_real_user(db_session) is None
+
+
+def test_openalex_budget_alert(monitor):
+    now = time.time()
+    monitor._openalex_budget.clear()
+    assert monitor.openalex_budget_problem(now) is None              # 还没调用过 OpenAlex
+    monitor.record_openalex_budget({"x-ratelimit-limit-usd": "1", "x-ratelimit-remaining-usd": "0.5"})
+    assert monitor.openalex_budget_problem(now) is None
+    monitor.record_openalex_budget({"x-ratelimit-limit-usd": "1", "x-ratelimit-remaining-usd": "0.12",
+                                    "x-ratelimit-reset": "7300"})
+    key, msg = monitor.openalex_budget_problem(time.time())
+    assert key == "openalex-budget" and "$0.120" in msg and "2 小时后重置" in msg
+    assert monitor.openalex_budget_problem(time.time() + 3 * 3600) is None  # 读数太旧，可能已经重置
+    monitor.record_openalex_budget({"x-ratelimit-limit-usd": "oops"})     # 读不到就忽略，不报错
+    monitor._openalex_budget.clear()
+
+
+async def test_new_feature_counters_reach_weekly_report(db_session, client):
+    from datetime import datetime
+    from services import stats, weekly_report
+    assert (await client.post("/api/events/export", headers={"X-Real-IP": "1.1.1.1"})).status_code == 204
+    await stats.bump(db_session, stats.LIBRARY_IMPORT)
+    await stats.bump(db_session, stats.MORE_PAPERS, 13)
+    data = await weekly_report.collect(db_session, days=7)
+    assert (data["export"], data["library_import"], data["more_papers"]) == (1, 1, 13)
+    assert data["has_activity"] is True
+    report = weekly_report._format(data, None, datetime.utcnow(), {"remaining": 0.42, "limit": 1.0})
+    assert ("导出文献", "1 次") in report["rows"] and ("从 Zotero 导入", "1 次") in report["rows"]
+    assert any("又补充了 13 篇" in n for n in report["notes"])
+    assert any("$0.420 / $1.00" in n for n in report["notes"])
