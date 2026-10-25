@@ -146,14 +146,17 @@ async def parse_query(user_query: str, api_key: str, history: list[dict] = [], m
     return parsed
 
 
+# 每批篇数越少，AI 要写的输出越短、各批并行越快：2026-10 实测 20 篇一批要 22-24 秒，5 篇一批 11-17 秒。
+# 再拆成"先只打分、再补理由"首屏还能快约 5 秒，但理由要晚 10 秒才出来、改动大，没做
+VALIDATE_BATCH_SIZE = 5
+
+
 async def validate_papers(
     papers: list[Paper], user_query: str, api_key: str, model: str = DEEPSEEK_MODEL
 ) -> tuple[list[Paper], list[Paper]]:
     """返回 (accepted, rejected) 两个列表。"""
     if not papers:
         return [], []
-
-    BATCH_SIZE = 20
 
     async def _validate_batch(batch: list[Paper]) -> tuple[list[Paper], list[Paper]]:
         papers_text = "\n\n".join(
@@ -196,7 +199,7 @@ async def validate_papers(
                 logger.warning("Validation batch of %d failed twice, keeping unscored: %s", len(batch), first_error)
                 return list(batch), []
 
-    batches = [papers[i:i + BATCH_SIZE] for i in range(0, len(papers), BATCH_SIZE)]
+    batches = [papers[i:i + VALIDATE_BATCH_SIZE] for i in range(0, len(papers), VALIDATE_BATCH_SIZE)]
     batch_results = await asyncio.gather(*[_validate_batch_with_retry(b) for b in batches])
 
     accepted: list[Paper] = []

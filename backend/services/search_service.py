@@ -29,15 +29,16 @@ RETRY_ATTEMPTS = 3
 RETRY_MAX_WAIT = 8.0
 
 
-async def _get_with_retry(client: httpx.AsyncClient, url: str, **kwargs) -> httpx.Response:
+async def _get_with_retry(client: httpx.AsyncClient, url: str, attempts: int = RETRY_ATTEMPTS,
+                          **kwargs) -> httpx.Response:
     """限流 / 上游临时故障时按指数退避重试（2s、4s…，带抖动，上限 8s）。
 
     有 Retry-After 就听服务端的。多个数据源同时被限流时，抖动能避免重试请求再次撞在一起。
     """
     wait = 2.0
-    for attempt in range(RETRY_ATTEMPTS):
+    for attempt in range(attempts):
         resp = await client.get(url, **kwargs)
-        if resp.status_code not in RETRY_STATUS or attempt == RETRY_ATTEMPTS - 1:
+        if resp.status_code not in RETRY_STATUS or attempt == attempts - 1:
             return resp
         try:
             retry_after = float(resp.headers.get("retry-after", ""))
@@ -60,9 +61,9 @@ async def _search_arxiv(parsed: ParsedQuery, limit: int) -> list[Paper]:
         # 有时间范围也按相关性排：按日期排拿回的是"最新的、沾点边的"，不是最相关的
         sort_by = "relevance"
 
-        # arXiv 要么几秒内返回，要么一直卡到超时（2026-10 实测 4 次里 3 次卡满 25 秒），
-        # 整个搜索要等最慢的源，超时设短一些
-        async with httpx.AsyncClient(timeout=15) as client:
+        # arXiv 要么三四秒内返回，要么一直卡到超时（2026-10 实测 4 次里 3 次卡满），
+        # 整个搜索要等最慢的源：15 秒时它常常一个人拖住整次搜索，降到 8 秒
+        async with httpx.AsyncClient(timeout=8) as client:
             resp = await _get_with_retry(
                 client,
                 "https://export.arxiv.org/api/query",
@@ -119,6 +120,8 @@ async def _search_semantic_scholar(parsed: ParsedQuery, limit: int) -> list[Pape
             resp = await _get_with_retry(
                 client,
                 "https://api.semanticscholar.org/graph/v1/paper/search",
+                # 没有 key 时用的是全球共享额度，429 后等几秒重试几乎从不成功，只会让整次搜索多等 6 秒
+                attempts=RETRY_ATTEMPTS if SEMANTIC_SCHOLAR_HEADERS else 1,
                 params=params,
                 headers=SEMANTIC_SCHOLAR_HEADERS,
             )

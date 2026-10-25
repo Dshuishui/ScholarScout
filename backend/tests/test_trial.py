@@ -418,3 +418,28 @@ async def test_empty_search_without_alternative_refunds(client, trial):
     trial["search_all_sources"].return_value = []
     events = dict(_events(await _search(client)))
     assert events["done"]["papers"] == [] and events["done"]["refunded"]
+
+
+async def test_parse_runs_intent_and_keywords_concurrently(client, trial, monkeypatch):
+    """意图判断和关键词提取同时发；闲聊时关键词提取失败也不影响回复。"""
+    import asyncio
+    import routers.search as sr
+    both_started = asyncio.Event()
+    started = []
+
+    async def intent(q, key, history):
+        started.append("intent")
+        await asyncio.wait_for(both_started.wait(), 1)  # 串行执行时这里会超时
+        return {"intent": "chat", "reply": "你好"}
+
+    async def parse(q, key, history):
+        started.append("parse")
+        both_started.set()
+        raise ValueError("bad json")
+
+    monkeypatch.setattr(sr, "classify_intent", intent)
+    monkeypatch.setattr(sr, "parse_query", parse)
+    r = await client.post("/api/parse", json={"query": "你好"},
+                          headers={"X-Trial-Device": DEVICE_A, "X-Real-IP": "1.1.1.1"})
+    assert r.status_code == 200 and r.json() == {"intent": "chat", "reply": "你好"}
+    assert sorted(started) == ["intent", "parse"]

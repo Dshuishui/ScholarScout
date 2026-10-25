@@ -96,8 +96,10 @@ async def test_validate_papers_empty_input():
 
 
 @pytest.mark.asyncio
-async def test_validate_papers_failed_batch_is_retried_then_kept():
+async def test_validate_papers_failed_batch_is_retried_then_kept(monkeypatch):
     # 回归：某一批调用失败时，这 20 篇曾既不在 accepted 也不在 rejected，悄悄消失
+    import services.llm_service as llm
+    monkeypatch.setattr(llm, "VALIDATE_BATCH_SIZE", 20)
     papers = [Paper(paper_id=str(i), title=f"P{i}", authors=["A"], source="arXiv") for i in range(25)]
     ok = _mock_llm({"results": [{"id": str(i), "score": 8, "reason": "r", "tldr": "t"} for i in range(20, 25)]})
 

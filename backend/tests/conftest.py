@@ -81,3 +81,14 @@ async def make_verified_user(db_session: AsyncSession, email: str = "u@test.com"
     await db_session.refresh(user)
     token = create_access_token(user.id)
     return user, token
+
+
+@pytest.fixture(autouse=True)
+def no_real_llm_in_search_router(monkeypatch):
+    """/api/parse 同时发意图判断和关键词提取：只替换了意图判断的用例，关键词提取也不能真的去连 DeepSeek。
+    需要特定行为的用例自己再覆盖。"""
+    from unittest.mock import AsyncMock
+    import routers.search as search_router
+    from models import ParsedQuery
+    monkeypatch.setattr(search_router, "classify_intent", AsyncMock(return_value={"intent": "search"}))
+    monkeypatch.setattr(search_router, "parse_query", AsyncMock(return_value=ParsedQuery(keywords=["test"])))
