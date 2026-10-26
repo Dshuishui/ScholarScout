@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { useAuth } from '../hooks/useAuth'
+import { useAccess } from '../hooks/useAccess'
 import { AuthModal } from './AuthModal'
 import { AccountSettingsModal } from './AccountSettingsModal'
 import { LegalModal } from './LegalModal'
@@ -10,7 +11,9 @@ interface Props {
 
 export function UserMenu({ onNavigate }: Props) {
   const { user, logout, isLoggedIn } = useAuth()
-  const freeSearches = user?.freeSearches ?? 0
+  const { mode } = useAccess()
+  // 用自己的 Key 搜索不扣免费次数，这时再显示剩余次数只会让人以为在扣
+  const freeSearches = mode === 'own_key' ? 0 : user?.freeSearches ?? 0
   const [showModal, setShowModal] = useState(false)
   const [open, setOpen] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
