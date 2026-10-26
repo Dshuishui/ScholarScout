@@ -14,6 +14,7 @@ const SOURCE_STYLES: Record<string, { bar: string; badge: string }> = {
   'CORE':             { bar: 'bg-cyan-500',    badge: 'bg-cyan-50 text-cyan-700 border-cyan-200' },
   'NASA ADS':         { bar: 'bg-sky-500',     badge: 'bg-sky-50 text-sky-700 border-sky-200' },
   'Google Scholar':   { bar: 'bg-amber-400',   badge: 'bg-amber-50 text-amber-700 border-amber-200' },
+  '中文文献':          { bar: 'bg-rose-500',    badge: 'bg-rose-50 text-rose-700 border-rose-200' },
 }
 const DEFAULT_STYLE = { bar: 'bg-gray-300', badge: 'bg-gray-50 text-gray-600 border-gray-200' }
 
@@ -28,6 +29,7 @@ const SOURCE_DESCRIPTIONS: Record<string, string> = {
   'CORE':             'CORE — 1.7亿+ 开放获取全文',
   'NASA ADS':         'NASA ADS — 天文学与天体物理专业库',
   'Google Scholar':   'Google Scholar — 综合搜索，含灰色文献',
+  '中文文献':          '中文文献 — 用中文检索词从 OpenAlex、CrossRef 查到的中文期刊论文（有 DOI 的）',
 }
 
 interface Props {
@@ -83,7 +85,7 @@ export function PaperCard({ paper, selected = false, onToggle, isRejected = fals
   // CrossRef 的链接就是这个 DOI，OpenAlex 的是数据库条目页，有 DOI 时都不再单独列，免得用户不知道点哪个
   const doiUrl = paper.doi ? `https://doi.org/${paper.doi}` : null
   const sourceLinks = links.filter(l =>
-    l.source !== 'Google Scholar' && !(doiUrl && (l.source === 'CrossRef' || l.source === 'OpenAlex')))
+    l.source !== 'Google Scholar' && !(doiUrl && ['CrossRef', 'OpenAlex', '中文文献'].includes(l.source)))
   // 百度学术常驻在下面（国内不翻墙能打开），不再在"找全文"里重复
   const baiduUrl = `https://xueshu.baidu.com/s?wd=${encodeURIComponent(paper.title)}`
   const findLinks = (paper.fallback_links ?? []).filter(fl =>

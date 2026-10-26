@@ -61,7 +61,7 @@ export async function* searchPapers(
   apiKey: string,
   history: { role: string; content: string }[] = [],
   settings: { limitPerSource?: number; validatedLimit?: number; selectedSources?: string[] } = {},
-  confirmed?: { keywords: string[]; date_from?: string | null; date_to?: string | null; domains?: string[]; concepts?: string[][] },
+  confirmed?: { keywords: string[]; date_from?: string | null; date_to?: string | null; domains?: string[]; concepts?: string[][]; zh_keywords?: string[] },
   model?: string,
   trial?: TrialAuth,
 ): AsyncGenerator<SearchEvent> {
@@ -82,6 +82,7 @@ export async function* searchPapers(
         date_to: confirmed.date_to ?? null,
         domains: confirmed.domains ?? null,
         concepts: confirmed.concepts ?? null,
+        zh_keywords: confirmed.zh_keywords ?? null,
       }),
     }),
   })

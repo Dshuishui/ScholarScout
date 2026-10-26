@@ -59,7 +59,7 @@ export function MainLayout() {
 
   const {
     messages, papers, previewPapers, previewTotal, rejectedPapers, isLoading, statusMessage, sourceStatuses,
-    search, confirmedKeywords, reSearch,
+    search, confirmedKeywords, zhKeywords, reSearch,
     hasSearchError, history, removeHistory, searchFromHistory, searchDateRange,
     currentSessionId, loadSession,
   } = useSearch(apiKey, settings, model)
@@ -371,6 +371,7 @@ export function MainLayout() {
             onSettingsChange={updateSettings}
             onReSearch={reSearch}
             confirmedKeywords={confirmedKeywords}
+            zhKeywords={zhKeywords}
             onAnalyzePaper={handleAnalyzePaper}
             onExampleSearch={search}
             apiKey={apiKey}

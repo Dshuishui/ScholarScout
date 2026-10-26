@@ -458,3 +458,15 @@ async def test_parse_force_search_skips_intent(client, trial, monkeypatch):
     r = await client.post("/api/parse", json={"query": "镁基储氢怎么改进", "force_search": True}, headers=headers)
     assert r.json()["intent"] == "search" and r.json()["keywords"] == ["MgH2 dehydrogenation"]
     assert intent.await_count == 1
+
+
+async def test_chinese_keywords_flow_from_parse_to_search(client, trial, monkeypatch):
+    import routers.search as sr
+    from models import ParsedQuery
+    monkeypatch.setattr(sr, "parse_query", AsyncMock(return_value=ParsedQuery(
+        keywords=["hydrogen storage"], zh_keywords=["镁基储氢材料"])))
+    headers = {"X-Trial-Device": DEVICE_A, "X-Real-IP": "1.1.1.1"}
+    r = await client.post("/api/parse", json={"query": "镁基储氢材料"}, headers=headers)
+    assert r.json()["zh_keywords"] == ["镁基储氢材料"]
+    await _search(client, body={**SEARCH_BODY, "zh_keywords": ["镁基储氢材料"]})
+    assert trial["search_all_sources"].call_args.args[0].zh_keywords == ["镁基储氢材料"]

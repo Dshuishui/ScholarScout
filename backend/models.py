@@ -27,6 +27,7 @@ class SearchRequest(BaseModel):
     sources: Optional[list[str]] = Field(default=None, max_length=15)
     domains: Optional[list[str]] = Field(default=None, max_length=10)  # parse 阶段识别的学科领域，用于选源
     concepts: Optional[list[list[str]]] = Field(default=None, max_length=10)  # parse 阶段拆出的概念组，用于取交集检索
+    zh_keywords: Optional[list[str]] = Field(default=None, max_length=10)  # parse 阶段给的中文检索词，用于查中文论文
     model: Optional[str] = Field(default=None, max_length=100)
 
 
@@ -59,6 +60,7 @@ class ValidateKeyRequest(BaseModel):
 
 MAX_CONCEPT_GROUPS = 3
 MAX_TERMS_PER_CONCEPT = 4
+MAX_ZH_KEYWORDS = 6
 
 
 class ParsedQuery(BaseModel):
@@ -70,6 +72,16 @@ class ParsedQuery(BaseModel):
     # 需求里要同时满足的几个概念，每组是同一概念的几种英文说法，
     # 如 [["reinforcement learning"], ["missile guidance", "guidance law"]]；空表示不做交集检索
     concepts: list[list[str]] = []
+    # 中文提问时另给的中文检索词，用来查中文期刊论文；英文提问时为空
+    zh_keywords: list[str] = []
+
+    @field_validator("zh_keywords", mode="before")
+    @classmethod
+    def _normalize_zh_keywords(cls, v):
+        if not isinstance(v, list):
+            return []
+        terms = [t.strip()[:50] for t in v if isinstance(t, str) and t.strip()]
+        return terms[:MAX_ZH_KEYWORDS]
 
     @field_validator("concepts", mode="before")
     @classmethod

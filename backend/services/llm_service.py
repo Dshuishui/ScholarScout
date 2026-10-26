@@ -33,7 +33,8 @@ PARSE_SYSTEM = """你是学术搜索助手。结合对话历史，将用户的�
   "date_to": "YYYY-12-31 或 null",
   "max_results": 30,
   "domains": ["cs"],
-  "concepts": [["概念A的英文说法1", "说法2"], ["概念B的英文说法1"]]
+  "concepts": [["概念A的英文说法1", "说法2"], ["概念B的英文说法1"]],
+  "zh_keywords": ["中文检索词1", "中文检索词2"]
 }
 
 规则：
@@ -48,6 +49,9 @@ PARSE_SYSTEM = """你是学术搜索助手。结合对话历史，将用户的�
   "综述""应用""方法""研究""原理""机制""效果"这类词不算概念
   例如"强化学习用于导弹制导"→ [["reinforcement learning", "adaptive dynamic programming"], ["missile guidance", "guidance law"]]
   例如"transformer 自注意力"→ [["transformer", "self-attention"]]
+- zh_keywords 用来检索中文期刊论文：用户用中文提问时给 2-4 个中文检索词，用中文论文里常见的术语，每个都是短词，不要整句；
+  用户用英文提问时返回 []
+  例如"镁基储氢材料低温脱氢动力学的改进方法"→ ["镁基储氢材料", "氢化镁", "脱氢动力学"]
 - 用户未提时间则 date_from/date_to 为 null
 - "最近两年" 相对今天计算
 - 若用户说"找更多"或"换个方向"，结合历史推断搜索主题"""

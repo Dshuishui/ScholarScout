@@ -13,6 +13,7 @@ import { PaperCardSkeleton } from './PaperCardSkeleton'
 import { getDownloadUrl } from '../api/client'
 import { TrialHint } from './TrialHint'
 import { toast } from './Toast'
+import { ChineseDbLinks } from './ChineseDbLinks'
 
 // 示例跨学科：以前全是计算机方向的，材料、医学、经管的用户一看以为不是给自己用的
 const MIXED_EXAMPLES = [
@@ -34,6 +35,7 @@ const SOURCE_COLORS: Record<string, string> = {
   'CORE':             'text-cyan-600',
   'NASA ADS':         'text-sky-600',
   'Google Scholar':   'text-amber-600',
+  '中文文献':          'text-rose-600',
 }
 
 const ITEMS_PER_PAGE = 20
@@ -55,6 +57,8 @@ interface Props {
   onSettingsChange: (patch: Partial<SearchSettings>) => void
   onReSearch?: (keywords: string[]) => void
   confirmedKeywords?: string[] | null
+  /** 中文提问时的中文检索词，用来拼知网、万方等中文库的跳转链接 */
+  zhKeywords?: string[]
   statusMessage: string
   sourceStatuses?: Record<string, SourceStatus>
   onAnalyzePaper?: (paper: Paper) => void
@@ -213,7 +217,7 @@ function Pagination({ current, total, onChange }: {
   )
 }
 
-export function ResultsPanel({ papers, availableSources, previewPapers = [], previewTotal = 0, rejectedPapers = [], isLoading, statusMessage, sourceStatuses = {}, settings, onSettingsChange, onReSearch, confirmedKeywords, onAnalyzePaper, onExampleSearch, apiKey, getMessages, hasSearchError = false, searchDateRange, sessionId, onOpenRag, onOpenGraph, onRequireKey }: Props) {
+export function ResultsPanel({ papers, availableSources, previewPapers = [], previewTotal = 0, rejectedPapers = [], isLoading, statusMessage, sourceStatuses = {}, settings, onSettingsChange, onReSearch, confirmedKeywords, zhKeywords = [], onAnalyzePaper, onExampleSearch, apiKey, getMessages, hasSearchError = false, searchDateRange, sessionId, onOpenRag, onOpenGraph, onRequireKey }: Props) {
   const [currentPage, setCurrentPage] = useState(1)
   const [showBackToTop, setShowBackToTop] = useState(false)
   const listScrollRef = useRef<HTMLDivElement>(null)
@@ -956,6 +960,13 @@ const addKeyword = () => {
         </div>
       )}
 
+      {/* 中文提问：给知网、万方等中文库的入口，那边独有的论文我们搜不到 */}
+      {confirmedKeywords != null && zhKeywords.length > 0 && (
+        <div className="px-3 sm:px-5 py-2 bg-white border-b border-gray-100">
+          <ChineseDbLinks keywords={zhKeywords} />
+        </div>
+      )}
+
       {/* ── 搜索配置区（手机上默认折叠，结果优先）─────────────────────── */}
       <div className="px-3 sm:px-5 pt-2 sm:pt-3 pb-2 sm:pb-3 bg-white/70 backdrop-blur-sm border-b border-gray-100/80">
         <button
@@ -1301,6 +1312,7 @@ const addKeyword = () => {
                 尝试换用更宽泛的词语，或去掉年份限制
               </p>
             </div>
+            {zhKeywords.length > 0 && <ChineseDbLinks keywords={zhKeywords} prominent />}
             <div className="flex flex-col gap-2 w-full max-w-xs">
               <p className="text-xs text-gray-400 mb-1">换个方向试试 ↓</p>
               {MIXED_EXAMPLES.map(example => (

@@ -277,6 +277,8 @@ Copy `backend/.env.example` to `backend/.env`. All variables have sensible defau
 
 **Unpaywall** automatically supplements DOI-bearing papers with legal open-access PDF links (no key required).
 
+> **Chinese-language papers**: for questions asked in Chinese, the parser also produces Chinese search terms, which are run against OpenAlex (Chinese-language works only) and CrossRef to find DOI-registered Chinese journal articles; they are labelled 中文文献 and screened together with the English results. CNKI, Wanfang and VIP have no open API, so the results page links to a search for the same Chinese terms on each of them.
+
 ---
 
 ## Deployment

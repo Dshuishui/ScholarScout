@@ -26,6 +26,8 @@ interface PendingSearch {
   domains?: string[]
   /** 解析出的概念组，后端用来取交集检索；用户改了关键词就不再适用 */
   concepts?: string[][]
+  /** 中文提问时的中文检索词：后端用来查中文论文，结果页用来拼知网、万方的跳转链接 */
+  zh_keywords?: string[]
   query: string
   history: { role: string; content: string }[]
 }
@@ -143,7 +145,8 @@ export function useSearch(apiKey: string, settings: SearchSettings, model?: stri
     try {
       for await (const event of searchPapers(
         pending.query, apiKey, pending.history, settings,
-        { keywords, date_from: pending.date_from, date_to: pending.date_to, domains: pending.domains, concepts: pending.concepts },
+        { keywords, date_from: pending.date_from, date_to: pending.date_to, domains: pending.domains, concepts: pending.concepts,
+          zh_keywords: pending.zh_keywords },
         model,
         trialAuth,
       )) {
@@ -299,6 +302,7 @@ export function useSearch(apiKey: string, settings: SearchSettings, model?: stri
           date_to: result.date_to,
           domains: result.domains,
           concepts: result.concepts,
+          zh_keywords: result.zh_keywords,
           query,
           history,
         }
@@ -420,6 +424,7 @@ export function useSearch(apiKey: string, settings: SearchSettings, model?: stri
     searchDateRange,
     search,
     confirmedKeywords: lastConfirmed?.keywords ?? null,
+    zhKeywords: lastConfirmed?.zh_keywords ?? [],
     reSearch: lastConfirmed ? reSearch : undefined,
     hasSearchError,
     history,

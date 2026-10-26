@@ -734,92 +734,126 @@ async def _search_nasa_ads(parsed: ParsedQuery, limit: int) -> list[Paper]:
         return []
 
 
+_CROSSREF_SELECT = ("DOI,title,author,published-print,published-online,abstract,is-referenced-by-count,URL,link,"
+                    "license,container-title")
+
+
+async def _crossref_query(query: str, rows: int, date_from: str | None = None) -> list[dict]:
+    params: dict = {"query": query, "rows": rows, "mailto": POLITE_EMAIL, "select": _CROSSREF_SELECT}
+    if date_from:
+        params["filter"] = f"from-pub-date:{date_from[:4]}"
+    async with httpx.AsyncClient(timeout=20) as client:
+        resp = await _get_with_retry(
+            client,
+            "https://api.crossref.org/works",
+            params=params,
+            headers={"User-Agent": f"ScholarScout/1.0 (mailto:{POLITE_EMAIL})"},
+        )
+        resp.raise_for_status()
+        return resp.json().get("message", {}).get("items", [])
+
+
+def _crossref_item_to_paper(item: dict) -> Paper | None:
+    titles = item.get("title") or []
+    title = titles[0].strip() if titles else ""
+    if not title:
+        return None
+
+    doi = item.get("DOI")
+
+    # 日期：优先 published-print，其次 published-online
+    pub_date = None
+    for date_key in ("published-print", "published-online", "created"):
+        parts_wrap = (item.get(date_key) or {}).get("date-parts", [[]])
+        if parts_wrap and parts_wrap[0]:
+            parts = parts_wrap[0]
+            year = parts[0] if len(parts) > 0 else None
+            month = parts[1] if len(parts) > 1 else 1
+            day = parts[2] if len(parts) > 2 else 1
+            if year:
+                pub_date = f"{year}-{month:02d}-{day:02d}"
+                break
+
+    authors = []
+    for a in (item.get("author") or [])[:10]:
+        given = a.get("given", "")
+        family = a.get("family", "")
+        name = f"{given} {family}".strip() if given else family
+        if name:
+            authors.append(name)
+
+    # 摘要是 JATS XML，统一在 _sanitize_paper 里清洗
+    abstract = item.get("abstract") or None
+
+    # link 里的 PDF 是出版社给文本挖掘用的链接，收费论文也有，读者点开是付费墙。
+    # 只有知识共享许可的才算开放获取；其余交给 Unpaywall 去找真正免费的版本
+    pdf_url = None
+    open_license = any("creativecommons.org" in (lic.get("URL") or "") for lic in item.get("license") or [])
+    for link in (item.get("link") or []) if open_license else []:
+        if "pdf" in (link.get("content-type") or "").lower():
+            pdf_url = link.get("URL")
+            break
+
+    url = item.get("URL") or (f"https://doi.org/{doi}" if doi else None)
+    paper_id = f"crossref_{doi.replace('/', '_')}" if doi else f"crossref_{abs(hash(title))}"
+
+    venue = (item.get("container-title") or [None])[0]
+    return Paper(
+        paper_id=paper_id,
+        title=title,
+        authors=authors,
+        abstract=abstract,
+        published_date=pub_date,
+        doi=doi,
+        pdf_url=pdf_url,
+        url=url,
+        source="CrossRef",
+        citations=item.get("is-referenced-by-count", 0) or 0,
+        venue=venue,
+    )
+
+
 async def _search_crossref(parsed: ParsedQuery, limit: int) -> list[Paper]:
     """CrossRef：1.5亿+ 文献元数据，无需 Key，覆盖人文 / 工程 / 自然科学"""
     try:
-        params: dict = {
-            "query": " ".join(parsed.keywords),
-            "rows": limit,
-            "mailto": POLITE_EMAIL,
-            "select": "DOI,title,author,published-print,published-online,abstract,is-referenced-by-count,URL,link,"
-                      "license,container-title",
-        }
-        if parsed.date_from:
-            params["filter"] = f"from-pub-date:{parsed.date_from[:4]}"
-
-        async with httpx.AsyncClient(timeout=20) as client:
-            resp = await _get_with_retry(
-                client,
-                "https://api.crossref.org/works",
-                params=params,
-                headers={"User-Agent": f"ScholarScout/1.0 (mailto:{POLITE_EMAIL})"},
-            )
-            resp.raise_for_status()
-            data = resp.json()
-
-        papers = []
-        for item in data.get("message", {}).get("items", []):
-            titles = item.get("title") or []
-            title = titles[0].strip() if titles else ""
-            if not title:
-                continue
-
-            doi = item.get("DOI")
-
-            # 日期：优先 published-print，其次 published-online
-            pub_date = None
-            for date_key in ("published-print", "published-online", "created"):
-                parts_wrap = (item.get(date_key) or {}).get("date-parts", [[]])
-                if parts_wrap and parts_wrap[0]:
-                    parts = parts_wrap[0]
-                    year = parts[0] if len(parts) > 0 else None
-                    month = parts[1] if len(parts) > 1 else 1
-                    day = parts[2] if len(parts) > 2 else 1
-                    if year:
-                        pub_date = f"{year}-{month:02d}-{day:02d}"
-                        break
-
-            authors = []
-            for a in (item.get("author") or [])[:10]:
-                given = a.get("given", "")
-                family = a.get("family", "")
-                name = f"{given} {family}".strip() if given else family
-                if name:
-                    authors.append(name)
-
-            # 摘要是 JATS XML，统一在 _sanitize_paper 里清洗
-            abstract = item.get("abstract") or None
-
-            # link 里的 PDF 是出版社给文本挖掘用的链接，收费论文也有，读者点开是付费墙。
-            # 只有知识共享许可的才算开放获取；其余交给 Unpaywall 去找真正免费的版本
-            pdf_url = None
-            open_license = any("creativecommons.org" in (lic.get("URL") or "") for lic in item.get("license") or [])
-            for link in (item.get("link") or []) if open_license else []:
-                if "pdf" in (link.get("content-type") or "").lower():
-                    pdf_url = link.get("URL")
-                    break
-
-            url = item.get("URL") or (f"https://doi.org/{doi}" if doi else None)
-            paper_id = f"crossref_{doi.replace('/', '_')}" if doi else f"crossref_{abs(hash(title))}"
-
-            venue = (item.get("container-title") or [None])[0]
-            papers.append(Paper(
-                paper_id=paper_id,
-                title=title,
-                authors=authors,
-                abstract=abstract,
-                published_date=pub_date,
-                doi=doi,
-                pdf_url=pdf_url,
-                url=url,
-                source="CrossRef",
-                citations=item.get("is-referenced-by-count", 0) or 0,
-                venue=venue,
-            ))
-        return papers
+        items = await _crossref_query(" ".join(parsed.keywords), limit, parsed.date_from)
+        return [p for p in map(_crossref_item_to_paper, items) if p]
     except Exception as e:
         logger.warning("CrossRef search error: %s", e)
         return []
+
+
+CHINESE_SOURCE = "中文文献"
+_CJK = re.compile(r"[\u4e00-\u9fff]")
+
+
+async def _search_chinese(parsed: ParsedQuery, limit: int) -> list[Paper]:
+    """中文论文：用中文检索词查 OpenAlex（只要中文论文）和 CrossRef，收录的是有 DOI 的中文期刊，
+    如中华医学会系列、《中国科学》。知网、万方没有开放接口，搜不到的由前端给跳转入口。"""
+    if not parsed.zh_keywords:
+        return []
+
+    async def openalex() -> list[Paper]:
+        # 中文词不加引号：OpenAlex 对中文按短语匹配时结果反而不准（实测"催化剂掺杂"会带出一堆无关的催化论文）
+        params = {"search": " OR ".join(parsed.zh_keywords), "filter": "language:zh",
+                  "per_page": min(limit, 50), "select": _OPENALEX_SELECT}
+        if parsed.date_from:
+            params["filter"] += f",publication_date:>{parsed.date_from}"
+        async with httpx.AsyncClient(timeout=20) as client:
+            return [_openalex_item_to_paper(it) for it in await _openalex_get(client, params)]
+
+    async def crossref() -> list[Paper]:
+        items = await _crossref_query(" ".join(parsed.zh_keywords), limit, parsed.date_from)
+        # CrossRef 也会返回英文论文，那些英文的几路已经查过了
+        return [p for p in map(_crossref_item_to_paper, items) if p and _CJK.search(p.title)]
+
+    papers: list[Paper] = []
+    for name, result in zip(("OpenAlex", "CrossRef"), await asyncio.gather(openalex(), crossref(), return_exceptions=True)):
+        if isinstance(result, Exception):
+            logger.warning("Chinese search via %s failed: %s", name, result)
+        else:
+            papers.extend(result)
+    return [p.model_copy(update={"source": CHINESE_SOURCE}) for p in papers]
 
 
 async def _search_google_scholar_serpapi(parsed: ParsedQuery, limit: int) -> list[Paper]:
@@ -1063,9 +1097,13 @@ def _normalize_pdf_url(url: str | None) -> str | None:
 
 
 def _sanitize_paper(p: Paper) -> Paper:
-    """清洗标题和摘要里的 HTML 标签、过滤空作者名、规范化 PDF URL。"""
+    """清洗标题、摘要、期刊名里的 HTML，过滤空作者名、规范化 PDF URL。"""
     clean_title = _clean_title(p.title)
     clean_abstract = _clean_abstract(p.abstract)
+    # 期刊名里也有 HTML 实体（Laser &amp; Optoelectronics Progress）；OpenAlex 有时把收录目录 DOAJ 当成期刊名
+    clean_venue = html.unescape(p.venue).strip() if p.venue else p.venue
+    if clean_venue and clean_venue.startswith("DOAJ"):
+        clean_venue = None
     clean_authors = _clean_authors(p.authors)
     clean_pdf_url = _normalize_pdf_url(p.pdf_url)
     updates: dict = {}
@@ -1073,6 +1111,8 @@ def _sanitize_paper(p: Paper) -> Paper:
         updates["title"] = clean_title or p.title
     if clean_abstract != p.abstract:
         updates["abstract"] = clean_abstract
+    if clean_venue != p.venue:
+        updates["venue"] = clean_venue
     if clean_authors != p.authors:
         updates["authors"] = clean_authors
     if clean_pdf_url != p.pdf_url:
@@ -1197,6 +1237,7 @@ _SOURCE_FUNCS: dict = {
     "CORE":             _search_core,
     "NASA ADS":         _search_nasa_ads,
     "Google Scholar":   _search_google_scholar,
+    CHINESE_SOURCE:     _search_chinese,  # 不在勾选列表里：中文提问时自动加上，见 get_source_names
 }
 
 
@@ -1229,17 +1270,23 @@ _SOURCE_KEY_REQUIRED = {
 
 def available_sources() -> list[str]:
     """当前配置下真正可用的数据源。读 config 模块属性而非导入的常量，便于测试替换。"""
-    return [n for n in _SOURCE_FUNCS
-            if not _SOURCE_KEY_REQUIRED.get(n) or getattr(config, _SOURCE_KEY_REQUIRED[n], "")]
+    return [n for n in _SOURCE_FUNCS if n != CHINESE_SOURCE
+            and (not _SOURCE_KEY_REQUIRED.get(n) or getattr(config, _SOURCE_KEY_REQUIRED[n], ""))]
 
 
-def get_source_names(sources: list[str] | None = None, domains: list[str] | None = None) -> list[str]:
-    """Return the list of source names that will actually be searched."""
+def get_source_names(sources: list[str] | None = None, domains: list[str] | None = None,
+                     zh: bool = False) -> list[str]:
+    """Return the list of source names that will actually be searched.
+
+    zh：中文提问（有中文检索词）时加上中文文献。它不受勾选影响：前端本地存的勾选列表里没有它，
+    老用户会永远查不到中文论文。
+    """
     usable = available_sources()
     names = usable if not sources else [k for k in usable if k in sources]
     routed = [n for n in names if _source_matches_domains(n, domains)]
     # 用户手动只勾了专科库（比如只勾 PubMed）时，按领域过滤会一个都不剩：尊重用户的选择
-    return routed or names
+    names = routed or names
+    return names + [CHINESE_SOURCE] if zh else names
 
 
 async def search_all_sources(
@@ -1248,7 +1295,8 @@ async def search_all_sources(
     sources: list[str] | None = None,
     on_source_done=None,  # async callable(name: str, count: int, papers: list[Paper]) | None
 ) -> list[Paper]:
-    funcs = {name: _SOURCE_FUNCS[name] for name in get_source_names(sources, parsed.domains)}
+    funcs = {name: _SOURCE_FUNCS[name]
+             for name in get_source_names(sources, parsed.domains, zh=bool(parsed.zh_keywords))}
 
     async def run_source(name: str, fn) -> list[Paper]:
         papers = await fn(parsed, limit_per_source)

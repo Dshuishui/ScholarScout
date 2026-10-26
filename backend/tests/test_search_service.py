@@ -843,3 +843,53 @@ async def test_backfill_skips_junk_from_one_store(monkeypatch):
                           europepmc={"10.1/a": "Real abstract."})
     [p] = await backfill_abstracts([make_paper("C1", "A", doi="10.1/a", source="CrossRef")], "CrossRef", None)
     assert p.abstract == "Real abstract."
+
+
+# ── 中文文献 ──────────────────────────────────────────────────────────────────
+
+def test_parsed_query_normalizes_zh_keywords():
+    q = ParsedQuery(keywords=["x"], zh_keywords=["  镁基储氢 ", "", 3, "氢化镁", "a", "b", "c", "d", "e"])
+    assert q.zh_keywords == ["镁基储氢", "氢化镁", "a", "b", "c", "d"]
+    assert ParsedQuery(keywords=["x"], zh_keywords=None).zh_keywords == []
+
+
+def test_chinese_source_only_runs_for_chinese_questions():
+    from services.search_service import CHINESE_SOURCE, available_sources, get_source_names
+    assert CHINESE_SOURCE not in available_sources()          # 不出现在搜索设置的勾选里
+    assert CHINESE_SOURCE not in get_source_names(None, ["chem"])
+    assert get_source_names(None, ["chem"], zh=True)[-1] == CHINESE_SOURCE
+    # 用户只勾了某个英文库时，中文提问也照样查中文
+    assert get_source_names(["PubMed"], ["med"], zh=True) == ["PubMed", CHINESE_SOURCE]
+
+
+async def test_search_chinese_queries_openalex_zh_and_crossref(monkeypatch):
+    from services import search_service as s
+    sent = {}
+
+    async def fake_openalex(client, params):
+        sent["openalex"] = params
+        return [{"id": "https://openalex.org/W1", "title": "镁基储氢材料的特性", "authorships": [], "cited_by_count": 3,
+                 "doi": "https://doi.org/10.1/zh1"}]
+
+    async def fake_crossref(query, rows, date_from=None):
+        sent["crossref"] = query
+        return [{"DOI": "10.1/zh2", "title": ["氢化镁脱氢动力学研究"], "URL": "https://doi.org/10.1/zh2"},
+                {"DOI": "10.1/en", "title": ["Hydrogen storage in Mg"], "URL": "https://doi.org/10.1/en"}]
+
+    monkeypatch.setattr(s, "_openalex_get", fake_openalex)
+    monkeypatch.setattr(s, "_crossref_query", fake_crossref)
+    papers = await s._search_chinese(ParsedQuery(keywords=["hydrogen storage"], zh_keywords=["镁基储氢材料", "氢化镁"]), 20)
+    assert sorted(p.doi for p in papers) == ["10.1/zh1", "10.1/zh2"]   # 英文标题的交给英文那几路
+    assert {p.source for p in papers} == {s.CHINESE_SOURCE}
+    assert sent["openalex"]["filter"] == "language:zh"
+    assert sent["openalex"]["search"] == "镁基储氢材料 OR 氢化镁"    # 中文词不加引号：加了引号 OpenAlex 反而搜不准
+    assert sent["crossref"] == "镁基储氢材料 氢化镁"
+    assert await s._search_chinese(ParsedQuery(keywords=["x"]), 20) == []
+
+
+def test_sanitize_paper_cleans_venue():
+    from services.search_service import _sanitize_paper
+    p = make_paper("W1", "T", venue="Laser &amp; Optoelectronics Progress")
+    assert _sanitize_paper(p).venue == "Laser & Optoelectronics Progress"
+    # OpenAlex 有时把收录目录 DOAJ 当成了期刊名
+    assert _sanitize_paper(make_paper("W2", "T", venue="DOAJ (DOAJ: Directory of Open Access Journals)")).venue is None

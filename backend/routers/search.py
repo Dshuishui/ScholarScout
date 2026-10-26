@@ -290,6 +290,7 @@ async def parse(
         "date_to": parsed.date_to,
         "domains": parsed.domains,
         "concepts": parsed.concepts,
+        "zh_keywords": parsed.zh_keywords,
     }
 
 
@@ -327,6 +328,7 @@ async def search(
                     max_results=request.limit_per_source,
                     domains=request.domains or [],
                     concepts=request.concepts or [],
+                    zh_keywords=request.zh_keywords or [],
                 )
             else:
                 # 旧路径：兼容不带关键词的调用
@@ -339,15 +341,16 @@ async def search(
                 parsed = await parse_query(request.query, api_key, history)
 
             kw_str = "、".join(parsed.keywords)
-            cache_keywords = parsed.keywords  # 下面可能换一组检索词再搜，缓存仍按用户确认的关键词存
+            # 下面可能换一组检索词再搜，缓存仍按用户确认的关键词存；中文检索词不同，查到的中文论文也不同
+            cache_keywords = parsed.keywords + parsed.zh_keywords
             yield sse("progress", {"message": f"正在搜索关键词：{kw_str}..."})
 
             # 缓存键用实际要查的数据源（已含按领域选源的结果），避免复用未选源时的缓存
-            source_names = get_source_names(request.sources, parsed.domains)
+            source_names = get_source_names(request.sources, parsed.domains, zh=bool(parsed.zh_keywords))
 
             # Check Redis cache before hitting external APIs
             cached_papers = await get_cached_search(
-                parsed.keywords, source_names,
+                cache_keywords, source_names,
                 parsed.date_from or "", parsed.date_to or "",
             )
             if cached_papers:
