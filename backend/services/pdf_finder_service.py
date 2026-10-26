@@ -10,15 +10,16 @@ from config import KIMI_BASE_URL, KIMI_MODEL
 logger = logging.getLogger(__name__)
 
 # 找不到开放获取 PDF 时，给用户几条合法的自助路径。按"最可能直接拿到全文"排序。
+# 百度学术放在前面：国内不翻墙也能打开，常会列出别处的免费全文；Google 学术、ResearchGate 在国内经常打不开。
+# 以前还有 arXiv 搜索和 BASE，大多数学科用不上，按钮太多反而不知道点哪个，去掉了。
 # 不包含 Sci-Hub：版权风险，且与我们自己的服务条款（只提供公开获取版本）冲突。
 _PLATFORMS = [
     ("出版社原文",       lambda doi, t: f"https://doi.org/{doi}" if doi else None),
+    ("百度学术",         lambda doi, t: f"https://xueshu.baidu.com/s?wd={urllib.parse.quote(t)}"),
     ("Google 学术",      lambda doi, t: f"https://scholar.google.com/scholar?q={urllib.parse.quote(t)}"),
-    ("arXiv 预印本",     lambda doi, t: f"https://arxiv.org/search/?searchtype=all&query={urllib.parse.quote(t)}"),
-    ("Open Access Button", lambda doi, t: f"https://openaccessbutton.org/access?doi={urllib.parse.quote(doi)}" if doi else None),
     ("Semantic Scholar", lambda doi, t: f"https://www.semanticscholar.org/search?q={urllib.parse.quote(t)}"),
     ("ResearchGate",     lambda doi, t: f"https://www.researchgate.net/search?q={urllib.parse.quote(t)}"),
-    ("BASE",             lambda doi, t: f"https://www.base-search.net/Search/Results?q={urllib.parse.quote(t)}"),
+    ("Open Access Button", lambda doi, t: f"https://openaccessbutton.org/access?doi={urllib.parse.quote(doi)}" if doi else None),
 ]
 
 

@@ -819,3 +819,10 @@ async def test_search_all_sources_backfills_each_source(monkeypatch):
     with patch.dict("services.search_service._SOURCE_FUNCS", source_mocks):
         [p] = await search_all_sources(ParsedQuery(keywords=["x"], domains=["cs"]))
     assert p.abstract == "Filled."
+
+
+def test_fallback_links_start_with_publisher_and_china_reachable_search():
+    from services.pdf_finder_service import generate_fallback_links
+    names = [l["name"] for l in generate_fallback_links(make_paper("C1", "Some Title", doi="10.1/x"))]
+    assert names[:2] == ["出版社原文", "百度学术"]
+    assert "百度学术" in [l["name"] for l in generate_fallback_links(make_paper("C2", "No DOI"))]

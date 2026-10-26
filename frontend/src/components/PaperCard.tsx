@@ -50,7 +50,8 @@ export function PaperCard({ paper, selected = false, onToggle, isRejected = fals
   const [abstractExpanded, setAbstractExpanded] = useState(false)
   const { isLoggedIn } = useAuth()
   const showAbstract = !compact || expanded
-  const hasExpandable = compact && (!!paper.abstract || !!paper.relevance_reason)
+  // 紧凑模式下没有摘要也给展开入口：展开后告诉用户去哪看摘要
+  const hasExpandable = compact
   // compact 模式点开即视为看全文；standard 模式长摘要默认截断 3 行，提供独立展开
   const isLongAbstract = (paper.abstract?.length ?? 0) > 180
   const clampAbstract = !compact && !abstractExpanded && isLongAbstract
@@ -78,7 +79,15 @@ export function PaperCard({ paper, selected = false, onToggle, isRejected = fals
     paper.source_links?.find(l => l.source === 'Google Scholar')?.url
     ?? `https://scholar.google.com/scholar?q=${encodeURIComponent(`"${paper.title}"`)}`
 
-  const sourceLinks = links.filter(l => l.source !== 'Google Scholar')
+  // 有 DOI 就固定给一个"原文页面"（跳到出版社官网，摘要和下载入口都在那）。
+  // CrossRef 的链接就是这个 DOI，OpenAlex 的是数据库条目页，有 DOI 时都不再单独列，免得用户不知道点哪个
+  const doiUrl = paper.doi ? `https://doi.org/${paper.doi}` : null
+  const sourceLinks = links.filter(l =>
+    l.source !== 'Google Scholar' && !(doiUrl && (l.source === 'CrossRef' || l.source === 'OpenAlex')))
+  const findLinks = (paper.fallback_links ?? []).filter(fl => !(doiUrl && fl.name === '出版社原文'))
+  // 没有摘要时 AI 只看了标题，打分和总结都要说明
+  const titleOnly = !paper.abstract
+  const abstractElsewhere = doiUrl ?? sourceLinks[0]?.url ?? scholarUrl
 
   // P1: Quality badges
   const isHighlyCited = paper.citations >= 1000
@@ -171,8 +180,8 @@ export function PaperCard({ paper, selected = false, onToggle, isRejected = fals
               </span>
             )}
             {hasOpenAccess && !isRejected && (
-              <span className="text-xs border rounded-full px-2 py-0.5 font-medium bg-emerald-50 text-emerald-700 border-emerald-200" title="可免费获取全文">
-                OA
+              <span className="text-xs border rounded-full px-2 py-0.5 font-medium bg-emerald-50 text-emerald-700 border-emerald-200" title="开放获取，可免费下载全文">
+                免费全文
               </span>
             )}
             {paper.relevance_score != null && !isRejected && (
@@ -215,10 +224,12 @@ export function PaperCard({ paper, selected = false, onToggle, isRejected = fals
             )}
           </div>
 
-          {/* TLDR — 针对用户问题的一句话核心发现 */}
+          {/* 一句话总结：针对用户问题的核心发现；没摘要时只是 AI 根据标题的推测 */}
           {paper.tldr && !isRejected && (
             <div className="flex items-start gap-1 mb-2">
-              <span className="text-indigo-400 flex-shrink-0 text-xs mt-0.5 font-bold">TL;DR</span>
+              <span className="text-indigo-400 flex-shrink-0 text-xs mt-0.5 font-bold whitespace-nowrap">
+                {titleOnly ? '据标题推测' : '一句话总结'}
+              </span>
               <p className="text-xs text-indigo-700/80 leading-relaxed">{paper.tldr}</p>
             </div>
           )}
@@ -244,7 +255,7 @@ export function PaperCard({ paper, selected = false, onToggle, isRejected = fals
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
               </svg>
               <span className="font-medium group-hover:text-blue-500 transition-colors">
-                {expanded ? '收起摘要' : '查看摘要与 AI 分析'}
+                {expanded ? '收起' : paper.abstract ? '查看摘要与 AI 分析' : '暂无公开摘要 · 查看原文入口'}
               </span>
               {!expanded && paper.abstract && (
                 <span className="truncate text-gray-300 flex-1">— {paper.abstract.slice(0, 60)}…</span>
@@ -268,16 +279,24 @@ export function PaperCard({ paper, selected = false, onToggle, isRejected = fals
               )}
             </div>
           )}
-          {/* 不少出版社不公开摘要，各个数据库都查不到：说明一下，免得以为是加载失败 */}
+          {/* 不少出版社不公开摘要，各个数据库都查不到：说明原因，并直接给能看到摘要的地方 */}
           {showAbstract && !paper.abstract && (
-            <p className="text-xs text-gray-400 mb-3">出版社未公开摘要，可点下方来源链接查看原文</p>
+            <div className="text-xs text-gray-500 bg-gray-50 border border-gray-100 rounded-lg px-2.5 py-2 mb-3 leading-relaxed">
+              暂无公开摘要：出版社没有把摘要开放给公共数据库，收费期刊比较常见。
+              <a href={abstractElsewhere} target="_blank" rel="noopener noreferrer"
+                className="ml-1 text-blue-600 hover:text-blue-800 font-medium whitespace-nowrap">
+                {doiUrl ? '去出版社页面看摘要 →' : '去原文页面看看 →'}
+              </a>
+            </div>
           )}
 
           {/* AI relevance reason (full) */}
           {showAbstract && paper.relevance_reason && (
             <div className="flex items-start gap-1.5 bg-blue-50 border border-blue-100 rounded-lg px-2.5 py-2 mb-3">
               <span className="text-blue-400 flex-shrink-0 mt-px text-xs">✦</span>
-              <p className="text-sm text-blue-700 leading-relaxed"><span className="font-medium">为什么推荐：</span>{paper.relevance_reason}</p>
+              <p className="text-sm text-blue-700 leading-relaxed">
+                <span className="font-medium">为什么推荐{titleOnly ? '（仅凭标题判断）' : ''}：</span>{paper.relevance_reason}
+              </p>
             </div>
           )}
 
@@ -285,6 +304,20 @@ export function PaperCard({ paper, selected = false, onToggle, isRejected = fals
           <div className="flex flex-wrap items-end gap-1.5 mt-1">
             {/* 手机上来源 / PDF 链接独占一行，常驻按钮排在下一行，避免被挤成竖排 */}
             <div className="flex flex-wrap gap-1.5 basis-full sm:basis-auto sm:flex-1 min-w-0">
+              {doiUrl && (
+                <a
+                  href={doiUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  title="跳到出版社官网：能看摘要，订阅了的学校可以直接下载"
+                  className="inline-flex items-center gap-1 text-xs font-medium text-gray-700 hover:text-gray-900 border border-gray-300 hover:border-gray-400 bg-white hover:bg-gray-50 rounded-lg px-2.5 py-1 transition-all active:scale-95"
+                >
+                  原文页面
+                  <svg className="w-3 h-3 opacity-60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                  </svg>
+                </a>
+              )}
               {sourceLinks.map(link => (
                 <a
                   key={link.source}
@@ -309,12 +342,12 @@ export function PaperCard({ paper, selected = false, onToggle, isRejected = fals
                   <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
                   </svg>
-                  PDF
+                  下载 PDF
                 </a>
-              ) : paper.fallback_links && paper.fallback_links.length > 0 ? (
+              ) : findLinks.length > 0 ? (
                 <>
-                  <span className="text-xs text-gray-400 py-1 w-full">查找全文：</span>
-                  {paper.fallback_links.map(fl => (
+                  <span className="text-xs text-gray-400 py-1 w-full">没有免费 PDF，可以去这些地方找全文：</span>
+                  {findLinks.map(fl => (
                     <a
                       key={fl.name}
                       href={fl.url}
@@ -329,8 +362,8 @@ export function PaperCard({ paper, selected = false, onToggle, isRejected = fals
                     </a>
                   ))}
                 </>
-              ) : links.length > 0 ? (
-                <span className="text-xs text-gray-300 py-1">无开放获取 PDF</span>
+              ) : links.length > 0 || doiUrl ? (
+                <span className="text-xs text-gray-400 py-1">没有免费 PDF，学校订阅了的话可在原文页面下载</span>
               ) : null}
             </div>
 
