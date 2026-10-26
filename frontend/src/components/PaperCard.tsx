@@ -371,74 +371,77 @@ export function PaperCard({ paper, selected = false, onToggle, isRejected = fals
               ) : null}
             </div>
 
-            {/* 百度学术 — 常驻：国内不翻墙也能打开，常会列出别处的免费全文 */}
-            <a
-              href={baiduUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex-shrink-0 inline-flex flex-col items-center gap-0.5 px-2.5 sm:px-3 py-1.5 rounded-lg border border-sky-200 bg-sky-50 hover:bg-sky-100 hover:border-sky-300 active:bg-sky-200 text-sky-700 transition-all active:scale-95"
-            >
-              <span className="flex items-center gap-1 text-xs font-semibold leading-tight">
-                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                </svg>
-                百度学术
-              </span>
-              <span className="hidden sm:block text-[10px] text-sky-400 leading-none">国内直接打开</span>
-            </a>
-
-            {/* Google Scholar — 电脑上常驻；手机上放不下四个按钮，没有免费 PDF 时在"找全文"里列出 */}
-            <a
-              href={scholarUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="hidden sm:inline-flex flex-shrink-0 flex-col items-center gap-0.5 px-3 py-1.5 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 hover:border-gray-300 text-gray-600 transition-all active:scale-95"
-            >
-              <span className="text-xs font-semibold leading-tight">Google Scholar</span>
-              <span className="text-[10px] text-gray-400 leading-none">引用 · 相关论文</span>
-            </a>
-
-            {/* Bookmark — 常驻 */}
-            {onSave && (
-              <button
-                onClick={e => { e.stopPropagation(); onSave() }}
-                title={isSaved ? '已收藏 · 点击取消收藏' : isLoggedIn ? '收藏到我的文献库' : '登录后可收藏'}
-                className={`flex-shrink-0 inline-flex flex-col items-center gap-0.5 px-2.5 sm:px-3 py-1.5 rounded-lg border transition-all active:scale-95 ${
-                  isSaved
-                    ? 'bg-blue-600 text-white border-blue-600 hover:bg-blue-700'
-                    : 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100 hover:border-blue-300'
-                }`}
-              >
-                <span className="flex items-center gap-1 text-xs font-semibold leading-tight">
-                  <svg className="w-3.5 h-3.5 flex-shrink-0" fill={isSaved ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
-                  </svg>
-                  {isSaved ? '已收藏' : '收藏'}
-                </span>
-                {/* 副文字：已收藏→提示取消，未登录→提示登录，已登录未收藏→透明占位保持高度对齐 */}
-                <span className={`hidden sm:block text-[10px] leading-none ${
-                  isSaved ? 'text-blue-200' : isLoggedIn ? 'invisible' : 'text-blue-400'
-                }`}>
-                  {isSaved ? '点击取消' : '登录后使用'}
-                </span>
-              </button>
-            )}
-
-            {/* AI 对话 — 常驻 */}
-            {onAnalyze && (
-              <button
-                onClick={e => { e.stopPropagation(); onAnalyze() }}
-                className="flex-shrink-0 inline-flex flex-col items-center gap-0.5 px-2.5 sm:px-3 py-1.5 rounded-lg border border-violet-200 bg-violet-50 hover:bg-violet-100 hover:border-violet-300 active:bg-violet-200 text-violet-700 transition-all active:scale-95"
+            {/* 常驻按钮放在一组：电脑上四个按钮放不下时整组换到下一行，不会只把最后一个挤下去 */}
+            <div className="flex items-end gap-1.5 flex-shrink-0 sm:ml-auto">
+              {/* 百度学术 — 常驻：国内不翻墙也能打开，常会列出别处的免费全文 */}
+              <a
+                href={baiduUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex-shrink-0 inline-flex flex-col items-center gap-0.5 px-2.5 sm:px-3 py-1.5 rounded-lg border border-sky-200 bg-sky-50 hover:bg-sky-100 hover:border-sky-300 active:bg-sky-200 text-sky-700 transition-all active:scale-95"
               >
                 <span className="flex items-center gap-1 text-xs font-semibold leading-tight">
                   <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                   </svg>
-                  AI 对话
+                  百度学术
                 </span>
-                <span className="hidden sm:block text-[10px] text-violet-400 leading-none">独立上下文</span>
-              </button>
-            )}
+                <span className="hidden sm:block text-[10px] text-sky-400 leading-none">国内直接打开</span>
+              </a>
+
+              {/* Google Scholar — 电脑上常驻；手机上放不下四个按钮，没有免费 PDF 时在"找全文"里列出 */}
+              <a
+                href={scholarUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="hidden sm:inline-flex flex-shrink-0 flex-col items-center gap-0.5 px-3 py-1.5 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 hover:border-gray-300 text-gray-600 transition-all active:scale-95"
+              >
+                <span className="text-xs font-semibold leading-tight">Google Scholar</span>
+                <span className="text-[10px] text-gray-400 leading-none">引用 · 相关论文</span>
+              </a>
+
+              {/* Bookmark — 常驻 */}
+              {onSave && (
+                <button
+                  onClick={e => { e.stopPropagation(); onSave() }}
+                  title={isSaved ? '已收藏 · 点击取消收藏' : isLoggedIn ? '收藏到我的文献库' : '登录后可收藏'}
+                  className={`flex-shrink-0 inline-flex flex-col items-center gap-0.5 px-2.5 sm:px-3 py-1.5 rounded-lg border transition-all active:scale-95 ${
+                    isSaved
+                      ? 'bg-blue-600 text-white border-blue-600 hover:bg-blue-700'
+                      : 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100 hover:border-blue-300'
+                  }`}
+                >
+                  <span className="flex items-center gap-1 text-xs font-semibold leading-tight">
+                    <svg className="w-3.5 h-3.5 flex-shrink-0" fill={isSaved ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
+                    </svg>
+                    {isSaved ? '已收藏' : '收藏'}
+                  </span>
+                  {/* 副文字：已收藏→提示取消，未登录→提示登录，已登录未收藏→透明占位保持高度对齐 */}
+                  <span className={`hidden sm:block text-[10px] leading-none ${
+                    isSaved ? 'text-blue-200' : isLoggedIn ? 'invisible' : 'text-blue-400'
+                  }`}>
+                    {isSaved ? '点击取消' : '登录后使用'}
+                  </span>
+                </button>
+              )}
+
+              {/* AI 对话 — 常驻 */}
+              {onAnalyze && (
+                <button
+                  onClick={e => { e.stopPropagation(); onAnalyze() }}
+                  className="flex-shrink-0 inline-flex flex-col items-center gap-0.5 px-2.5 sm:px-3 py-1.5 rounded-lg border border-violet-200 bg-violet-50 hover:bg-violet-100 hover:border-violet-300 active:bg-violet-200 text-violet-700 transition-all active:scale-95"
+                >
+                  <span className="flex items-center gap-1 text-xs font-semibold leading-tight">
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+                    </svg>
+                    AI 对话
+                  </span>
+                  <span className="hidden sm:block text-[10px] text-violet-400 leading-none">独立上下文</span>
+                </button>
+              )}
+            </div>
           </div>
         </div>
       </div>
