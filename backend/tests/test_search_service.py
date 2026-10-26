@@ -826,3 +826,20 @@ def test_fallback_links_start_with_publisher_and_china_reachable_search():
     names = [l["name"] for l in generate_fallback_links(make_paper("C1", "Some Title", doi="10.1/x"))]
     assert names[:2] == ["出版社原文", "百度学术"]
     assert "百度学术" in [l["name"] for l in generate_fallback_links(make_paper("C2", "No DOI"))]
+
+
+def test_clean_abstract_drops_scraped_page_text_and_placeholders():
+    from services.search_service import _clean_abstract
+    acs = "ADVERTISEMENT RETURN TO ISSUEPREVArticleNEXTStructural studies of the hydrogen storage material Cite this: Inorg. Chem."
+    assert _clean_abstract(acs) is None
+    assert _clean_abstract("No abstract available.") is None
+    assert _clean_abstract("An abstract is not available for this content so a preview has been provided.") is None
+    assert _clean_abstract("Abstract available methods are compared.") == "Abstract available methods are compared."
+
+
+async def test_backfill_skips_junk_from_one_store(monkeypatch):
+    from services.search_service import backfill_abstracts
+    _stub_abstract_stores(monkeypatch, openalex={"10.1/a": "ADVERTISEMENT RETURN TO ISSUEPREVArticleNEXT..."},
+                          europepmc={"10.1/a": "Real abstract."})
+    [p] = await backfill_abstracts([make_paper("C1", "A", doi="10.1/a", source="CrossRef")], "CrossRef", None)
+    assert p.abstract == "Real abstract."

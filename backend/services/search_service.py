@@ -950,10 +950,12 @@ async def backfill_abstracts(papers: list[Paper], source: str, domains: list[str
                                        return_exceptions=True):
         if isinstance(result, dict):
             for doi, abstract in result.items():
-                found.setdefault(doi, abstract)
+                clean = _clean_abstract(abstract)
+                if clean:  # 一家给的是网页页头这类垃圾时，用另一家的
+                    found.setdefault(doi, clean)
         else:
             logger.info("Abstract backfill for %s failed: %r", source, result)
-    return [p.model_copy(update={"abstract": _clean_abstract(found[p.doi.lower()])})
+    return [p.model_copy(update={"abstract": found[p.doi.lower()]})
             if p.doi and not p.abstract and p.doi.lower() in found else p
             for p in papers]
 
@@ -1019,10 +1021,17 @@ _TAG = re.compile(r"</?[A-Za-z][\w:.-]*(?:\s[^<>]*)?/?>")
 _ABSTRACT_HEADING = re.compile(r"<((?:\w+:)?(?:h[1-6]|title))\b[^>]*>(.*?)</\1>", re.I | re.S)
 
 
+# 不是摘要的"摘要"：OpenAlex 把 ACS 老论文网页的页头当成了摘要（ADVERTISEMENT RETURN TO ISSUE PREV Article NEXT…），
+# 有些出版社填的是"没有摘要"之类的占位语。当作没有摘要处理，卡片上会提示去出版社页面看
+_JUNK_ABSTRACT = re.compile(r"^\W*(?:ADVERTISEMENT\s*RETURN TO ISSUE|no abstract|(?:an\s+)?abstract\s+(?:is\s+)?not\s+available)", re.I)
+
+
 def _clean_abstract(text: str | None) -> str | None:
     """解码实体、去掉 HTML/JATS 标签；小标题改成 "Background: "，开头那个 "Abstract" 小标题直接去掉。"""
     if not text:
         return text
+    if _JUNK_ABSTRACT.match(text):
+        return None
     t = _INLINE_TAGS.sub("", html.unescape(text))
 
     def heading(m: re.Match) -> str:
