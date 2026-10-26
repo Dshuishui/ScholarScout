@@ -85,11 +85,17 @@ export function PaperCard({ paper, selected = false, onToggle, isRejected = fals
   // CrossRef 的链接就是这个 DOI，OpenAlex 的是数据库条目页，有 DOI 时都不再单独列，免得用户不知道点哪个
   const doiUrl = paper.doi ? `https://doi.org/${paper.doi}` : null
   const sourceLinks = links.filter(l =>
-    l.source !== 'Google Scholar' && !(doiUrl && ['CrossRef', 'OpenAlex', '中文文献'].includes(l.source)))
+    l.source !== 'Google Scholar' && l.source !== '中文文献'  // 中文文献的链接是 OpenAlex 条目页，下面改给知网、万方
+    && !(doiUrl && (l.source === 'CrossRef' || l.source === 'OpenAlex')))
   // 百度学术常驻在下面（国内不翻墙能打开），不再在"找全文"里重复
   const baiduUrl = `https://xueshu.baidu.com/s?wd=${encodeURIComponent(paper.title)}`
-  const findLinks = (paper.fallback_links ?? []).filter(fl =>
-    fl.name !== '百度学术' && !(doiUrl && fl.name === '出版社原文'))
+  // 中文论文去知网、万方按标题搜最可能找到全文；Google 学术、ResearchGate 对中文论文基本没用
+  const findLinks = paper.source === '中文文献'
+    ? [
+        { name: '知网', url: `https://kns.cnki.net/kns8s/defaultresult/index?kw=${encodeURIComponent(paper.title)}` },
+        { name: '万方', url: `https://s.wanfangdata.com.cn/paper?q=${encodeURIComponent(paper.title)}` },
+      ]
+    : (paper.fallback_links ?? []).filter(fl => fl.name !== '百度学术' && !(doiUrl && fl.name === '出版社原文'))
   // 没有摘要时 AI 只看了标题，打分和总结都要说明
   const titleOnly = !paper.abstract
   const abstractElsewhere = doiUrl ?? sourceLinks[0]?.url ?? scholarUrl
