@@ -4,6 +4,7 @@ import pytest
 
 from models import Paper, ParsedQuery
 from services.search_service import _merge, _normalize_title, deduplicate, search_all_sources
+from services.search_service import _abstracts_from_openalex  # conftest 会替换掉模块里的这个函数，这里留住真的
 
 _ALL_SOURCE_NAMES = [
     "arXiv", "Semantic Scholar", "OpenAlex", "PubMed",
@@ -650,3 +651,171 @@ async def test_expand_citations_needs_key_and_seeds(monkeypatch):
     assert await s.expand_citations([make_paper("W1", "Seed")], [], ParsedQuery(keywords=["x"])) == []
     monkeypatch.setattr(s, "OPENALEX_API_KEY", "k")
     assert await s.expand_citations([], [], ParsedQuery(keywords=["x"])) == []
+
+
+# ── 摘要清洗、各源解析 ────────────────────────────────────────────────────────
+
+class _FakeResp:
+    def __init__(self, json_data=None, text=""):
+        self._json, self.text, self.status_code, self.headers = json_data, text, 200, {}
+
+    def raise_for_status(self):
+        pass
+
+    def json(self):
+        return self._json
+
+
+def _route_http(monkeypatch, routes: dict):
+    """按 URL 片段返回假响应，不联网。"""
+    from services import search_service as s
+
+    class DummyClient:
+        def __init__(self, *a, **kw): pass
+        async def __aenter__(self): return self
+        async def __aexit__(self, *a): return False
+
+    async def fake_get(client, url, **kwargs):
+        for frag, resp in routes.items():
+            if frag in url:
+                return resp
+        raise AssertionError(f"unexpected url {url}")
+
+    monkeypatch.setattr(s.httpx, "AsyncClient", DummyClient)
+    monkeypatch.setattr(s, "_get_with_retry", fake_get)
+
+
+def test_clean_abstract_turns_headings_into_labels_and_drops_tags():
+    from services.search_service import _clean_abstract
+    epmc = "<h4>Introduction</h4>Guide RNAs bind DNA.<h4>Methods</h4>We used SiO<sub>2</sub> and <i>E. coli</i>."
+    assert _clean_abstract(epmc) == "Introduction: Guide RNAs bind DNA. Methods: We used SiO2 and E. coli."
+    crossref = "<jats:title>Abstract</jats:title><jats:p>MgH<jats:sub>2</jats:sub> releases hydrogen.</jats:p>"
+    assert _clean_abstract(crossref) == "MgH2 releases hydrogen."
+    assert _clean_abstract("SiO&lt;sub&gt;2&lt;/sub&gt; &amp; TiO2") == "SiO2 & TiO2"
+
+
+def test_clean_abstract_keeps_comparison_signs():
+    from services.search_service import _clean_abstract
+    text = "Mortality fell (p < 0.05) in patients aged >65 years and 3<x."
+    assert _clean_abstract(text) == text
+    assert _clean_abstract("risk &lt; 0.01 and &gt; 2") == "risk < 0.01 and > 2"
+
+
+def test_sanitize_paper_cleans_abstract():
+    from services.search_service import _sanitize_paper
+    p = make_paper("E1", "T", source="Europe PMC", abstract="<h4>Background</h4>Text <b>here</b>.")
+    assert _sanitize_paper(p).abstract == "Background: Text here."
+
+
+_PUBMED_XML = """<PubmedArticleSet><PubmedArticle><MedlineCitation><PMID>1</PMID><Article>
+<ArticleTitle>Enhanced kinetics of MgH<sub>2</sub> by <i>in situ</i> catalysts</ArticleTitle>
+<Abstract>
+<AbstractText Label="BACKGROUND">A biotemplated <i>Ni</i> catalyst lowers MgH<sub>2</sub> barriers.</AbstractText>
+<AbstractText Label="MATERIALS AND METHODS">We used XRD.</AbstractText>
+</Abstract></Article></MedlineCitation></PubmedArticle></PubmedArticleSet>"""
+
+
+async def test_pubmed_keeps_text_after_inline_tags(monkeypatch):
+    from services import search_service as s
+    _route_http(monkeypatch, {
+        "esearch": _FakeResp({"esearchresult": {"idlist": ["1"]}}),
+        "efetch": _FakeResp(text=_PUBMED_XML),
+    })
+    [p] = await s._search_pubmed(ParsedQuery(keywords=["MgH2"]), 10)
+    assert p.title == "Enhanced kinetics of MgH2 by in situ catalysts"
+    assert p.abstract == ("Background: A biotemplated Ni catalyst lowers MgH2 barriers. "
+                          "Materials and methods: We used XRD.")
+
+
+def _crossref_item(doi, license_url=None):
+    item = {"DOI": doi, "title": ["Paper " + doi], "URL": f"https://doi.org/{doi}",
+            "container-title": ["Journal of Tests"],
+            "link": [{"URL": f"https://publisher.example/{doi}.pdf", "content-type": "application/pdf"}]}
+    if license_url:
+        item["license"] = [{"URL": license_url, "content-version": "vor", "delay-in-days": 0}]
+    return item
+
+
+async def test_crossref_pdf_only_for_open_licenses(monkeypatch):
+    from services import search_service as s
+    items = [_crossref_item("10.1/open", "http://creativecommons.org/licenses/by/4.0/"),
+             _crossref_item("10.1/tdm", "https://www.springer.com/tdm"),
+             _crossref_item("10.1/none")]
+    _route_http(monkeypatch, {"api.crossref.org": _FakeResp({"message": {"items": items}})})
+    papers = {p.doi: p for p in await s._search_crossref(ParsedQuery(keywords=["x"]), 10)}
+    assert papers["10.1/open"].pdf_url == "https://publisher.example/10.1/open.pdf"
+    assert papers["10.1/tdm"].pdf_url is None   # 出版社的文本挖掘链接，多半是付费墙
+    assert papers["10.1/none"].pdf_url is None
+    assert papers["10.1/open"].venue == "Journal of Tests"
+
+
+# ── 按 DOI 补摘要 ─────────────────────────────────────────────────────────────
+
+def _stub_abstract_stores(monkeypatch, openalex=None, europepmc=None):
+    from services import search_service as s
+    calls = []
+
+    def store(name, result):
+        async def lookup(dois):
+            calls.append((name, list(dois)))
+            if isinstance(result, Exception):
+                raise result
+            return result or {}
+        return lookup
+
+    monkeypatch.setattr(s, "_abstracts_from_openalex", store("openalex", openalex))
+    monkeypatch.setattr(s, "_abstracts_from_europepmc", store("europepmc", europepmc))
+    return calls
+
+
+async def test_backfill_abstracts_fills_by_doi_and_cleans(monkeypatch):
+    from services.search_service import backfill_abstracts
+    calls = _stub_abstract_stores(monkeypatch, openalex={"10.1/a": "From OpenAlex."},
+                                  europepmc={"10.1/b": "<h4>Aims</h4>From <i>EPMC</i>."})
+    papers = [make_paper("C1", "A", doi="10.1/A", source="CrossRef"),
+              make_paper("C2", "B", doi="10.1/b", source="CrossRef"),
+              make_paper("C3", "C", doi="10.1/c", source="CrossRef", abstract="Already here."),
+              make_paper("C4", "D", source="CrossRef")]
+    out = await backfill_abstracts(papers, "CrossRef", ["bio"])
+    assert [p.abstract for p in out] == ["From OpenAlex.", "Aims: From EPMC.", "Already here.", None]
+    assert sorted(calls) == [("europepmc", ["10.1/a", "10.1/b"]), ("openalex", ["10.1/a", "10.1/b"])]
+
+
+async def test_backfill_abstracts_skips_own_store_and_off_domain_epmc(monkeypatch):
+    from services.search_service import backfill_abstracts
+    calls = _stub_abstract_stores(monkeypatch)
+    papers = [make_paper("W1", "A", doi="10.1/a", source="OpenAlex")]
+    await backfill_abstracts(papers, "OpenAlex", ["cs"])   # 计算机题不查 Europe PMC，OpenAlex 自己也不再查
+    assert calls == []
+    await backfill_abstracts(papers, "CrossRef", ["cs"])
+    assert [name for name, _ in calls] == ["openalex"]
+
+
+async def test_backfill_abstracts_survives_a_failing_store(monkeypatch):
+    from services.search_service import backfill_abstracts
+    _stub_abstract_stores(monkeypatch, openalex=RuntimeError("timeout"), europepmc={"10.1/a": "Rescued."})
+    [p] = await backfill_abstracts([make_paper("C1", "A", doi="10.1/a", source="CrossRef")], "CrossRef", None)
+    assert p.abstract == "Rescued."
+
+
+async def test_abstracts_from_openalex_rebuilds_inverted_index(monkeypatch):
+    from services import search_service as s
+    sent = []
+
+    async def fake_get(client, params):
+        sent.append(params)
+        return [{"doi": "https://doi.org/10.1/A", "abstract_inverted_index": {"Hello": [0], "world": [1]}},
+                {"doi": "https://doi.org/10.1/b", "abstract_inverted_index": None}]
+
+    monkeypatch.setattr(s, "_openalex_get", fake_get)
+    assert await _abstracts_from_openalex(["10.1/a", "10.1/b"]) == {"10.1/a": "Hello world"}
+    assert sent[0]["filter"] == "doi:10.1/a|10.1/b"
+
+
+async def test_search_all_sources_backfills_each_source(monkeypatch):
+    calls = _stub_abstract_stores(monkeypatch, openalex={"10.1/x": "Filled."})
+    source_mocks = {src: AsyncMock(return_value=[]) for src in _ALL_SOURCE_NAMES}
+    source_mocks["CrossRef"] = AsyncMock(return_value=[make_paper("C1", "X", doi="10.1/x", source="CrossRef")])
+    with patch.dict("services.search_service._SOURCE_FUNCS", source_mocks):
+        [p] = await search_all_sources(ParsedQuery(keywords=["x"], domains=["cs"]))
+    assert p.abstract == "Filled."

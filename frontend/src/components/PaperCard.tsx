@@ -263,10 +263,14 @@ export function PaperCard({ paper, selected = false, onToggle, isRejected = fals
                   onClick={() => setAbstractExpanded(v => !v)}
                   className="mt-1 text-xs text-blue-500 hover:text-blue-700 font-medium transition-colors"
                 >
-                  {abstractExpanded ? '收起摘要' : '展开全文'}
+                  {abstractExpanded ? '收起摘要' : '展开完整摘要'}
                 </button>
               )}
             </div>
+          )}
+          {/* 不少出版社不公开摘要，各个数据库都查不到：说明一下，免得以为是加载失败 */}
+          {showAbstract && !paper.abstract && (
+            <p className="text-xs text-gray-400 mb-3">出版社未公开摘要，可点下方来源链接查看原文</p>
           )}
 
           {/* AI relevance reason (full) */}

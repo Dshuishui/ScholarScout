@@ -92,3 +92,12 @@ def no_real_llm_in_search_router(monkeypatch):
     from models import ParsedQuery
     monkeypatch.setattr(search_router, "classify_intent", AsyncMock(return_value={"intent": "search"}))
     monkeypatch.setattr(search_router, "parse_query", AsyncMock(return_value=ParsedQuery(keywords=["test"])))
+
+
+@pytest.fixture(autouse=True)
+def no_real_abstract_backfill(monkeypatch):
+    """search_all_sources 会按 DOI 去 OpenAlex、Europe PMC 补摘要：用例里的假论文不能真的联网去查。"""
+    from unittest.mock import AsyncMock
+    from services import search_service
+    monkeypatch.setattr(search_service, "_abstracts_from_openalex", AsyncMock(return_value={}))
+    monkeypatch.setattr(search_service, "_abstracts_from_europepmc", AsyncMock(return_value={}))

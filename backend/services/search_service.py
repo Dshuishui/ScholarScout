@@ -156,21 +156,24 @@ async def _search_semantic_scholar(parsed: ParsedQuery, limit: int) -> list[Pape
 _OPENALEX_SELECT = "id,title,authorships,abstract_inverted_index,publication_date,doi,open_access,cited_by_count,primary_location"
 
 
+def _inverted_index_to_text(inv: dict | None) -> str | None:
+    """OpenAlex 的摘要以倒排索引给出（词 → 出现位置），按位置拼回原文。"""
+    if not inv:
+        return None
+    words: dict[int, str] = {}
+    for word, positions in inv.items():
+        for pos in positions:
+            words[pos] = word
+    return " ".join(words[i] for i in sorted(words)) or None
+
+
 def _openalex_item_to_paper(item: dict) -> Paper:
     doi = (item.get("doi") or "").replace("https://doi.org/", "") or None
     oa = item.get("open_access", {})
     pdf_url = oa.get("oa_url") if oa.get("is_oa") else None
     work_id = item.get("id", "").replace("https://openalex.org/", "")
 
-    abstract = None
-    inv = item.get("abstract_inverted_index")
-    if inv:
-        words: dict[int, str] = {}
-        for word, positions in inv.items():
-            for pos in positions:
-                words[pos] = word
-        abstract = " ".join(words[i] for i in sorted(words))
-
+    abstract = _inverted_index_to_text(item.get("abstract_inverted_index"))
     venue = ((item.get("primary_location") or {}).get("source") or {}).get("display_name")
     return Paper(
         paper_id=work_id,
@@ -458,13 +461,19 @@ async def _search_pubmed(parsed: ParsedQuery, limit: int) -> list[Paper]:
                 art = medline.find("Article")
 
                 pmid = medline.findtext("PMID", "")
-                title = (art.findtext("ArticleTitle") or "").strip()
+                title_elem = art.find("ArticleTitle")
+                title = _xml_text(title_elem) if title_elem is not None else ""
                 if not title:
                     continue
 
-                abstract = " ".join(
-                    (p.text or "") for p in art.findall(".//AbstractText")
-                ).strip() or None
+                # 结构化摘要分成好几段，每段带 Label（BACKGROUND、METHODS…）
+                sections = []
+                for part in art.findall(".//AbstractText"):
+                    text = _xml_text(part)
+                    label = (part.get("Label") or "").strip()
+                    if text:
+                        sections.append(f"{label.capitalize()}: {text}" if label else text)
+                abstract = " ".join(sections) or None
 
                 authors = []
                 for author in art.findall(".//Author"):
@@ -732,7 +741,8 @@ async def _search_crossref(parsed: ParsedQuery, limit: int) -> list[Paper]:
             "query": " ".join(parsed.keywords),
             "rows": limit,
             "mailto": POLITE_EMAIL,
-            "select": "DOI,title,author,published-print,published-online,abstract,is-referenced-by-count,URL,link",
+            "select": "DOI,title,author,published-print,published-online,abstract,is-referenced-by-count,URL,link,"
+                      "license,container-title",
         }
         if parsed.date_from:
             params["filter"] = f"from-pub-date:{parsed.date_from[:4]}"
@@ -777,13 +787,14 @@ async def _search_crossref(parsed: ParsedQuery, limit: int) -> list[Paper]:
                 if name:
                     authors.append(name)
 
-            # 摘要去除 JATS XML 标签
-            abstract_raw = item.get("abstract") or ""
-            abstract: str | None = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", abstract_raw)).strip() or None
+            # 摘要是 JATS XML，统一在 _sanitize_paper 里清洗
+            abstract = item.get("abstract") or None
 
-            # 从 link 数组找 PDF
+            # link 里的 PDF 是出版社给文本挖掘用的链接，收费论文也有，读者点开是付费墙。
+            # 只有知识共享许可的才算开放获取；其余交给 Unpaywall 去找真正免费的版本
             pdf_url = None
-            for link in (item.get("link") or []):
+            open_license = any("creativecommons.org" in (lic.get("URL") or "") for lic in item.get("license") or [])
+            for link in (item.get("link") or []) if open_license else []:
                 if "pdf" in (link.get("content-type") or "").lower():
                     pdf_url = link.get("URL")
                     break
@@ -880,6 +891,73 @@ async def _search_google_scholar(parsed: ParsedQuery, limit: int) -> list[Paper]
     return await _search_google_scholar_serpapi(parsed, limit)
 
 
+# 补摘要发生在 AI 筛选之前，单路查询最多等这么久，查不到就算了，不能拖慢首屏
+ABSTRACT_BACKFILL_TIMEOUT = 5
+_OPENALEX_DOI_BATCH = 50   # OpenAlex 的 doi 过滤一次最多 50 个值
+_EUROPEPMC_DOI_BATCH = 25  # Europe PMC 的查询串太长会被拒
+
+
+async def _abstracts_from_openalex(dois: list[str]) -> dict[str, str]:
+    async def batch(client: httpx.AsyncClient, chunk: list[str]) -> list[dict]:
+        return await _openalex_get(client, {"filter": "doi:" + "|".join(chunk), "per_page": _OPENALEX_DOI_BATCH,
+                                            "select": "doi,abstract_inverted_index"})
+
+    async with httpx.AsyncClient(timeout=ABSTRACT_BACKFILL_TIMEOUT) as client:
+        chunks = [dois[i:i + _OPENALEX_DOI_BATCH] for i in range(0, len(dois), _OPENALEX_DOI_BATCH)]
+        results = await asyncio.gather(*(batch(client, c) for c in chunks))
+    found = {}
+    for item in (it for items in results for it in items):
+        doi = (item.get("doi") or "").replace("https://doi.org/", "").lower()
+        abstract = _inverted_index_to_text(item.get("abstract_inverted_index"))
+        if doi and abstract:
+            found[doi] = abstract
+    return found
+
+
+async def _abstracts_from_europepmc(dois: list[str]) -> dict[str, str]:
+    async def batch(client: httpx.AsyncClient, chunk: list[str]) -> list[dict]:
+        resp = await client.get(
+            "https://www.ebi.ac.uk/europepmc/webservices/rest/search",
+            params={"query": " OR ".join(f'DOI:"{d}"' for d in chunk), "pageSize": 2 * len(chunk),
+                    "format": "json", "resultType": "core"},
+        )
+        resp.raise_for_status()
+        return resp.json().get("resultList", {}).get("result", [])
+
+    async with httpx.AsyncClient(timeout=ABSTRACT_BACKFILL_TIMEOUT) as client:
+        chunks = [dois[i:i + _EUROPEPMC_DOI_BATCH] for i in range(0, len(dois), _EUROPEPMC_DOI_BATCH)]
+        results = await asyncio.gather(*(batch(client, c) for c in chunks))
+    return {item["doi"].lower(): item["abstractText"]
+            for items in results for item in items if item.get("doi") and item.get("abstractText")}
+
+
+async def backfill_abstracts(papers: list[Paper], source: str, domains: list[str] | None = None) -> list[Paper]:
+    """有 DOI 没摘要的论文按 DOI 去 OpenAlex、Europe PMC 补摘要。
+
+    CrossRef 来的论文三分之二没有摘要（Elsevier 等出版社不把摘要交给 CrossRef），OpenAlex 也缺三分之一；
+    实测两家合起来能补回其中约 38%。不查论文自己的来源库（查了也一样没有），Europe PMC 只在生物医学类问题里查。
+    """
+    dois = sorted({p.doi.lower() for p in papers if p.doi and not p.abstract and not re.search(r'[|,"]', p.doi)})
+    if not dois:
+        return papers
+    lookups = []
+    if source != "OpenAlex":
+        lookups.append(_abstracts_from_openalex(dois))
+    if source != "Europe PMC" and _source_matches_domains("Europe PMC", domains):
+        lookups.append(_abstracts_from_europepmc(dois))
+    found: dict[str, str] = {}
+    for result in await asyncio.gather(*(asyncio.wait_for(l, ABSTRACT_BACKFILL_TIMEOUT) for l in lookups),
+                                       return_exceptions=True):
+        if isinstance(result, dict):
+            for doi, abstract in result.items():
+                found.setdefault(doi, abstract)
+        else:
+            logger.info("Abstract backfill for %s failed: %r", source, result)
+    return [p.model_copy(update={"abstract": _clean_abstract(found[p.doi.lower()])})
+            if p.doi and not p.abstract and p.doi.lower() in found else p
+            for p in papers]
+
+
 async def enhance_with_unpaywall(papers: list[Paper]) -> list[Paper]:
     """为有 DOI 但无 PDF 的论文查询 Unpaywall，尝试补全开放获取 PDF 链接。"""
     to_enhance = [p for p in papers if p.doi and not p.pdf_url]
@@ -930,6 +1008,31 @@ def _clean_title(title: str) -> str:
     return re.sub(r"\s+", " ", t).strip()
 
 
+def _xml_text(elem) -> str:
+    """元素里的全部文字，包括 <i>、<sub> 等子标签里的。elem.text 只到第一个子标签为止：MgH<sub>2</sub> 只剩 MgH。"""
+    return re.sub(r"\s+", " ", "".join(elem.itertext())).strip()
+
+
+# 只认真正的标签（< 后面紧跟字母或 /字母），摘要里的 "p < 0.05"、">65 years" 不能被当成标签删掉
+_TAG = re.compile(r"</?[A-Za-z][\w:.-]*(?:\s[^<>]*)?/?>")
+# 摘要里的小标题：Europe PMC 的 <h4>Background</h4>、CrossRef 的 <jats:title>Abstract</jats:title>
+_ABSTRACT_HEADING = re.compile(r"<((?:\w+:)?(?:h[1-6]|title))\b[^>]*>(.*?)</\1>", re.I | re.S)
+
+
+def _clean_abstract(text: str | None) -> str | None:
+    """解码实体、去掉 HTML/JATS 标签；小标题改成 "Background: "，开头那个 "Abstract" 小标题直接去掉。"""
+    if not text:
+        return text
+    t = _INLINE_TAGS.sub("", html.unescape(text))
+
+    def heading(m: re.Match) -> str:
+        h = _TAG.sub("", m.group(2)).strip().rstrip(":：")
+        return " " if not h or h.lower() == "abstract" else f" {h}: "
+
+    t = _TAG.sub(" ", _ABSTRACT_HEADING.sub(heading, t))
+    return re.sub(r"\s+", " ", t).strip() or None
+
+
 def _clean_authors(authors: list[str]) -> list[str]:
     """过滤空字符串和纯空白作者名。"""
     return [a.strip() for a in authors if a and a.strip()]
@@ -951,13 +1054,16 @@ def _normalize_pdf_url(url: str | None) -> str | None:
 
 
 def _sanitize_paper(p: Paper) -> Paper:
-    """清洗 title HTML 标签、过滤空作者名、规范化 PDF URL。"""
+    """清洗标题和摘要里的 HTML 标签、过滤空作者名、规范化 PDF URL。"""
     clean_title = _clean_title(p.title)
+    clean_abstract = _clean_abstract(p.abstract)
     clean_authors = _clean_authors(p.authors)
     clean_pdf_url = _normalize_pdf_url(p.pdf_url)
     updates: dict = {}
     if clean_title != p.title:
         updates["title"] = clean_title or p.title
+    if clean_abstract != p.abstract:
+        updates["abstract"] = clean_abstract
     if clean_authors != p.authors:
         updates["authors"] = clean_authors
     if clean_pdf_url != p.pdf_url:
@@ -1138,11 +1244,12 @@ async def search_all_sources(
     async def run_source(name: str, fn) -> list[Paper]:
         papers = await fn(parsed, limit_per_source)
         record_source_result(name, len(papers))
+        # 每个源一返回就补摘要，和还没返回的慢源同时进行，不额外拖慢整体
+        papers = await backfill_abstracts([_sanitize_paper(p) for p in papers], name, parsed.domains)
         if on_source_done:
             # 把结果一并交出去：前端可以边搜边展示，不用等全部源都回来
-            await on_source_done(name, len(papers), [_sanitize_paper(p) for p in papers])
+            await on_source_done(name, len(papers), papers)
         return papers
 
     results = await asyncio.gather(*(run_source(name, fn) for name, fn in funcs.items()))
-    all_papers = [_sanitize_paper(p) for source_results in results for p in source_results]
-    return deduplicate(all_papers)
+    return deduplicate([p for source_results in results for p in source_results])
