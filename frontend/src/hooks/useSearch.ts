@@ -260,9 +260,10 @@ export function useSearch(apiKey: string, settings: SearchSettings, model?: stri
     }
   }
 
-  const search = async (query: string) => {
+  /** forceSearch：用户在 AI 的直接回答下点了"按这个问题搜论文"，不再判断意图 */
+  const search = async (query: string, forceSearch = false) => {
     if (!guard()) return
-    track('search_submit', { mode })
+    track('search_submit', forceSearch ? { mode, forced: true } : { mode })
     const userMsgId = Date.now().toString()
     const assistantId = (Date.now() + 1).toString()
 
@@ -280,10 +281,10 @@ export function useSearch(apiKey: string, settings: SearchSettings, model?: stri
         .slice(-8)
         .map(m => ({ role: m.role, content: m.content }))
 
-      const result = await parseQuery(query, apiKey, history, model, trialAuth)
+      const result = await parseQuery(query, apiKey, history, model, trialAuth, forceSearch)
 
       if (result.intent === 'chat') {
-        updateAssistant(assistantId, { content: result.reply, isLoading: false })
+        updateAssistant(assistantId, { content: result.reply, isLoading: false, searchableQuery: query })
         setIsLoading(false)
       } else {
         const kwPreview = result.keywords.join('、')

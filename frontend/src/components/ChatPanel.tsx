@@ -8,7 +8,7 @@ import { TrialHint } from './TrialHint'
 interface Props {
   messages: Message[]
   isLoading: boolean
-  onSearch: (query: string) => void
+  onSearch: (query: string, forceSearch?: boolean) => void
   history: HistoryItem[]
   onSearchFromHistory: (item: HistoryItem) => void
   onRemoveHistory: (timestamp: number) => void
@@ -221,7 +221,8 @@ export function ChatPanel({
             )}
 
             {visibleMessages.map(msg => (
-              <MessageBubble key={msg.id} message={msg} />
+              <MessageBubble key={msg.id} message={msg}
+                onForceSearch={isLoading ? undefined : q => onSearch(q, true)} />
             ))}
             <div ref={bottomRef} />
           </div>

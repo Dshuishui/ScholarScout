@@ -267,11 +267,12 @@ async def parse(
     history = [{"role": m.role, "content": m.content} for m in request.messages]
     try:
         # 两次调用同时发：绝大多数输入都是搜索，排队等意图判断要多 1 秒；是闲聊时丢掉解析结果即可
-        intent, parsed = await asyncio.gather(
-            classify_intent(request.query, api_key, history),
-            parse_query(request.query, api_key, history),
-            return_exceptions=True,
-        )
+        calls = [parse_query(request.query, api_key, history)]
+        if not request.force_search:
+            calls.insert(0, classify_intent(request.query, api_key, history))
+        results = await asyncio.gather(*calls, return_exceptions=True)
+        intent = results[0] if len(results) == 2 else {"intent": "search"}
+        parsed = results[-1]
         if isinstance(intent, Exception):
             raise intent
         if intent.get("intent") == "chat":

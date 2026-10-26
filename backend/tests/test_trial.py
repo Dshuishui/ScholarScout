@@ -443,3 +443,18 @@ async def test_parse_runs_intent_and_keywords_concurrently(client, trial, monkey
                           headers={"X-Trial-Device": DEVICE_A, "X-Real-IP": "1.1.1.1"})
     assert r.status_code == 200 and r.json() == {"intent": "chat", "reply": "你好"}
     assert sorted(started) == ["intent", "parse"]
+
+
+async def test_parse_force_search_skips_intent(client, trial, monkeypatch):
+    """用户在 AI 的直接回答下点"按这个问题搜论文"：不再判断意图，直接提取关键词。"""
+    import routers.search as sr
+    from models import ParsedQuery
+    intent = AsyncMock(return_value={"intent": "chat", "reply": "直接回答"})
+    monkeypatch.setattr(sr, "classify_intent", intent)
+    monkeypatch.setattr(sr, "parse_query", AsyncMock(return_value=ParsedQuery(keywords=["MgH2 dehydrogenation"])))
+    headers = {"X-Trial-Device": DEVICE_A, "X-Real-IP": "1.1.1.1"}
+    r = await client.post("/api/parse", json={"query": "镁基储氢怎么改进"}, headers=headers)
+    assert r.json()["intent"] == "chat"
+    r = await client.post("/api/parse", json={"query": "镁基储氢怎么改进", "force_search": True}, headers=headers)
+    assert r.json()["intent"] == "search" and r.json()["keywords"] == ["MgH2 dehydrogenation"]
+    assert intent.await_count == 1

@@ -45,11 +45,12 @@ export async function parseQuery(
   history: { role: string; content: string }[] = [],
   model?: string,
   trial?: TrialAuth,
+  forceSearch = false,
 ): Promise<ParseResult> {
   const response = await fetch(`${API_BASE}/parse`, {
     method: 'POST',
     headers: requestHeaders(apiKey, trial),
-    body: JSON.stringify({ query, api_key: apiKey || null, messages: history, model }),
+    body: JSON.stringify({ query, api_key: apiKey || null, messages: history, model, force_search: forceSearch }),
   })
   if (!response.ok) throw await toApiError(response)
   return response.json()

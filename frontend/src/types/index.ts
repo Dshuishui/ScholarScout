@@ -25,6 +25,8 @@ export interface Message {
   content: string
   papers?: Paper[]
   isLoading?: boolean
+  /** AI 直接回答（没去搜论文）时，原问题留在这里，气泡下给"按这个问题搜论文"按钮 */
+  searchableQuery?: string
 }
 
 export type SearchProgressEvent = {

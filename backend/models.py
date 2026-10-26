@@ -12,6 +12,8 @@ class ParseRequest(BaseModel):
     api_key: Optional[str] = Field(default=None, max_length=200)
     messages: list[HistoryMessage] = Field(default=[], max_length=30)
     model: Optional[str] = Field(default=None, max_length=100)
+    # 用户在 AI 的直接回答下点了"按这个问题搜论文"：跳过意图判断
+    force_search: bool = False
 
 class SearchRequest(BaseModel):
     query: str = Field(default="", max_length=2000)
