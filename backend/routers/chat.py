@@ -31,6 +31,9 @@ TRIAL_DEVICE_HEADER = "X-Trial-Device"
 CHATS_PER_HOUR = 30            # 单个用户/IP 每小时最多几条，防脚本刷
 MAX_HISTORY_MESSAGES = 8
 MAX_MESSAGE_CHARS = 2000
+# 不少论文没有公开摘要：只给标题时模型会照着标题编出方法和结论
+NO_ABSTRACT_NOTE = ("\n这篇论文没有公开摘要，你只知道上面这些信息。不要编造它的方法、数据或结论；"
+                    "用户问到具体内容时，说明需要上传 PDF 全文才能回答。")
 _chat_attempts: dict[str, list[float]] = defaultdict(list)
 
 
@@ -69,7 +72,8 @@ def _system_prompt(paper: Paper) -> str:
 
 
 def _build_messages(req: PaperChatRequest) -> list[dict]:
-    msgs: list[dict] = [{"role": "system", "content": _system_prompt(req.paper)}]
+    system = _system_prompt(req.paper) + ("" if req.paper.abstract or req.pdf_text else NO_ABSTRACT_NOTE)
+    msgs: list[dict] = [{"role": "system", "content": system}]
     for m in req.messages[-MAX_HISTORY_MESSAGES:]:
         msgs.append({"role": m.role, "content": m.content[:MAX_MESSAGE_CHARS]})
     if req.pdf_text:

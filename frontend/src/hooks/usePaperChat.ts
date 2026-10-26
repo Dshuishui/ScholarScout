@@ -355,7 +355,9 @@ function buildApiMessages(
   pdfText: string | undefined,
   userContent: string,
 ): { role: string; content: string }[] {
-  const system = buildSystemPrompt(paper)
+  // 没有摘要也没传全文时模型只知道标题，会照着标题编出方法和结论（后端免费对话也加了同样的提醒）
+  const system = buildSystemPrompt(paper) + (paper.abstract || pdfText ? '' :
+    '\n这篇论文没有公开摘要，你只知道上面这些信息。不要编造它的方法、数据或结论；用户问到具体内容时，说明需要上传 PDF 全文才能回答。')
   const history = prevMessages.map(m => ({ role: m.role, content: m.content }))
 
   const msgs: { role: string; content: string }[] = [{ role: 'system', content: system }, ...history]

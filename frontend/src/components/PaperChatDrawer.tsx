@@ -247,6 +247,8 @@ export function PaperChatDrawer({ paper, messages, isStreaming, pdfStatus, onSen
                 ? 'bg-green-50 border border-green-100 text-green-700'
                 : pdfStatus === 'error'
                 ? 'bg-red-50 border border-red-100 text-red-600'
+                : !paper.abstract
+                ? 'bg-amber-50 border border-amber-100 text-amber-700'
                 : 'bg-blue-50 border border-blue-100 text-blue-600'
             }`}>
               {pdfStatus === 'ok' ? (
@@ -283,7 +285,9 @@ export function PaperChatDrawer({ paper, messages, isStreaming, pdfStatus, onSen
                   <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
-                  <span className="flex-1">基于<strong>摘要</strong>分析</span>
+                  <span className="flex-1">
+                    {paper.abstract ? <>基于<strong>摘要</strong>分析</> : '这篇没有公开摘要，AI 只知道标题，具体内容需要全文'}
+                  </span>
                   <button
                     onClick={() => fileInputRef.current?.click()}
                     className="text-blue-600 hover:text-blue-800 font-medium underline underline-offset-2 whitespace-nowrap"

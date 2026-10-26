@@ -182,3 +182,13 @@ async def test_translation_unavailable_without_system_key(client, monkeypatch):
     monkeypatch.setattr(tr.config, "DEEPSEEK_SYSTEM_KEY", "")
     r = await client.post("/api/translate/titles", json={"titles": ["x"]})
     assert r.status_code == 503
+
+
+def test_system_prompt_warns_when_only_title_is_known():
+    from routers.chat import PaperChatRequest, _build_messages, NO_ABSTRACT_NOTE
+    title_only = {**PAPER, "abstract": None}
+    sys_msg = _build_messages(PaperChatRequest(**_body(paper=title_only)))[0]["content"]
+    assert NO_ABSTRACT_NOTE in sys_msg
+    with_pdf = _build_messages(PaperChatRequest(**_body(paper=title_only, pdf_text="Full text.")))[0]["content"]
+    assert NO_ABSTRACT_NOTE not in with_pdf   # 传了全文就不该再说"只知道标题"
+    assert NO_ABSTRACT_NOTE not in _build_messages(PaperChatRequest(**_body()))[0]["content"]
