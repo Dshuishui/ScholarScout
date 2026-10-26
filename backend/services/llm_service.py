@@ -55,6 +55,9 @@ VALIDATE_PROMPT = """用户的原始需求：{query}
 2. reason：一句话说明相关或不相关的原因
 3. tldr：针对用户需求，一句话概括这篇论文的核心贡献或发现（中文，≤30字）
 
+摘要写着"（无摘要）"的论文只能凭标题判断，打分要保守：标题明确包含用户需求的核心概念才给 6～7 分，否则最多 5 分。
+这类论文的 reason 和 tldr 只写标题能确定的内容，不要编造方法、数据或结论。
+
 {papers_text}
 
 返回 JSON 数组（不要有额外文字）：
@@ -149,6 +152,8 @@ async def parse_query(user_query: str, api_key: str, history: list[dict] = [], m
 # 每批篇数越少，AI 要写的输出越短、各批并行越快：2026-10 实测 20 篇一批要 22-24 秒，5 篇一批 11-17 秒。
 # 再拆成"先只打分、再补理由"首屏还能快约 5 秒，但理由要晚 10 秒才出来、改动大，没做
 VALIDATE_BATCH_SIZE = 5
+# 没有摘要的论文 AI 只能看标题，提示词要求保守打分，这里再兜底封顶：不让它算作"高度相关"（8 分以上）
+TITLE_ONLY_MAX_SCORE = 7.0
 
 
 async def validate_papers(
@@ -179,6 +184,8 @@ async def validate_papers(
         for p in batch:
             v = verdict_map.get(p.paper_id)
             score = float(v.get("score", 0)) if v else 0
+            if not p.abstract:
+                score = min(score, TITLE_ONLY_MAX_SCORE)
             if v and score >= 5:
                 p.relevance_reason = v.get("reason")
                 p.relevance_score = score
@@ -249,11 +256,12 @@ def citation_bonus(citations: int) -> float:
 
 def rank_accepted(papers: list[Paper]) -> list[Paper]:
     """按"大模型相关性评分 + 引用量加分"从高到低排序；没打分的排最后。
+    同一个评分里，有摘要的排在只凭标题打分的前面。
 
     必须在截取 validated_limit 之前调用，否则排在后面的数据源里的高分论文会先被截掉。
     """
-    def key(p: Paper) -> float:
+    def key(p: Paper) -> tuple[float, bool, float]:
         if p.relevance_score is None:
-            return -1.0
-        return p.relevance_score + citation_bonus(p.citations)
+            return (-1.0, False, 0.0)
+        return (p.relevance_score, bool(p.abstract), citation_bonus(p.citations))
     return sorted(papers, key=key, reverse=True)

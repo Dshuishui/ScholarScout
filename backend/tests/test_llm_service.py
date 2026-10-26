@@ -203,3 +203,32 @@ async def test_parse_cache_expires(monkeypatch):
     from models import ParsedQuery
     llm._parse_cache_set(("q", "m"), ParsedQuery(keywords=["a"]))
     assert llm._parse_cache_get(("q", "m")) is None
+
+
+@pytest.mark.asyncio
+async def test_title_only_papers_are_capped_and_prompt_says_so():
+    papers = [
+        Paper(paper_id="t", title="RAG for Law", authors=[], source="CrossRef"),
+        Paper(paper_id="a", title="RAG for Law II", authors=[], abstract="We apply RAG.", source="arXiv"),
+    ]
+    create = AsyncMock(return_value=_mock_llm({"results": [
+        {"id": "t", "score": 9, "reason": "标题切题", "tldr": "x"},
+        {"id": "a", "score": 9, "reason": "切题", "tldr": "y"},
+    ]}))
+    with patch("services.llm_service.AsyncOpenAI") as MockClient:
+        MockClient.return_value.chat.completions.create = create
+        accepted, _ = await validate_papers(papers, "RAG", "sk-fake-key")
+    scores = {p.paper_id: p.relevance_score for p in accepted}
+    assert scores == {"t": 7.0, "a": 9.0}   # 只凭标题判断的最多 7 分
+    prompt = create.await_args.kwargs["messages"][0]["content"]
+    assert "（无摘要）" in prompt and "不要编造" in prompt
+
+
+def test_rank_accepted_puts_papers_with_abstracts_first_within_a_score():
+    papers = [
+        Paper(paper_id="title-only", title="T", authors=[], source="CrossRef", relevance_score=7, citations=5000),
+        Paper(paper_id="with-abstract", title="A", authors=[], source="arXiv", relevance_score=7,
+              abstract="Text.", citations=0),
+        Paper(paper_id="higher", title="H", authors=[], source="CrossRef", relevance_score=8),
+    ]
+    assert [p.paper_id for p in rank_accepted(papers)] == ["higher", "with-abstract", "title-only"]
