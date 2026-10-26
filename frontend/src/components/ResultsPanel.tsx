@@ -14,7 +14,13 @@ import { getDownloadUrl } from '../api/client'
 import { TrialHint } from './TrialHint'
 import { toast } from './Toast'
 
-const MOBILE_KW_LIMIT = 3
+// 示例跨学科：以前全是计算机方向的，材料、医学、经管的用户一看以为不是给自己用的
+const MIXED_EXAMPLES = [
+  '镁基储氢材料低温脱氢动力学的改进方法',
+  '肠道菌群与抑郁症的关系',
+  '董事会独立性与公司绩效的关系',
+  '找 2023 年后关于大模型幻觉问题的论文',
+]
 const ComparePanel = lazy(() => import('./ComparePanel').then(m => ({ default: m.ComparePanel })))
 
 const SOURCE_COLORS: Record<string, string> = {
@@ -506,6 +512,7 @@ export function ResultsPanel({ papers, availableSources, previewPapers = [], pre
     if (confirmedKeywords) {
       setEditKeywords([...confirmedKeywords])
       setNewKw('')
+      setShowAllKeywords(false)
     }
   }, [confirmedKeywords])
 
@@ -845,13 +852,24 @@ const addKeyword = () => {
       {/* 关键词行 */}
       {confirmedKeywords != null && (
         <div className="px-3 sm:px-5 py-2.5 bg-white border-b border-gray-100 flex items-center gap-2 justify-between">
+          {/* 手机上默认只显示一行搜索词，点"修改"再展开编辑：以前关键词占了小半屏，第一篇论文要滑下去才看得到 */}
+          {!showAllKeywords && !keywordsChanged && (
+            <button
+              onClick={() => setShowAllKeywords(true)}
+              className="sm:hidden flex-1 min-w-0 flex items-center gap-1.5 text-left text-xs"
+            >
+              <span className="shrink-0 text-gray-400">搜索词</span>
+              <span className="truncate text-indigo-700 font-medium">{editKeywords.join('、')}</span>
+              <span className="shrink-0 text-indigo-600 underline underline-offset-2">修改</span>
+            </button>
+          )}
           {/* 左侧：标签 + chips + 添加输入 + 重搜按钮 */}
-          <div className="flex items-center gap-2 flex-wrap flex-1 min-w-0">
+          <div className={`${showAllKeywords || keywordsChanged ? 'flex' : 'hidden sm:flex'} items-center gap-2 flex-wrap flex-1 min-w-0`}>
             <span className="hidden sm:inline text-sm font-medium text-gray-400 shrink-0">搜索词</span>
             {editKeywords.map((kw, i) => (
               <span
                 key={i}
-                className={`${i >= MOBILE_KW_LIMIT && !showAllKeywords ? 'hidden sm:flex' : 'flex'} items-center gap-1 bg-indigo-600 text-white text-xs rounded-full px-2.5 py-1 font-medium shadow-sm`}
+                className="flex items-center gap-1 bg-indigo-600 text-white text-xs rounded-full px-2.5 py-1 font-medium shadow-sm"
               >
                 {kw}
                 <button
@@ -862,12 +880,11 @@ const addKeyword = () => {
                 </button>
               </span>
             ))}
-            {/* 手机上关键词多时只显示前几个，避免把论文列表挤出首屏 */}
-            {editKeywords.length > MOBILE_KW_LIMIT && (
+            {showAllKeywords && !keywordsChanged && (
               <button
-                onClick={() => setShowAllKeywords(v => !v)}
+                onClick={() => setShowAllKeywords(false)}
                 className="sm:hidden text-xs text-indigo-600 bg-indigo-50 border border-indigo-200 rounded-full px-2.5 py-1"
-              >{showAllKeywords ? '收起' : `+${editKeywords.length - MOBILE_KW_LIMIT}`}</button>
+              >收起</button>
             )}
             <input
               value={newKw}
@@ -1242,11 +1259,7 @@ const addKeyword = () => {
             </div>
             <div className="flex flex-col gap-2 w-full max-w-xs">
               <p className="text-xs text-gray-400 mb-1">点击示例快速开始 ↓</p>
-              {[
-                '找 2023 年后关于大模型幻觉问题的论文',
-                'diffusion model 在医学图像的应用综述',
-                '图神经网络用于药物发现的最新进展',
-              ].map(example => (
+              {MIXED_EXAMPLES.map(example => (
                 <button
                   key={example}
                   onClick={() => onExampleSearch?.(example)}
@@ -1290,11 +1303,7 @@ const addKeyword = () => {
             </div>
             <div className="flex flex-col gap-2 w-full max-w-xs">
               <p className="text-xs text-gray-400 mb-1">换个方向试试 ↓</p>
-              {[
-                '找关于大模型幻觉问题的论文',
-                'transformer 在计算机视觉的应用',
-                'deep learning 医学图像分析综述',
-              ].map(example => (
+              {MIXED_EXAMPLES.map(example => (
                 <button
                   key={example}
                   onClick={() => onExampleSearch?.(example)}

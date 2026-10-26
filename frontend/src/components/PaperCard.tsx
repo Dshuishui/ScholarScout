@@ -84,7 +84,10 @@ export function PaperCard({ paper, selected = false, onToggle, isRejected = fals
   const doiUrl = paper.doi ? `https://doi.org/${paper.doi}` : null
   const sourceLinks = links.filter(l =>
     l.source !== 'Google Scholar' && !(doiUrl && (l.source === 'CrossRef' || l.source === 'OpenAlex')))
-  const findLinks = (paper.fallback_links ?? []).filter(fl => !(doiUrl && fl.name === '出版社原文'))
+  // 百度学术常驻在下面（国内不翻墙能打开），不再在"找全文"里重复
+  const baiduUrl = `https://xueshu.baidu.com/s?wd=${encodeURIComponent(paper.title)}`
+  const findLinks = (paper.fallback_links ?? []).filter(fl =>
+    fl.name !== '百度学术' && !(doiUrl && fl.name === '出版社原文'))
   // 没有摘要时 AI 只看了标题，打分和总结都要说明
   const titleOnly = !paper.abstract
   const abstractElsewhere = doiUrl ?? sourceLinks[0]?.url ?? scholarUrl
@@ -353,7 +356,8 @@ export function PaperCard({ paper, selected = false, onToggle, isRejected = fals
                       href={fl.url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 text-xs text-gray-500 hover:text-gray-800 border border-gray-200 hover:border-gray-300 bg-white hover:bg-gray-50 rounded-lg px-2.5 py-1 transition-all active:scale-95"
+                      // 电脑上 Google 学术是常驻按钮，这里只在手机上列出
+                      className={`${fl.name === 'Google 学术' ? 'inline-flex sm:hidden' : 'inline-flex'} items-center gap-1 text-xs text-gray-500 hover:text-gray-800 border border-gray-200 hover:border-gray-300 bg-white hover:bg-gray-50 rounded-lg px-2.5 py-1 transition-all active:scale-95`}
                     >
                       {fl.name}
                       <svg className="w-3 h-3 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -367,20 +371,31 @@ export function PaperCard({ paper, selected = false, onToggle, isRejected = fals
               ) : null}
             </div>
 
-            {/* Google Scholar — 常驻 */}
+            {/* 百度学术 — 常驻：国内不翻墙也能打开，常会列出别处的免费全文 */}
             <a
-              href={scholarUrl}
+              href={baiduUrl}
               target="_blank"
               rel="noopener noreferrer"
               className="flex-shrink-0 inline-flex flex-col items-center gap-0.5 px-2.5 sm:px-3 py-1.5 rounded-lg border border-sky-200 bg-sky-50 hover:bg-sky-100 hover:border-sky-300 active:bg-sky-200 text-sky-700 transition-all active:scale-95"
             >
               <span className="flex items-center gap-1 text-xs font-semibold leading-tight">
-                <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M12 24a7 7 0 1 1 0-14 7 7 0 0 1 0 14zm0-24L0 9.5l4.838 3.94A8 8 0 0 1 12 9a8 8 0 0 1 7.162 4.44L24 9.5z"/>
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                 </svg>
-                <span className="sm:hidden">Scholar</span><span className="hidden sm:inline">Google Scholar</span>
+                百度学术
               </span>
-              <span className="hidden sm:block text-[10px] text-sky-400 leading-none">引用 · 全文 · 相关</span>
+              <span className="hidden sm:block text-[10px] text-sky-400 leading-none">国内直接打开</span>
+            </a>
+
+            {/* Google Scholar — 电脑上常驻；手机上放不下四个按钮，没有免费 PDF 时在"找全文"里列出 */}
+            <a
+              href={scholarUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hidden sm:inline-flex flex-shrink-0 flex-col items-center gap-0.5 px-3 py-1.5 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 hover:border-gray-300 text-gray-600 transition-all active:scale-95"
+            >
+              <span className="text-xs font-semibold leading-tight">Google Scholar</span>
+              <span className="text-[10px] text-gray-400 leading-none">引用 · 相关论文</span>
             </a>
 
             {/* Bookmark — 常驻 */}

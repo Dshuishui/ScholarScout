@@ -17,32 +17,51 @@ interface Props {
   initialQuery?: string
 }
 
+// 默认的"推荐"故意跨学科：用户里不少是材料、医学、经管方向的，以前一进来全是计算机的例子
 const EXAMPLE_GROUPS = [
   {
-    label: 'AI / 机器学习',
+    label: '推荐',
     color: 'indigo',
+    examples: [
+      '镁基储氢材料低温脱氢动力学的改进方法',
+      '术后认知功能障碍有哪些预防措施',
+      '数字金融对中小企业融资约束的影响',
+    ],
+  },
+  {
+    label: '医学生命',
+    color: 'emerald',
+    examples: [
+      'CRISPR 基因编辑精准性提升研究',
+      '肠道菌群与抑郁症的关系',
+      '单细胞 RNA 测序数据分析方法',
+    ],
+  },
+  {
+    label: '理工材料',
+    color: 'amber',
+    examples: [
+      '钙钛矿太阳能电池的稳定性如何提升',
+      '锂电池固态电解质的界面问题',
+      '混凝土裂缝自修复材料研究进展',
+    ],
+  },
+  {
+    label: '经管社科',
+    color: 'rose',
+    examples: [
+      '董事会独立性与公司绩效的关系',
+      '短视频使用对青少年心理健康的影响',
+      '碳排放权交易对企业创新的影响',
+    ],
+  },
+  {
+    label: '计算机',
+    color: 'sky',
     examples: [
       '找 2023 年后关于大模型幻觉问题的论文',
       'RAG 检索增强生成最新进展综述',
       'Transformer 在视觉任务的优化方法',
-    ],
-  },
-  {
-    label: '生命科学',
-    color: 'emerald',
-    examples: [
-      'AlphaFold 蛋白质结构预测的最新改进',
-      '单细胞 RNA 测序数据分析方法',
-      'CRISPR 基因编辑精准性提升研究',
-    ],
-  },
-  {
-    label: '其他方向',
-    color: 'amber',
-    examples: [
-      '图神经网络用于药物分子设计',
-      '联邦学习隐私保护最新方案',
-      '量子计算在密码学中的应用',
     ],
   },
 ]
@@ -102,11 +121,15 @@ export function ChatPanel({
     indigo: 'text-indigo-600 bg-indigo-50 border-indigo-200 hover:bg-indigo-100',
     emerald: 'text-emerald-600 bg-emerald-50 border-emerald-200 hover:bg-emerald-100',
     amber: 'text-amber-600 bg-amber-50 border-amber-200 hover:bg-amber-100',
+    rose: 'text-rose-600 bg-rose-50 border-rose-200 hover:bg-rose-100',
+    sky: 'text-sky-600 bg-sky-50 border-sky-200 hover:bg-sky-100',
   }
   const tabActive: Record<string, string> = {
     indigo: 'bg-indigo-600 text-white',
     emerald: 'bg-emerald-600 text-white',
     amber: 'bg-amber-500 text-white',
+    rose: 'bg-rose-500 text-white',
+    sky: 'bg-sky-500 text-white',
   }
 
   return (
@@ -140,7 +163,7 @@ export function ChatPanel({
 
           {/* 分类 Tab */}
           <div>
-            <div className="flex gap-1.5 mb-3">
+            <div className="flex flex-wrap gap-1.5 mb-3">
               {EXAMPLE_GROUPS.map((g, i) => (
                 <button
                   key={g.label}
