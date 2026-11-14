@@ -1298,7 +1298,8 @@ const addKeyword = () => {
 
 
         {/* 搜索后全源零结果 */}
-        {!isLoading && papers.length === 0 && rejectedPapers.length === 0 && !hasSearchError && !statusMessage && confirmedKeywords != null && confirmedKeywords.length > 0 && (
+        {/* 不看 statusMessage：搜索结束时它总有内容（"未找到相关论文…"），以前要求它为空，这块从来没显示过 */}
+        {!isLoading && papers.length === 0 && rejectedPapers.length === 0 && !hasSearchError && confirmedKeywords != null && confirmedKeywords.length > 0 && (
           <div className="flex flex-col items-center justify-center min-h-[280px] text-center gap-4 px-8">
             <div className="w-14 h-14 rounded-2xl bg-gray-100 border border-gray-200 flex items-center justify-center">
               <svg className="w-7 h-7 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">

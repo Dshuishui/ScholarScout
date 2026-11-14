@@ -266,6 +266,8 @@ export function useSearch(apiKey: string, settings: SearchSettings, model?: stri
   /** forceSearch：用户在 AI 的直接回答下点了"按这个问题搜论文"，不再判断意图 */
   const search = async (query: string, forceSearch = false) => {
     if (!guard()) return
+    // 提取关键词的几秒里就锁住输入框：以前要到真正开始检索才锁，连点两次会发出两次搜索，后返回的覆盖先发的，还多扣次数
+    setIsLoading(true)
     track('search_submit', forceSearch ? { mode, forced: true } : { mode })
     const userMsgId = Date.now().toString()
     const assistantId = (Date.now() + 1).toString()

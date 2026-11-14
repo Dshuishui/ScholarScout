@@ -30,6 +30,20 @@ export function usePaperChat(apiKey: string, model: string = 'deepseek-v4-flash'
     } catch { /* noop: localStorage may be unavailable */ }
   }, [])
 
+  // 退出或切换账号：上一个账号的对话和 PDF 不能留在页面上（公用电脑上下一个人会看到，继续提问还会存进新账号）。
+  // 从未登录到登录不清：刚才没登录时聊的内容留着。要放在下面的加载之前，新账号的记录才不会被清掉
+  const prevTokenRef = useRef(token)
+  useEffect(() => {
+    const prev = prevTokenRef.current
+    prevTokenRef.current = token
+    if (!prev || prev === token) return
+    abortRef.current?.abort()
+    setHistories(new Map())
+    setPdfStatuses(new Map())
+    pdfTextsRef.current.clear()
+    setStreamingPaperId(null)
+  }, [token])
+
   // 从后端加载对话记录和 PDF 文本（登录后恢复）
   useEffect(() => {
     if (!isLoggedIn || !token) return
