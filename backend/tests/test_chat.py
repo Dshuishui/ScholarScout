@@ -192,3 +192,12 @@ def test_system_prompt_warns_when_only_title_is_known():
     with_pdf = _build_messages(PaperChatRequest(**_body(paper=title_only, pdf_text="Full text.")))[0]["content"]
     assert NO_ABSTRACT_NOTE not in with_pdf   # 传了全文就不该再说"只知道标题"
     assert NO_ABSTRACT_NOTE not in _build_messages(PaperChatRequest(**_body()))[0]["content"]
+
+
+def test_free_chat_prompt_caps_client_supplied_paper_fields():
+    """论文字段是前端传来的：不限长度的话，往摘要里塞一大段就能放大我们代付的费用。"""
+    from routers.chat import PaperChatRequest, _build_messages
+    huge = {**PAPER, "title": "T" * 50_000, "abstract": "A" * 500_000, "venue": "V" * 10_000,
+            "authors": ["X" * 5_000] * 50}
+    sys_msg = _build_messages(PaperChatRequest(**_body(paper=huge)))[0]["content"]
+    assert len(sys_msg) < 8_000

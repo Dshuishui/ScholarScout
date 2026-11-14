@@ -32,6 +32,8 @@ CHATS_PER_HOUR = 30            # 单个用户/IP 每小时最多几条，防脚�
 MAX_HISTORY_MESSAGES = 8
 MAX_MESSAGE_CHARS = 2000
 # 不少论文没有公开摘要：只给标题时模型会照着标题编出方法和结论
+# 论文字段是前端传来的，不限长度的话往摘要里塞一大段就能放大我们代付的费用
+PAPER_FIELD_LIMITS = {"title": 500, "venue": 200, "author": 100, "abstract": 4000}
 NO_ABSTRACT_NOTE = ("\n这篇论文没有公开摘要，你只知道上面这些信息。不要编造它的方法、数据或结论；"
                     "用户问到具体内容时，说明需要上传 PDF 全文才能回答。")
 _chat_attempts: dict[str, list[float]] = defaultdict(list)
@@ -58,16 +60,16 @@ def _system_prompt(paper: Paper) -> str:
         "你是一个学术论文分析助手，请根据以下论文信息回答用户的问题。请用中文回答，简洁专业。支持 Markdown 格式输出。",
         "",
         "【论文信息】",
-        f"标题：{paper.title}",
+        f"标题：{paper.title[:PAPER_FIELD_LIMITS['title']]}",
     ]
     if paper.authors:
-        lines.append("作者：" + "、".join(paper.authors[:5]))
+        lines.append("作者：" + "、".join(a[:PAPER_FIELD_LIMITS["author"]] for a in paper.authors[:5]))
     if paper.venue:
-        lines.append(f"发表于：{paper.venue}")
+        lines.append(f"发表于：{paper.venue[:PAPER_FIELD_LIMITS['venue']]}")
     if paper.published_date:
         lines.append(f"年份：{paper.published_date[:4]}")
     if paper.abstract:
-        lines.append(f"\n摘要：{paper.abstract}")
+        lines.append(f"\n摘要：{paper.abstract[:PAPER_FIELD_LIMITS['abstract']]}")
     return "\n".join(lines)
 
 

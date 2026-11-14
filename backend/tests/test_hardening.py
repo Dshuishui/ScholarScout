@@ -328,3 +328,18 @@ async def test_ws_bad_token_stays_anonymous(monkeypatch, db_engine):
     ws = _FakeWebSocket([{"type": "auth", "token": "not-a-jwt"}])
     await websocket_endpoint(ws, cid="xyz")
     assert ws.sent[1] == {"event": "authenticated", "data": {"client_key": "anon:xyz"}}
+
+
+def test_logs_redact_secrets_in_urls():
+    from logging_config import redact_secrets
+    url = "Server error '504' for url 'https://api.openalex.org/works?per_page=30&api_key=abc123SECRET&select=id'"
+    out = redact_secrets(url)
+    assert "abc123SECRET" not in out and "api_key=<redacted>&select=id" in out
+    assert "sk-0123456789abcdef0123" not in redact_secrets("bad key sk-0123456789abcdef0123")
+    assert redact_secrets("keywords=transformer") == "keywords=transformer"
+
+
+async def test_pdf_parsing_is_limited_to_a_few_at_a_time():
+    from routers import paper
+    slot = paper._parse_slot()
+    assert slot is paper._parse_slot() and slot._value == paper.MAX_CONCURRENT_PARSES <= 2
