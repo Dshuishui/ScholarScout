@@ -12,6 +12,7 @@ Usage:
 """
 import logging
 import os
+import re
 import sys
 import time
 from collections import deque
@@ -20,6 +21,28 @@ import structlog
 
 LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO").upper()
 LOG_FORMAT = os.environ.get("LOG_FORMAT", "console")  # "console" | "json"
+
+
+# 日志里不能出现凭证：OpenAlex 的 Key 放在请求网址里，上游一报错，httpx 的异常信息会带着完整网址进日志
+# （2026-11 服务器日志里查到过 17 行）
+_SECRET_PATTERNS = [
+    (re.compile(r"(?i)\b(api_key|apikey|access_token|token|password|secret)=[^&\s'\"<>]+"), r"\1=<redacted>"),
+    (re.compile(r"\bsk-[A-Za-z0-9]{16,}"), "sk-<redacted>"),
+    (re.compile(r"(?i)\b(bearer\s+)[A-Za-z0-9._~+/-]{16,}"), r"\1<redacted>"),
+]
+
+
+def redact_secrets(text: str) -> str:
+    for pattern, repl in _SECRET_PATTERNS:
+        text = pattern.sub(repl, text)
+    return text
+
+
+def _redact_processor(logger, method_name, event_dict: dict) -> dict:
+    for key, value in event_dict.items():
+        if isinstance(value, str):
+            event_dict[key] = redact_secrets(value)
+    return event_dict
 
 
 def setup_logging() -> None:
@@ -33,6 +56,9 @@ def setup_logging() -> None:
         structlog.stdlib.PositionalArgumentsFormatter(),
         structlog.processors.TimeStamper(fmt="iso"),
         structlog.processors.StackInfoRenderer(),
+        # 先把异常堆栈转成文字，脱敏才能覆盖到堆栈里的网址
+        structlog.processors.format_exc_info,
+        _redact_processor,
     ]
 
     if LOG_FORMAT == "json":
