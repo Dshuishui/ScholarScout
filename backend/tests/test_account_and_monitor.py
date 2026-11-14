@@ -378,3 +378,24 @@ async def test_new_feature_counters_reach_weekly_report(db_session, client):
     assert ("导出文献", "1 次") in report["rows"] and ("从 Zotero 导入", "1 次") in report["rows"]
     assert any("又补充了 13 篇" in n for n in report["notes"])
     assert any("$0.420 / $1.00" in n for n in report["notes"])
+
+
+async def test_weekly_report_is_sent_even_without_activity(db_session, monkeypatch):
+    """没人用的那周也发：不发信时分不清是没人用还是发信坏了（2026-11-09 就没收到周报）。"""
+    from contextlib import asynccontextmanager
+    from unittest.mock import AsyncMock
+    import database
+    from services import weekly_report, email_service, health_monitor
+
+    @asynccontextmanager
+    async def session():
+        yield db_session
+
+    sent = AsyncMock(return_value=True)
+    monkeypatch.setattr(database, "AsyncSessionLocal", session)
+    monkeypatch.setattr(email_service, "send_weekly_summary", sent)
+    monkeypatch.setattr(health_monitor, "deepseek_balance", AsyncMock(return_value=None))
+    assert await weekly_report.run_weekly_report() is True
+    stats = sent.await_args.args[0]
+    assert stats["headline"] == "本周没人使用"
+    assert any("每周一都会发" in n for n in stats["notes"])

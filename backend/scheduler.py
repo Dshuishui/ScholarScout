@@ -374,7 +374,7 @@ def setup_scheduler() -> AsyncIOScheduler:
     from services.weekly_report import run_weekly_report
     scheduler.add_job(
         run_weekly_report,
-        # 每周一北京时间 09:00；这一周没人用就不会发信
+        # 每周一北京时间 09:00；没人用的那周也发，标题写"本周没人使用"
         trigger=CronTrigger(day_of_week="mon", hour=1, minute=0, timezone="UTC"),
         id="weekly_report",
         replace_existing=True,

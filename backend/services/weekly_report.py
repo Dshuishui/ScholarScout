@@ -1,4 +1,4 @@
-"""每周汇总邮件：这一周有人用才发，没人用就完全不打扰。
+"""每周汇总邮件，每周一都发：没人用的那周标题写"本周没人使用"。
 
 数据全部来自我们自己的数据库（site_counters + 各业务表），不依赖 Umami。
 """
@@ -6,11 +6,9 @@ from datetime import datetime, timedelta
 
 from sqlalchemy import func, select
 
-from logging_config import get_logger
 from models_db import Feedback, SavedPaper, SearchSession, Subscription, SubscriptionQueueItem, TrialUsage, User
 from services import stats as stats_service
 
-logger = get_logger(__name__)
 
 
 async def collect(db, days: int = 7, now: datetime | None = None) -> dict:
@@ -86,13 +84,20 @@ def _format(data: dict, balance: float | None, now: datetime, openalex: dict | N
     if data["search"] and not data["register"]:
         notes.append("有人搜索但没人注册：可以看看注册引导是不是不够清楚")
 
-    headline = f"本周 {data['search']} 次搜索 · {data['register']} 人注册"
+    if data.get("has_activity", True):
+        headline = f"本周 {data['search']} 次搜索 · {data['register']} 人注册"
+    else:
+        headline = "本周没人使用"
+        notes.insert(0, "这一周没人搜索、对话或注册。周报每周一都会发，哪周没收到就是发信出了问题")
     return {"period": f"{start} 至 {now.strftime('%Y-%m-%d')}（UTC）",
             "headline": headline, "rows": rows, "notes": notes}
 
 
-async def run_weekly_report(force: bool = False) -> bool:
-    """定时任务入口。返回是否真的发出了邮件。"""
+async def run_weekly_report() -> bool:
+    """定时任务入口。返回是否真的发出了邮件。
+
+    没人用的那周也发：以前那周直接跳过，站长收不到信时分不清是没人用还是发信坏了（2026-11-09）。
+    """
     from database import AsyncSessionLocal
     from services.email_service import send_weekly_summary
     from services.health_monitor import deepseek_balance, openalex_budget
@@ -100,8 +105,5 @@ async def run_weekly_report(force: bool = False) -> bool:
     now = datetime.utcnow()
     async with AsyncSessionLocal() as db:
         data = await collect(db, days=7, now=now)
-    if not data["has_activity"] and not force:
-        logger.info("Weekly summary skipped: no activity")
-        return False
     balance = await deepseek_balance()
     return await send_weekly_summary(_format(data, balance, now, openalex_budget()))
