@@ -1121,18 +1121,14 @@ def _sanitize_paper(p: Paper) -> Paper:
 
 
 def _normalize_title(title: str) -> str:
-    """标题规范化：Unicode 归一化 → ASCII → 小写 → 去首尾标点 → 压缩空白。
+    """标题规范化：去掉重音（Schrödinger → schrodinger）→ 小写 → 去首尾标点 → 压缩空白。
 
-    对纯非拉丁标题（中文、希腊字母等），ASCII 归一化会得到空串。此时回退到
-    NFKC 归一化后的原始标题，避免 deduplicate 因空 key 而整篇丢弃论文。
+    汉字等非拉丁文字原样保留。以前整体转成 ASCII，中文标题只剩夹在里面的英文：
+    「基于BERT的情感分析」和「基于BERT的命名实体识别」都变成 bert，被当成同一篇合并掉。
     """
-    t = unicodedata.normalize("NFKD", title).encode("ascii", "ignore").decode("ascii")
-    t = t.lower().rstrip(".,;:!?。，；：！？").strip()
-    t = re.sub(r"\s+", " ", t)
-    if t:
-        return t
-    fallback = unicodedata.normalize("NFKC", title).lower().rstrip(".,;:!?。，；：！？").strip()
-    return re.sub(r"\s+", " ", fallback)
+    t = "".join(c for c in unicodedata.normalize("NFKD", title) if not unicodedata.combining(c))
+    t = unicodedata.normalize("NFKC", t).lower().rstrip(".,;:!?。，；：！？").strip()
+    return re.sub(r"\s+", " ", t)
 
 
 def _doi_owner(doi: str | None) -> str | None:
@@ -1309,4 +1305,20 @@ async def search_all_sources(
         return papers
 
     results = await asyncio.gather(*(run_source(name, fn) for name, fn in funcs.items()))
-    return deduplicate([p for source_results in results for p in source_results])
+    return [p for p in deduplicate([p for source_results in results for p in source_results])
+            if in_date_range(p, parsed)]
+
+
+def in_date_range(p: Paper, parsed: ParsedQuery) -> bool:
+    """按年份判断是否在用户要的时间范围内；没有日期的保留。
+
+    大多数源只支持起始年份，结束年份以前只传给了谷歌学术，用户说"2018 年以前"照样会混进新论文。
+    """
+    year = (p.published_date or "")[:4]
+    if not year.isdigit():
+        return True
+    if parsed.date_from and year < parsed.date_from[:4]:
+        return False
+    if parsed.date_to and year > parsed.date_to[:4]:
+        return False
+    return True

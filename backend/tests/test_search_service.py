@@ -893,3 +893,22 @@ def test_sanitize_paper_cleans_venue():
     assert _sanitize_paper(p).venue == "Laser & Optoelectronics Progress"
     # OpenAlex 有时把收录目录 DOAJ 当成了期刊名
     assert _sanitize_paper(make_paper("W2", "T", venue="DOAJ (DOAJ: Directory of Open Access Journals)")).venue is None
+
+
+# ── Codex 审查（2026-11-15）发现的问题 ───────────────────────────────────────
+
+def test_normalize_title_keeps_chinese_so_different_papers_stay_apart():
+    a = make_paper("1", "基于BERT的情感分析", doi="10.1/a", source="中文文献")
+    b = make_paper("2", "基于BERT的命名实体识别", doi="10.1/b", source="中文文献")
+    assert len(deduplicate([a, b])) == 2
+    assert _normalize_title("Schrödinger equation") == _normalize_title("Schrodinger Equation")   # 重音照样折叠
+    assert _normalize_title("基于BERT的情感分析。") == _normalize_title("基于bert的情感分析")
+
+
+async def test_search_all_sources_enforces_date_range():
+    source_mocks = {src: AsyncMock(return_value=[]) for src in _ALL_SOURCE_NAMES}
+    p = lambda i, d: Paper(paper_id=f"x{i}", title=f"T{i}", authors=[], source="arXiv", published_date=d)
+    source_mocks["arXiv"] = AsyncMock(return_value=[p(1, "2015-06-01"), p(2, "2021-01-01"), p(3, None), p(4, "2012-01-01")])
+    with patch.dict("services.search_service._SOURCE_FUNCS", source_mocks):
+        result = await search_all_sources(ParsedQuery(keywords=["x"], date_from="2014-01-01", date_to="2018-12-31"))
+    assert sorted(r.paper_id for r in result) == ["x1", "x3"]   # 没有日期的保留

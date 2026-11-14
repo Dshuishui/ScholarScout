@@ -8,7 +8,7 @@ from models import ParsedQuery, Paper
 from services.llm_service import rank_accepted, suggest_requery, validate_papers
 from services.pdf_finder_service import generate_fallback_links
 from services.search_service import (
-    EXPANSION_MIN_SCORE, enhance_with_unpaywall, expand_citations, only_new, search_all_sources,
+    EXPANSION_MIN_SCORE, enhance_with_unpaywall, expand_citations, in_date_range, only_new, search_all_sources,
 )
 
 # 8 分以上的论文少于这么多篇，就换个说法再搜一次。不能数 5 分以上的：窄题常有三四十篇 5 分，8 分以上却只有零到三篇
@@ -23,7 +23,8 @@ async def expand_and_validate(final: list[Paper], pool: list[Paper], parsed: Par
                               query: str, api_key: str) -> list[Paper]:
     """沿引用链补：从 AI 打了高分的论文出发。"""
     seeds = [p for p in final if (p.relevance_score or 0) >= EXPANSION_MIN_SCORE]
-    return await _vet(await expand_citations(seeds, pool, parsed), query, api_key, "citations")
+    candidates = [p for p in await expand_citations(seeds, pool, parsed) if in_date_range(p, parsed)]
+    return await _vet(candidates, query, api_key, "citations")
 
 
 async def requery_and_validate(query: str, parsed: ParsedQuery, pool: list[Paper], found: int, api_key: str,
