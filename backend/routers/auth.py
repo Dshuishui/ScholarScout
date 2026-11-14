@@ -84,10 +84,12 @@ async def register(req: RegisterRequest, request: Request, db: AsyncSession = De
         if not _rate_ok(_resend_attempts, req.email.lower(), limit=3, window_sec=3600):
             raise HTTPException(status_code=429, detail="发送过于频繁，请 1 小时后再试")
         token, expires = _make_verify_token()
+        # 密码一并换成这次填的：以前只重发邮件、保留第一次注册的密码，
+        # 攻击者先拿别人的邮箱注册，主人点了验证链接后，攻击者就能用自己的密码登录
         await db.execute(
             sa_update(User)
             .where(User.id == existing.id)
-            .values(verify_token=token, verify_token_expires=expires)
+            .values(verify_token=token, verify_token_expires=expires, password_hash=hash_password(req.password))
         )
         await db.commit()
         verify_url = f"{APP_BASE_URL}/?verify={token}"

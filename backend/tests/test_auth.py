@@ -77,3 +77,17 @@ async def test_me_success(client, db_session):
 async def test_me_no_token(client):
     r = await client.get("/api/auth/me")
     assert r.status_code == 401  # FastAPI 0.116+ 缺少凭证时返回 401（以前是 403）
+
+
+@pytest.mark.asyncio
+async def test_reregistering_unverified_email_replaces_password(client, db_session):
+    """抢注：攻击者先用别人的邮箱注册，真主人再注册并点验证链接后，攻击者的密码不能还能登录。"""
+    from sqlalchemy import select
+    from models_db import User
+    await client.post("/api/auth/register", json={"email": "victim@b.com", "password": "attacker-pass"})
+    await client.post("/api/auth/register", json={"email": "victim@b.com", "password": "owner-pass-1"})
+    token = (await db_session.execute(select(User.verify_token).where(User.email == "victim@b.com"))).scalar_one()
+    assert (await client.get(f"/api/auth/verify-email?token={token}")).status_code == 200
+    login = lambda pw: client.post("/api/auth/login", json={"email": "victim@b.com", "password": pw})
+    assert (await login("attacker-pass")).status_code == 401
+    assert (await login("owner-pass-1")).status_code == 200
