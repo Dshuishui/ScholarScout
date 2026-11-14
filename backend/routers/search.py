@@ -341,8 +341,9 @@ async def search(
                 parsed = await parse_query(request.query, api_key, history)
 
             kw_str = "、".join(parsed.keywords)
-            # 下面可能换一组检索词再搜，缓存仍按用户确认的关键词存；中文检索词不同，查到的中文论文也不同
-            cache_keywords = parsed.keywords + parsed.zh_keywords
+            # 下面可能换一组检索词再搜，缓存仍按用户确认的关键词存；中文检索词不同，查到的中文论文也不同。
+            # 缓存的是按这个问题打过分的结果：两个问题碰巧提取出同一组关键词时不能共用，所以把原问题也放进键里
+            cache_keywords = parsed.keywords + parsed.zh_keywords + ([f"q:{request.query.strip()}"] if request.query.strip() else [])
             yield sse("progress", {"message": f"正在搜索关键词：{kw_str}..."})
 
             # 缓存键用实际要查的数据源（已含按领域选源的结果），避免复用未选源时的缓存
@@ -444,19 +445,28 @@ async def search(
             accepted = [with_pdf(p) for p in accepted]
             rejected = [with_pdf(p) for p in rejected]
             final = rank_accepted(accepted)[:request.validated_limit]
+            # 每一批都打分失败（DeepSeek 余额用完、Key 失效、全面超时）时，结果是原样保留的未筛选论文：
+            # 不能说成"找到 N 篇相关论文"，不扣次数，不缓存，也不再补论文（补的那几步同样要调大模型）
+            ai_failed = bool(accepted) and not rejected and all(p.relevance_score is None for p in accepted)
+            if ai_failed:
+                logger.warning("AI screening failed for every batch; returning unscored results")
+                final = sorted(accepted, key=lambda p: p.citations, reverse=True)[:request.validated_limit]
 
             await _count(stats.SEARCH)
             papers_dict = [p.model_dump() for p in final]
             rejected_dict = [p.model_dump() for p in rejected]
             refund_info = {}
-            if not final:
-                # 一篇相关的都没筛出来，这次不算次数
+            message = f"为您找到 {len(final)} 篇相关论文。"
+            if not final or ai_failed:
+                # 一篇相关的都没筛出来，或者 AI 根本没能筛，这次不算次数
                 await _refund(charge)
                 refund_info = _refund_note(charge)
+            if ai_failed:
+                message = f"AI 筛选暂时不可用，下面是未经筛选的 {len(final)} 篇检索结果（按被引次数排序），本次不计次数。"
             yield sse("done", {
                 "papers": papers_dict,
                 "rejected_papers": rejected_dict,
-                "message": f"为您找到 {len(final)} 篇相关论文。",
+                "message": message,
                 **refund_info,
             })
             result_delivered = True
@@ -465,10 +475,11 @@ async def search(
             asyncio.create_task(_index_papers_async(papers_dict))
 
             # Store validated results in Redis (non-blocking)
-            asyncio.create_task(cache_search(
-                cache_keywords, source_names,
-                papers_dict, parsed.date_from or "", parsed.date_to or "",
-            ))
+            if not ai_failed:
+                asyncio.create_task(cache_search(
+                    cache_keywords, source_names,
+                    papers_dict, parsed.date_from or "", parsed.date_to or "",
+                ))
 
             # ── PDF 深度查找（异步补充，不阻塞结果展示）──────────────────
             no_pdf = [p for p in final if not p.pdf_url]
@@ -502,7 +513,7 @@ async def search(
             # ── 首屏之后再补两批（结果已经给出，不拖慢首屏）────────────────
             # 补充失败不能把已经给出的结果变成"搜索出错"，所以各自兜住异常
             added: list = []
-            if strong_count(final) < FEW_STRONG:
+            if not ai_failed and strong_count(final) < FEW_STRONG:
                 yield sse("expanding", {"message": "高度相关的论文较少，正在换个说法再搜一次..."})
                 try:
                     extra = await requery_and_validate(request.query, parsed, papers, strong_count(final), api_key,

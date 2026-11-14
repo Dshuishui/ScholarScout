@@ -17,7 +17,8 @@ SEARCH_BODY = {"query": "rag", "keywords": ["retrieval augmented generation"]}
 
 
 def _paper(i: int) -> Paper:
-    return Paper(paper_id=f"p{i}", title=f"Paper {i}", authors=["A"], source="OpenAlex")
+    # 打过分：全部没打分的结果会被当成 AI 筛选整体失败（不扣次数、不缓存）
+    return Paper(paper_id=f"p{i}", title=f"Paper {i}", authors=["A"], source="OpenAlex", relevance_score=7.0)
 
 
 @pytest.fixture
@@ -330,8 +331,8 @@ async def test_search_sends_citation_expansion_after_results(client, trial, monk
 
     async def expand(seeds, pool, parsed):
         calls.append(([p.paper_id for p in seeds], len(pool)))
-        return [_paper(1).model_copy(update={"paper_id": "x1", "title": "Cited"}),
-                _paper(2).model_copy(update={"paper_id": "x2", "title": "Unscored"})]
+        return [_paper(1).model_copy(update={"paper_id": "x1", "title": "Cited", "relevance_score": None}),
+                _paper(2).model_copy(update={"paper_id": "x2", "title": "Unscored", "relevance_score": None})]
 
     import services.expansion as ex
     trial["validate_papers"].side_effect = validate
@@ -470,3 +471,23 @@ async def test_chinese_keywords_flow_from_parse_to_search(client, trial, monkeyp
     assert r.json()["zh_keywords"] == ["镁基储氢材料"]
     await _search(client, body={**SEARCH_BODY, "zh_keywords": ["镁基储氢材料"]})
     assert trial["search_all_sources"].call_args.args[0].zh_keywords == ["镁基储氢材料"]
+
+
+async def test_search_when_ai_screening_fails_entirely_is_not_charged_or_cached(client, db_session, trial):
+    """DeepSeek 余额用完等情况：每批都打分失败，结果原样保留。不能说成"找到 N 篇相关论文"，不扣次数，也不缓存。"""
+    unscored = [Paper(paper_id="u1", title="U1", authors=[], source="OpenAlex")]
+    trial["validate_papers"].return_value = (unscored, [])
+    resp = await _search(client)
+    done = next(d for e, d in _events(resp) if e == "done")
+    assert "AI 筛选暂时不可用" in done["message"] and done.get("refunded") is True
+    assert await _usage_count(db_session) == 0
+    trial["cache_search"].assert_not_called()
+
+
+async def test_search_cache_key_includes_the_question(client, trial):
+    """两个不同问题碰巧提取出同一组关键词时，不能拿到按另一个问题打的分。"""
+    await _search(client, body={**SEARCH_BODY, "query": "问题甲"})
+    key_a = trial["get_cached_search"].await_args.args[0]
+    await _search(client, device=DEVICE_B, body={**SEARCH_BODY, "query": "问题乙"})
+    key_b = trial["get_cached_search"].await_args.args[0]
+    assert key_a != key_b
