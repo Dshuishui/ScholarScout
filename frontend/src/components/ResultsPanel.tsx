@@ -960,8 +960,8 @@ const addKeyword = () => {
         </div>
       )}
 
-      {/* 中文提问：给知网、万方等中文库的入口，那边独有的论文我们搜不到 */}
-      {confirmedKeywords != null && zhKeywords.length > 0 && (
+      {/* 中文提问：给知网、万方等中文库的入口，那边独有的论文我们搜不到。一篇都没搜到时下面的空状态里有更醒目的一份 */}
+      {confirmedKeywords != null && zhKeywords.length > 0 && (isLoading || papers.length > 0 || rejectedPapers.length > 0) && (
         <div className="px-3 sm:px-5 py-2 bg-white border-b border-gray-100">
           <ChineseDbLinks keywords={zhKeywords} />
         </div>
