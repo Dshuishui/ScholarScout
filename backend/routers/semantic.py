@@ -1,6 +1,7 @@
 """Semantic search and RAG endpoints."""
 import asyncio
 import logging
+import re
 from typing import Optional
 
 import httpx
@@ -193,21 +194,34 @@ def _paper_to_node(item: dict, role: str) -> dict:
     }
 
 
-@router.get("/citations/{paper_id}")
+# 只有从 Semantic Scholar 搜到的论文编号它才认；它的搜索接口没 key 时一直 429，
+# 其他来源的论文改用 DOI 去查（arXiv 论文也有 10.48550/arXiv.<id> 这个 DOI）。
+_DOI_RE = re.compile(r"^10\.\d{4,9}/[^\s?#]+$")
+
+
+@router.get("/citations/{paper_id:path}")
 async def get_citation_graph(
     paper_id: str,
     limit: int = Query(default=20, ge=1, le=50),
+    doi: Optional[str] = Query(default=None, max_length=300),
 ):
     """
-    Fetch references and citations for a Semantic Scholar paper.
+    Fetch references and citations for a paper from Semantic Scholar.
+    `paper_id` is the graph node id (links attach to it); `doi`, when given, is what we look up.
     Returns {nodes, links} where links have type='cites'.
     """
+    if doi is not None and (not _DOI_RE.match(doi) or ".." in doi):
+        raise HTTPException(status_code=422, detail="DOI 格式不对")
+    lookup = f"DOI:{doi}" if doi else paper_id
+    if ".." in lookup or "?" in lookup or "#" in lookup:
+        raise HTTPException(status_code=422, detail="论文编号格式不对")
+
     fields = _SS_FIELDS
     async with httpx.AsyncClient(timeout=15) as client:
         ref_resp, cit_resp = await asyncio.gather(
-            client.get(f"{_SS_BASE}/{paper_id}/references", params={"fields": fields, "limit": limit},
+            client.get(f"{_SS_BASE}/{lookup}/references", params={"fields": fields, "limit": limit},
                        headers=SEMANTIC_SCHOLAR_HEADERS),
-            client.get(f"{_SS_BASE}/{paper_id}/citations",  params={"fields": fields, "limit": limit},
+            client.get(f"{_SS_BASE}/{lookup}/citations",  params={"fields": fields, "limit": limit},
                        headers=SEMANTIC_SCHOLAR_HEADERS),
             return_exceptions=True,
         )
@@ -235,6 +249,9 @@ async def get_citation_graph(
                 links.append({"source": paper["paperId"], "target": paper_id, "similarity": 0.8, "type": "cites"})
 
     if not nodes and not links:
-        raise HTTPException(status_code=404, detail="未找到引用数据（论文可能不在 Semantic Scholar 中）")
+        busy = [r for r in (ref_resp, cit_resp) if isinstance(r, httpx.Response) and r.status_code == 429]
+        if busy:
+            raise HTTPException(status_code=503, detail="Semantic Scholar 暂时繁忙，请稍后再试")
+        raise HTTPException(status_code=404, detail="Semantic Scholar 里没有这篇论文的引用数据")
 
     return {"nodes": list(nodes.values()), "links": links}

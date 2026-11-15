@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect } from 'react'
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react'
 import ForceGraph2D from 'react-force-graph-2d'
 import type { Paper } from '../types'
 
@@ -59,6 +59,9 @@ export function PaperGraphPanel({ papers, onClose }: Props) {
   const [dimensions, setDimensions] = useState({ width: 600, height: 500 })
   const [expandingId, setExpandingId] = useState<string | null>(null)
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set())
+  const [expandError, setExpandError] = useState<{ id: string; msg: string } | null>(null)
+  // 只有 Semantic Scholar 自己的论文编号它才认，其他来源的论文用 DOI 去查
+  const doiById = useMemo(() => new Map(papers.map(p => [p.paper_id, p.doi])), [papers])
   const [hoveredNode, setHoveredNode] = useState<GraphNode | null>(null)
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 })
 
@@ -111,11 +114,23 @@ export function PaperGraphPanel({ papers, onClose }: Props) {
     fetchGraph(threshold)
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const expandCitations = useCallback(async (nodeId: string) => {
+  const expandCitations = useCallback(async (node: GraphNode) => {
+    const nodeId = node.id
     setExpandingId(nodeId)
+    setExpandError(null)
     try {
-      const r = await fetch(`/api/semantic/citations/${encodeURIComponent(nodeId)}?limit=20`)
-      if (!r.ok) throw new Error(await r.text())
+      const qs = new URLSearchParams({ limit: '20' })
+      const doi = node.source === 'Semantic Scholar' ? undefined : doiById.get(nodeId)
+      if (doi) qs.set('doi', doi)
+      const r = await fetch(`/api/semantic/citations/${encodeURIComponent(nodeId)}?${qs}`)
+      if (!r.ok) {
+        let msg = '没拉到引用数据，请稍后再试'
+        try {
+          const body = await r.json()
+          if (typeof body?.detail === 'string') msg = body.detail
+        } catch { /* 不是 JSON，用默认提示 */ }
+        throw new Error(msg)
+      }
       const data: GraphData = await r.json()
       setExpandedIds(prev => new Set([...prev, nodeId]))
       setGraphData(prev => {
@@ -134,11 +149,11 @@ export function PaperGraphPanel({ papers, onClose }: Props) {
       // reheat after React flushes the new graphData so new nodes scatter properly
       setTimeout(() => graphRef.current?.d3ReheatSimulation(), 50)
     } catch (e) {
-      console.warn('Citation expand failed:', e)
+      setExpandError({ id: nodeId, msg: e instanceof Error ? e.message : '没拉到引用数据，请稍后再试' })
     } finally {
       setExpandingId(null)
     }
-  }, [])
+  }, [doiById])
 
   const nodeCanvasObject = useCallback((node: GraphNode, ctx: CanvasRenderingContext2D, globalScale: number) => {
     const r = Math.max(4, Math.min(12, 4 + Math.log1p(node.citations || 0) * 1.5))
@@ -350,15 +365,16 @@ export function PaperGraphPanel({ papers, onClose }: Props) {
               </div>
               {/* Expand citation graph button */}
               {(() => {
-                const canExpand = selected.source === 'Semantic Scholar'
+                const canExpand = selected.source === 'Semantic Scholar' || !!doiById.get(selected.id)
                 const isExpanded = expandedIds.has(selected.id)
                 const isExpanding = expandingId === selected.id
                 const title = !canExpand
-                  ? '仅 Semantic Scholar 来源的论文支持扩展引用图'
+                  ? '这篇论文没有 DOI，查不到它的引用关系'
                   : isExpanded ? '引用图已扩展' : '从 Semantic Scholar 拉取参考文献和引用该论文的论文'
                 return (
+                  <>
                   <button
-                    onClick={() => expandCitations(selected.id)}
+                    onClick={() => expandCitations(selected)}
                     disabled={!canExpand || isExpanding || isExpanded}
                     title={title}
                     className="mt-2.5 w-full text-[11px] flex items-center justify-center gap-1.5 px-2 py-1.5 rounded border border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
@@ -373,8 +389,12 @@ export function PaperGraphPanel({ papers, onClose }: Props) {
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                       </svg>
                     )}
-                    {!canExpand ? '不支持扩展（非 SS 来源）' : isExpanded ? '已扩展引用图' : '扩展引用图'}
+                    {!canExpand ? '没有 DOI，无法扩展' : isExpanded ? '已扩展引用图' : '扩展引用图'}
                   </button>
+                  {expandError?.id === selected.id && (
+                    <p className="mt-1 text-[10px] text-red-500">{expandError.msg}</p>
+                  )}
+                  </>
                 )
               })()}
               {/* 相邻连接 */}

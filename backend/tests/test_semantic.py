@@ -319,3 +319,59 @@ async def test_rag_includes_paper_context_in_prompt(client):
     user_msg = next(m["content"] for m in captured[0] if m["role"] == "user")
     assert "Attention Is All You Need" in user_msg
     assert "BERT" in user_msg
+
+
+async def test_citation_graph_looks_up_by_doi_but_links_to_node_id(client):
+    """其他来源的论文编号 Semantic Scholar 不认：用 DOI 查，连线仍挂在图里原来的节点上。"""
+    seen = []
+    ref_paper = {"paperId": "ref1", "title": "Ref", "year": 2020,
+                 "citationCount": 0, "authors": [], "venue": None}
+
+    async def mock_get(url, **kwargs):
+        seen.append(url)
+        return _make_ss_response([{"citedPaper": ref_paper}] if "references" in url else [])
+
+    mock_client = AsyncMock()
+    mock_client.get = mock_get
+    ctx = MagicMock()
+    ctx.__aenter__ = AsyncMock(return_value=mock_client)
+    ctx.__aexit__ = AsyncMock(return_value=False)
+    with patch("routers.semantic.httpx.AsyncClient", return_value=ctx):
+        r = await client.get("/api/semantic/citations/W2963403868",
+                             params={"doi": "10.48550/arXiv.1706.03762"})
+
+    assert r.status_code == 200
+    assert all("/DOI:10.48550/arXiv.1706.03762/" in u for u in seen)
+    assert r.json()["links"][0]["source"] == "W2963403868"
+
+
+async def test_citation_graph_accepts_ids_with_slash(client):
+    ctx = _mock_httpx_client(ref_data=[], cit_data=[])
+    with patch("routers.semantic.httpx.AsyncClient", return_value=ctx):
+        r = await client.get("/api/semantic/citations/hep-th%2F9901001v1")
+    assert r.status_code == 404  # 路由匹配上了，只是没数据
+
+
+async def test_citation_graph_rejects_bad_doi(client):
+    r = await client.get("/api/semantic/citations/p1", params={"doi": "10.1/../../search"})
+    assert r.status_code == 422
+    r = await client.get("/api/semantic/citations/p1", params={"doi": "not-a-doi"})
+    assert r.status_code == 422
+
+
+async def test_citation_graph_503_when_rate_limited(client):
+    busy = MagicMock(spec=httpx.Response)
+    busy.status_code = 429
+
+    async def mock_get(url, **kwargs):
+        return busy
+
+    mock_client = AsyncMock()
+    mock_client.get = mock_get
+    ctx = MagicMock()
+    ctx.__aenter__ = AsyncMock(return_value=mock_client)
+    ctx.__aexit__ = AsyncMock(return_value=False)
+    with patch("routers.semantic.httpx.AsyncClient", return_value=ctx):
+        r = await client.get("/api/semantic/citations/p1", params={"doi": "10.1145/3132747.3132757"})
+    assert r.status_code == 503
+    assert "繁忙" in r.json()["detail"]
