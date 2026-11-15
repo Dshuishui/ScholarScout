@@ -61,6 +61,8 @@ export function useSearch(apiKey: string, settings: SearchSettings, model?: stri
   // 用户点「停止搜索」时中断请求，已经搜到的论文留下
   const abortRef = useRef<AbortController | null>(null)
   const userStopped = useRef(false)
+  // 停下时一篇都还没拿到：结果页要说"已停止"，不能显示"未找到相关论文"
+  const [searchStopped, setSearchStopped] = useState(false)
   const [statusMessage, setStatusMessage] = useState('')
   const [lastConfirmed, setLastConfirmed] = useState<PendingSearch | null>(null)
   const [sourceStatuses, setSourceStatuses] = useState<Record<string, SourceStatus>>({})
@@ -149,6 +151,7 @@ export function useSearch(apiKey: string, settings: SearchSettings, model?: stri
     const ctrl = new AbortController()
     abortRef.current = ctrl
     userStopped.current = false
+    setSearchStopped(false)
 
     try {
       for await (const event of searchPapers(
@@ -263,6 +266,7 @@ export function useSearch(apiKey: string, settings: SearchSettings, model?: stri
       if (stale()) return
       if (userStopped.current) {
         const kept = keepPreviewAsResults()
+        setSearchStopped(true)
         setStatusMessage('')
         updateAssistant(assistantId, {
           content: kept ? '已停止搜索，保留了已找到的论文（未经 AI 筛选）。' : '已停止搜索。',
@@ -469,6 +473,7 @@ export function useSearch(apiKey: string, settings: SearchSettings, model?: stri
     hasSearchError,
     chatOnlyReplyAt,
     stopSearch,
+    searchStopped,
     history,
     removeHistory,
     searchFromHistory,

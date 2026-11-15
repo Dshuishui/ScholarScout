@@ -60,7 +60,7 @@ export function MainLayout() {
   const {
     messages, papers, previewPapers, previewTotal, rejectedPapers, isLoading, statusMessage, sourceStatuses,
     search, confirmedKeywords, zhKeywords, reSearch,
-    hasSearchError, chatOnlyReplyAt, stopSearch, history, removeHistory, searchFromHistory, searchDateRange,
+    hasSearchError, chatOnlyReplyAt, stopSearch, searchStopped, history, removeHistory, searchFromHistory, searchDateRange,
     currentSessionId, loadSession,
   } = useSearch(apiKey, settings, model)
 
@@ -366,6 +366,7 @@ export function MainLayout() {
         <div className={`${isMobile ? (mobileTab === 'results' ? 'flex-1 min-w-0' : 'hidden') : 'flex-1 min-w-0'}`}>
           <ResultsPanel
             onStopSearch={stopSearch}
+            searchStopped={searchStopped}
             papers={papers}
             previewPapers={previewPapers}
             previewTotal={previewTotal}

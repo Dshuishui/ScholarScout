@@ -69,6 +69,8 @@ interface Props {
   onExampleSearch?: (query: string) => boolean | void
   /** 中断正在进行的搜索，保留已找到的论文 */
   onStopSearch?: () => void
+  /** 用户中途停了搜索 */
+  searchStopped?: boolean
   apiKey?: string
   getMessages?: (paperId: string) => ChatMessage[]
   hasSearchError?: boolean
@@ -223,7 +225,7 @@ function Pagination({ current, total, onChange }: {
   )
 }
 
-export function ResultsPanel({ papers, availableSources, previewPapers = [], previewTotal = 0, rejectedPapers = [], isLoading, statusMessage, sourceStatuses = {}, settings, onSettingsChange, onReSearch, confirmedKeywords, zhKeywords = [], onAnalyzePaper, onExampleSearch, apiKey, getMessages, hasSearchError = false, searchDateRange, sessionId, onOpenRag, onOpenGraph, onRequireKey, onStopSearch }: Props) {
+export function ResultsPanel({ papers, availableSources, previewPapers = [], previewTotal = 0, rejectedPapers = [], isLoading, statusMessage, sourceStatuses = {}, settings, onSettingsChange, onReSearch, confirmedKeywords, zhKeywords = [], onAnalyzePaper, onExampleSearch, apiKey, getMessages, hasSearchError = false, searchDateRange, sessionId, onOpenRag, onOpenGraph, onRequireKey, onStopSearch, searchStopped = false }: Props) {
   const [currentPage, setCurrentPage] = useState(1)
   const [showBackToTop, setShowBackToTop] = useState(false)
   const listScrollRef = useRef<HTMLDivElement>(null)
@@ -1328,7 +1330,19 @@ const addKeyword = () => {
 
         {/* 搜索后全源零结果 */}
         {/* 不看 statusMessage：搜索结束时它总有内容（"未找到相关论文…"），以前要求它为空，这块从来没显示过 */}
-        {!isLoading && papers.length === 0 && rejectedPapers.length === 0 && !hasSearchError && confirmedKeywords != null && confirmedKeywords.length > 0 && (
+        {!isLoading && searchStopped && papers.length === 0 && rejectedPapers.length === 0 && (
+          <div className="flex flex-col items-center justify-center min-h-[240px] text-center gap-3 px-8">
+            <p className="text-sm font-medium text-gray-600">已停止搜索</p>
+            <p className="text-xs text-gray-400">停下时还没有找到论文。想看结果可以再搜一次</p>
+            {onReSearch && confirmedKeywords && confirmedKeywords.length > 0 && (
+              <button
+                onClick={() => onReSearch(confirmedKeywords)}
+                className="text-sm text-indigo-600 hover:text-indigo-700 border border-indigo-200 rounded-lg px-4 py-1.5 transition-colors"
+              >重新搜索</button>
+            )}
+          </div>
+        )}
+        {!isLoading && !searchStopped && papers.length === 0 && rejectedPapers.length === 0 && !hasSearchError && confirmedKeywords != null && confirmedKeywords.length > 0 && (
           <div className="flex flex-col items-center justify-center min-h-[280px] text-center gap-4 px-8">
             <div className="w-14 h-14 rounded-2xl bg-gray-100 border border-gray-200 flex items-center justify-center">
               <svg className="w-7 h-7 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
