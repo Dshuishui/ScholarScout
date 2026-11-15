@@ -1,6 +1,7 @@
 import asyncio
 import html
 from collections import Counter
+from datetime import datetime, timezone
 import random
 import logging
 import re
@@ -51,13 +52,32 @@ async def _get_with_retry(client: httpx.AsyncClient, url: str, attempts: int = R
     return resp
 
 
+def _arxiv_day(date: str | None, end: bool) -> str | None:
+    """把 2021-01-01 或 2021 转成 arXiv 要的 YYYYMMDD；只有年份时取年初或年底。"""
+    digits = re.sub(r"\D", "", date or "")[:8]
+    if len(digits) < 4:
+        return None
+    return digits if len(digits) == 8 else digits[:4] + ("1231" if end else "0101")
+
+
+def _arxiv_date_filter(parsed: ParsedQuery) -> str:
+    """arXiv 只认两头都写日期的区间：`[X TO *]` 会直接返回 500。
+
+    至少从 2026-10 下旬起，带起始日期的查询（包括每天的订阅补充）因此全部拿不到 arXiv 结果。
+    """
+    start = _arxiv_day(parsed.date_from, end=False)
+    end = _arxiv_day(parsed.date_to, end=True)
+    if not start and not end:
+        return ""
+    start = start or "19910101"  # arXiv 最早的论文是 1991 年
+    end = end or datetime.now(timezone.utc).strftime("%Y%m%d")
+    return f" AND submittedDate:[{start}0000 TO {end}2359]"
+
+
 async def _search_arxiv(parsed: ParsedQuery, limit: int) -> list[Paper]:
     try:
         kw_part = " OR ".join(f'all:"{kw}"' for kw in parsed.keywords)
-        search_query = f'({kw_part})'
-        if parsed.date_from:
-            date_str = parsed.date_from.replace("-", "")
-            search_query += f' AND submittedDate:[{date_str}000000 TO *]'
+        search_query = f'({kw_part})' + _arxiv_date_filter(parsed)
         # 有时间范围也按相关性排：按日期排拿回的是"最新的、沾点边的"，不是最相关的
         sort_by = "relevance"
 
@@ -102,7 +122,7 @@ async def _search_arxiv(parsed: ParsedQuery, limit: int) -> list[Paper]:
                 continue
         return papers
     except Exception as e:
-        logger.warning("arXiv search error: %s", e)
+        logger.warning("arXiv search error: %r", e)
         return []
 
 
@@ -149,7 +169,7 @@ async def _search_semantic_scholar(parsed: ParsedQuery, limit: int) -> list[Pape
             ))
         return papers
     except Exception as e:
-        logger.warning("Semantic Scholar search error: %s", e)
+        logger.warning("Semantic Scholar search error: %r", e)
         return []
 
 
@@ -302,13 +322,13 @@ async def _search_openalex(parsed: ParsedQuery, limit: int) -> list[Paper]:
             results = dict(zip(tasks, await asyncio.gather(*tasks.values(), return_exceptions=True)))
         for name, r in results.items():
             if isinstance(r, Exception):
-                logger.warning("OpenAlex %s sub-search error: %s", name, r)
+                logger.warning("OpenAlex %s sub-search error: %r", name, r)
         ok = {name: r for name, r in results.items() if isinstance(r, list)}
         fused = _rrf_fuse([ok[n] for n in ("keyword", "semantic", "intersection") if n in ok], limit)
         seen = {p.paper_id for p in fused}
         return fused + [p for p in ok.get("cited", []) if p.paper_id not in seen]
     except Exception as e:
-        logger.warning("OpenAlex search error: %s", e)
+        logger.warning("OpenAlex search error: %r", e)
         return []
 
 
@@ -519,7 +539,7 @@ async def _search_pubmed(parsed: ParsedQuery, limit: int) -> list[Paper]:
                 continue
         return papers
     except Exception as e:
-        logger.warning("PubMed search error: %s", e)
+        logger.warning("PubMed search error: %r", e)
         return []
 
 
@@ -562,7 +582,7 @@ async def _search_core(parsed: ParsedQuery, limit: int) -> list[Paper]:
             ))
         return papers
     except Exception as e:
-        logger.warning("CORE search error: %s", e)
+        logger.warning("CORE search error: %r", e)
         return []
 
 
@@ -619,7 +639,7 @@ async def _search_inspire(parsed: ParsedQuery, limit: int) -> list[Paper]:
             ))
         return papers
     except Exception as e:
-        logger.warning("INSPIRE-HEP search error: %s", e)
+        logger.warning("INSPIRE-HEP search error: %r", e)
         return []
 
 
@@ -672,7 +692,7 @@ async def _search_europepmc(parsed: ParsedQuery, limit: int) -> list[Paper]:
             ))
         return papers
     except Exception as e:
-        logger.warning("Europe PMC search error: %s", e)
+        logger.warning("Europe PMC search error: %r", e)
         return []
 
 
@@ -730,7 +750,7 @@ async def _search_nasa_ads(parsed: ParsedQuery, limit: int) -> list[Paper]:
             ))
         return papers
     except Exception as e:
-        logger.warning("NASA ADS search error: %s", e)
+        logger.warning("NASA ADS search error: %r", e)
         return []
 
 
@@ -819,7 +839,7 @@ async def _search_crossref(parsed: ParsedQuery, limit: int) -> list[Paper]:
         items = await _crossref_query(" ".join(parsed.keywords), limit, parsed.date_from)
         return [p for p in map(_crossref_item_to_paper, items) if p]
     except Exception as e:
-        logger.warning("CrossRef search error: %s", e)
+        logger.warning("CrossRef search error: %r", e)
         return []
 
 

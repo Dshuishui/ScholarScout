@@ -258,7 +258,28 @@ async def test_arxiv_sorts_by_relevance_even_with_date(monkeypatch):
     p = await _capture_params(monkeypatch, s._search_arxiv,
                               ParsedQuery(keywords=["raft"], date_from="2021-01-01"))
     assert p["sortBy"] == "relevance"
-    assert "submittedDate:[20210101000000 TO *]" in p["search_query"]
+    assert "submittedDate:[202101010000 TO " in p["search_query"]
+
+
+async def test_arxiv_date_range_is_closed(monkeypatch):
+    """arXiv 对 `[X TO *]` 直接返回 500：没给结束日期时用今天补上。"""
+    from datetime import datetime, timezone
+    from services import search_service as s
+    today = datetime.now(timezone.utc).strftime("%Y%m%d")
+    p = await _capture_params(monkeypatch, s._search_arxiv,
+                              ParsedQuery(keywords=["raft"], date_from="2026-08-17"))
+    assert p["search_query"].endswith(f"submittedDate:[202608170000 TO {today}2359]")
+    assert "*" not in p["search_query"]
+
+
+def test_arxiv_date_filter_variants():
+    from services.search_service import _arxiv_date_filter
+    assert _arxiv_date_filter(ParsedQuery(keywords=["x"])) == ""
+    assert _arxiv_date_filter(ParsedQuery(keywords=["x"], date_from="2015-01-01", date_to="2018-12-31")) \
+        == " AND submittedDate:[201501010000 TO 201812312359]"
+    # 只有结束年份：从 arXiv 最早的论文算起；只给年份时取年底
+    assert _arxiv_date_filter(ParsedQuery(keywords=["x"], date_to="2018")) \
+        == " AND submittedDate:[199101010000 TO 201812312359]"
 
 
 async def test_pubmed_sorts_by_relevance(monkeypatch):
