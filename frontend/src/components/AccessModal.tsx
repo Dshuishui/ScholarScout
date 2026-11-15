@@ -29,7 +29,7 @@ const persistKey = (key: string) => {
 
 const maskKey = (key: string) => `sk-···${key.slice(-4)}`
 
-function headline(reason: GateReason, feature: string | undefined, signupBonus: number, canSignup: boolean) {
+function headline(reason: GateReason, feature: string | undefined, signupBonus: number, canSignup: boolean, chatSignupBonus: number) {
   const signupHint = canSignup && signupBonus > 0 ? `注册账号再送 ${signupBonus} 次免费搜索，或` : ''
   switch (reason) {
     case 'trial_exhausted':
@@ -41,11 +41,14 @@ function headline(reason: GateReason, feature: string | undefined, signupBonus: 
     case 'key_required':
       return { title: '需要 DeepSeek API Key', desc: `${signupHint}填写自己的 DeepSeek API Key 后使用。` }
     case 'feature':
+      if (feature === '论文对话') {
+        // 以前写"需要你自己的 Key、免费次数只用于搜索"：刚用过免费对话的人看了会糊涂，也不知道注册还能再领
+        const chatHint = canSignup && chatSignupBonus > 0 ? `注册账号再送 ${chatSignupBonus} 条免费对话；也可以` : ''
+        return { title: '免费对话用完了', desc: `${chatHint}填写自己的 DeepSeek API Key 继续对话，还能基于完整的 PDF 全文回答。` }
+      }
       return {
         title: `${feature ?? '这个功能'}需要你自己的 Key`,
-        desc: feature === '论文对话'
-          ? '免费对话条数已经用完。填写自己的 DeepSeek API Key 可以不限条数使用，还能基于上传的 PDF 全文回答。'
-          : '多论文分析、多文献问答由你的浏览器直接调用 DeepSeek，需要填写自己的 API Key。论文搜索和单篇论文对话有免费额度，不需要 Key。',
+        desc: '多论文分析、多文献问答由你的浏览器直接调用 DeepSeek，需要填写自己的 API Key。论文搜索和单篇论文对话有免费额度，不需要 Key。',
       }
     default:
       return { title: '使用方式', desc: '免费次数用完后，填写自己的 DeepSeek API Key 即可不限次数使用。Key 只保存在你的浏览器里。' }
@@ -78,8 +81,9 @@ export function AccessModal() {
   }
 
   const canSignup = !isLoggedIn && trial.enabled
-  const { title, desc } = headline(gate.reason, gate.feature, trial.signupBonus, canSignup)
-  const showSignup = canSignup && trial.signupBonus > 0 && gate.reason !== 'feature'
+  const { title, desc } = headline(gate.reason, gate.feature, trial.signupBonus, canSignup, trial.signupChatBonus)
+  const chatGate = gate.reason === 'feature' && gate.feature === '论文对话'
+  const showSignup = canSignup && (chatGate ? trial.signupChatBonus > 0 : trial.signupBonus > 0 && gate.reason !== 'feature')
 
   const applyKey = (key: string, source: 'input' | 'saved') => {
     persistKey(key)
@@ -167,7 +171,9 @@ export function AccessModal() {
           {showSignup && (
             <div className="rounded-2xl border border-indigo-200 p-4 mb-4"
               style={{ background: 'linear-gradient(135deg, #eef2ff 0%, #f5f3ff 60%, #fdf4ff 100%)' }}>
-              <p className="font-semibold text-indigo-700 text-sm mb-1">⚡ 注册再送 {trial.signupBonus} 次免费搜索</p>
+              <p className="font-semibold text-indigo-700 text-sm mb-1">
+                ⚡ {chatGate ? `注册再送 ${trial.signupChatBonus} 条免费对话、${trial.signupBonus} 次免费搜索` : `注册再送 ${trial.signupBonus} 次免费搜索`}
+              </p>
               <p className="text-xs text-indigo-600/80 mb-3 leading-relaxed">验证邮箱后到账，还能同步收藏、搜索快照和订阅推送。</p>
               <button
                 onClick={() => { track('gate_register_click', { reason: gate.reason }); setAuthTab('register') }}
@@ -227,11 +233,29 @@ export function AccessModal() {
             >{isValidating ? '验证中…' : '使用'}</button>
           </div>
           {error && <p className="text-red-500 text-xs mt-1.5">{error}</p>}
-          <p className="text-xs text-gray-400 mt-2 leading-relaxed">
-            Key 只保存在你的浏览器里。还没有 Key？
-            <a href="https://platform.deepseek.com/api_keys" target="_blank" rel="noopener noreferrer"
-              className="text-blue-500 hover:underline ml-0.5">去 DeepSeek 开放平台创建 →</a>
-          </p>
+          {/* 不懂技术的用户看到"API Key""sk-…"不知道是什么、要不要钱，以前只给了一个链接 */}
+          <details className="mt-2 rounded-xl bg-gray-50 border border-gray-100 px-3 py-2" open={!hasKey}>
+            <summary className="text-xs font-medium text-gray-600 cursor-pointer select-none">
+              API Key 是什么？怎么拿到？
+            </summary>
+            <p className="text-xs text-gray-500 mt-1.5 leading-relaxed">
+              它相当于你在 DeepSeek 的"使用凭证"，填上后由你的账户直接付费调用 AI，不再受本站免费次数限制。
+            </p>
+            <ol className="text-xs text-gray-500 mt-1.5 space-y-1 list-decimal pl-4 leading-relaxed">
+              <li>
+                打开
+                <a href="https://platform.deepseek.com/api_keys" target="_blank" rel="noopener noreferrer"
+                  className="text-blue-500 hover:underline mx-0.5">DeepSeek 开放平台</a>
+                ，用手机号注册并登录
+              </li>
+              <li>在「API keys」页面点「创建 API key」，复制以 sk- 开头的那串字符</li>
+              <li>粘贴到上面的输入框，点「使用」</li>
+            </ol>
+            <p className="text-[11px] text-gray-400 mt-1.5 leading-relaxed">
+              费用：需要先在 DeepSeek 平台充值少量余额，按实际用量扣费，钱直接付给 DeepSeek，本站不收费。
+              Key 只保存在你的浏览器里，本站服务器不保存。
+            </p>
+          </details>
 
           {/* 论文对话模型 */}
           <details className="mt-4 group">

@@ -8,7 +8,8 @@ import { TrialHint } from './TrialHint'
 interface Props {
   messages: Message[]
   isLoading: boolean
-  onSearch: (query: string, forceSearch?: boolean) => void
+  /** 返回 false 表示被额度拦下、没开始搜：这时保留输入框里的问题 */
+  onSearch: (query: string, forceSearch?: boolean) => boolean | void
   history: HistoryItem[]
   onSearchFromHistory: (item: HistoryItem) => void
   onRemoveHistory: (timestamp: number) => void
@@ -105,8 +106,7 @@ export function ChatPanel({
   const handleSend = () => {
     const q = input.trim()
     if (!q || isLoading) return
-    setInput('')
-    onSearch(q)
+    if (onSearch(q) !== false) setInput('')
   }
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -157,7 +157,7 @@ export function ChatPanel({
             <p className="text-xs text-gray-400 leading-relaxed">
               AI 提取关键词、按学科检索多个学术数据库，再逐篇筛选相关论文
             </p>
-            <p className="text-[11px] text-gray-300 mt-1">只检索英文学术库，暂不含知网等中文库</p>
+            <p className="text-[11px] text-gray-400 mt-1">中英文都能问；知网、万方的论文在结果页可一键跳过去搜</p>
             <TrialHint className="mt-2.5" />
           </div>
 

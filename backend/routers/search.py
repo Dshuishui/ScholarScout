@@ -39,7 +39,7 @@ from services.health_monitor import source_stats
 from config import (
     CORE_API_KEY, NASA_ADS_API_KEY, SERPAPI_KEY, KIMI_API_KEY,
     DEEPSEEK_BASE_URL, DEEPSEEK_MODEL, DEEPSEEK_SYSTEM_KEY,
-    FREE_SEARCHES_QUOTA, ANON_TRIAL_SEARCHES, SEARCH_LIMIT_PER_SOURCE, VALIDATED_LIMIT,
+    FREE_SEARCHES_QUOTA, ANON_TRIAL_SEARCHES, SEARCH_LIMIT_PER_SOURCE, VALIDATED_LIMIT, ACCOUNT_FREE_CHATS,
 )
 
 router = APIRouter()
@@ -210,6 +210,8 @@ async def trial_status(
         "enabled": enabled,
         "anon_total": ANON_TRIAL_SEARCHES,
         "signup_bonus": FREE_SEARCHES_QUOTA if enabled else 0,
+        # 免费对话用完的访客，提示"注册再领 N 条对话"用
+        "signup_chat_bonus": ACCOUNT_FREE_CHATS if enabled else 0,
         "anon_remaining": 0,
         "capacity_ok": True,
     }

@@ -26,6 +26,8 @@ interface TrialInfo {
   anonRemaining: number
   anonTotal: number
   signupBonus: number
+  /** 注册后送的免费对话条数 */
+  signupChatBonus: number
   capacityOk: boolean
   /** 免费论文对话剩余条数（未登录按浏览器算，登录按账号算） */
   chatsRemaining: number
@@ -75,7 +77,7 @@ function useAccessState(): AccessContextValue {
   })
   const [deviceId] = useState(loadDeviceId)
   const [trial, setTrial] = useState<TrialInfo>({
-    loaded: false, enabled: true, anonRemaining: 0, anonTotal: 2, signupBonus: 3, capacityOk: true,
+    loaded: false, enabled: true, anonRemaining: 0, anonTotal: 2, signupBonus: 3, signupChatBonus: 0, capacityOk: true,
     chatsRemaining: 0, chatsTotal: 0,
   })
   const [gate, setGate] = useState<{ reason: GateReason; feature?: string } | null>(null)
@@ -103,6 +105,7 @@ function useAccessState(): AccessContextValue {
         anonRemaining: d.anon_remaining ?? 0,
         anonTotal: d.anon_total ?? 2,
         signupBonus: d.signup_bonus ?? 0,
+        signupChatBonus: d.signup_chat_bonus ?? 0,
         capacityOk: d.capacity_ok ?? true,
         chatsRemaining: d.chats_remaining ?? 0,
         chatsTotal: d.chats_total ?? 0,

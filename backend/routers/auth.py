@@ -93,8 +93,10 @@ async def register(req: RegisterRequest, request: Request, db: AsyncSession = De
         )
         await db.commit()
         verify_url = f"{APP_BASE_URL}/?verify={token}"
-        await send_verification_email(existing.email, verify_url)
-        return {"message": "该邮箱已注册但尚未验证，验证邮件已重新发送，请查收"}
+        # 发信失败也说"已发送"的话，用户会一直等邮件、反复点重发，分不清是邮箱问题还是我们的问题
+        if not await send_verification_email(existing.email, verify_url):
+            return {"message": "注册信息已保存，但验证邮件暂时没发出去，请稍后点「重新发送验证邮件」", "email_sent": False}
+        return {"message": "该邮箱已注册但尚未验证，验证邮件已重新发送，请查收", "email_sent": True}
 
     token, expires = _make_verify_token()
     user = User(
@@ -109,8 +111,9 @@ async def register(req: RegisterRequest, request: Request, db: AsyncSession = De
     await db.commit()
 
     verify_url = f"{APP_BASE_URL}/?verify={token}"
-    await send_verification_email(req.email, verify_url)
-    return {"message": "注册成功！验证邮件已发送，请在 24 小时内点击邮件中的链接完成验证"}
+    if not await send_verification_email(req.email, verify_url):
+        return {"message": "注册信息已保存，但验证邮件暂时没发出去，请稍后点「重新发送验证邮件」", "email_sent": False}
+    return {"message": "注册成功！验证邮件已发送，请在 24 小时内点击邮件中的链接完成验证", "email_sent": True}
 
 
 @router.get("/verify-email")
@@ -206,7 +209,8 @@ async def resend_verification(req: ResendRequest, db: AsyncSession = Depends(get
     await db.commit()
 
     verify_url = f"{APP_BASE_URL}/?verify={token}"
-    await send_verification_email(user.email, verify_url)
+    if not await send_verification_email(user.email, verify_url):
+        raise HTTPException(status_code=503, detail="邮件暂时没发出去，请过几分钟再试")
     return {"message": "如果该邮箱存在且尚未验证，验证邮件已重新发送"}
 
 

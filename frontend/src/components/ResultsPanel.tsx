@@ -62,7 +62,7 @@ interface Props {
   statusMessage: string
   sourceStatuses?: Record<string, SourceStatus>
   onAnalyzePaper?: (paper: Paper) => void
-  onExampleSearch?: (query: string) => void
+  onExampleSearch?: (query: string) => boolean | void
   apiKey?: string
   getMessages?: (paperId: string) => ChatMessage[]
   hasSearchError?: boolean
@@ -254,7 +254,8 @@ export function ResultsPanel({ papers, availableSources, previewPapers = [], pre
   const [subModalKeywords, setSubModalKeywords] = useState<string[]>([])
   const [newSubId, setNewSubId] = useState<number | null>(null)
   // 数据源和数量设置：手机上默认折叠，把首屏留给论文列表
-  const [showConfig, setShowConfig] = useState(() => typeof window === 'undefined' || window.innerWidth >= 640)
+  // 数据源勾选、每源篇数是进阶设置：电脑上以前默认展开在最上面，新用户看不懂还占地方
+  const [showConfig, setShowConfig] = useState(false)
   const sourceOptions: readonly string[] = availableSources?.length ? availableSources : ALL_SOURCES
   // 中文标题：非英语母语用户扫 50 条英文标题很累，可一键切换（译文由后端翻译并缓存）
   const [showZhTitles, setShowZhTitles] = useState(() => {
@@ -267,7 +268,7 @@ export function ResultsPanel({ papers, availableSources, previewPapers = [], pre
   const [showCompare, setShowCompare] = useState(false)
   const [showAuthModal, setShowAuthModal] = useState(false)
   const [showExportModal, setShowExportModal] = useState(false)
-  const [exportOpts, setExportOpts] = useState({ format: 'csv' as 'csv' | 'bib' | 'ris', aiOnly: true, aiAnalysis: true, translate: true, chats: true })
+  const [exportOpts, setExportOpts] = useState({ format: 'csv' as 'csv' | 'bib' | 'ris', aiOnly: true, aiAnalysis: true, translate: true, chats: true, selectedOnly: false })
   const [exporting, setExporting] = useState(false)
   const [exportStatus, setExportStatus] = useState('')
 
@@ -355,12 +356,17 @@ export function ResultsPanel({ papers, availableSources, previewPapers = [], pre
     }
   }
 
+  // 勾选了几篇再点导出，以前仍然导出全部：有勾选时默认只导出勾选的
+  const selectedForExport = [...papers, ...rejectedPapers].filter(p => selectedIds.has(p.paper_id))
+  const exportSelected = exportOpts.selectedOnly && selectedForExport.length > 0
+  const exportList = exportSelected ? selectedForExport : exportOpts.aiOnly ? papers : [...papers, ...rejectedPapers]
+
   const handleExport = async () => {
     setExporting(true)
     setExportStatus('')
     try {
       const dateStr = new Date().toISOString().slice(0, 10)
-      const exportPapers = exportOpts.aiOnly ? papers : [...papers, ...rejectedPapers]
+      const exportPapers = exportList
       if (exportOpts.format !== 'csv') {
         const bib = exportOpts.format === 'bib'
         downloadText(
@@ -702,7 +708,7 @@ const addKeyword = () => {
       {/* 换个问题再搜：以前只能切回左侧/底部的搜索面板 */}
       {onExampleSearch && (papers.length > 0 || confirmedKeywords != null) && (
         <form
-          onSubmit={e => { e.preventDefault(); const q = newQuery.trim(); if (q && !isLoading) { onExampleSearch(q); setNewQuery('') } }}
+          onSubmit={e => { e.preventDefault(); const q = newQuery.trim(); if (q && !isLoading && onExampleSearch(q) !== false) setNewQuery('') }}
           className="flex gap-2 px-3 sm:px-5 pt-2.5 pb-1 bg-white/70 backdrop-blur-sm"
         >
           <input
@@ -726,7 +732,8 @@ const addKeyword = () => {
       )}
 
       {/* 顶部标题栏 */}
-      <div className="px-3 sm:px-5 py-2 sm:py-3 border-b border-gray-200/80 bg-white/70 backdrop-blur-sm flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-3">
+      {/* 手机上统计和按钮并成一行：以前上下两行，加上搜索词、中文库入口，论文要到半屏以下才出现 */}
+      <div className="px-3 sm:px-5 py-2 sm:py-3 border-b border-gray-200/80 bg-white/70 backdrop-blur-sm flex flex-row items-center justify-between gap-2 sm:gap-3">
         <div className="flex items-center gap-3 flex-shrink-0 flex-wrap">
           <div className="hidden sm:flex items-center gap-2">
             <div className="w-1.5 h-4 rounded-full bg-gray-300" />
@@ -736,23 +743,23 @@ const addKeyword = () => {
           {!isLoading && papers.length > 0 && (
             <div className="flex items-center gap-1.5 text-xs flex-wrap">
               {Object.keys(sourceStatuses).length > 0 && (
-                <>
+                <span className="hidden sm:contents">
                   <span className="font-medium text-gray-500">
                     {Object.values(sourceStatuses).filter(s => s.count > 0).length} 个来源
                   </span>
                   <span className="text-gray-200">·</span>
-                </>
+                </span>
               )}
               <span className="text-gray-500">
                 共 <span className="font-semibold text-gray-700">{papers.length + rejectedPapers.length}</span> 篇
               </span>
               {rejectedPapers.length > 0 && (
-                <>
+                <span className="hidden sm:contents">
                   <span className="text-gray-200">·</span>
                   <span className="text-gray-500">
                     AI 筛选 <span className="font-semibold text-indigo-600">{papers.length}</span> 篇相关
                   </span>
-                </>
+                </span>
               )}
             </div>
           )}
@@ -768,7 +775,7 @@ const addKeyword = () => {
         </div>
 
         {papers.length > 0 && (
-          <div className="flex items-center gap-1.5 sm:flex-wrap overflow-x-auto sm:overflow-visible -mx-3 px-3 sm:mx-0 sm:px-0 pb-0.5 sm:pb-0 [&>*]:flex-shrink-0 [&>button]:whitespace-nowrap">
+          <div className="flex items-center gap-1.5 sm:flex-wrap min-w-0 overflow-x-auto sm:overflow-visible pb-0.5 sm:pb-0 [&>*]:flex-shrink-0 [&>button]:whitespace-nowrap">
             {totalPages > 1 && (
               <span className="text-xs text-gray-400 tabular-nums mr-1">
                 {start}–{end} / {sortedPapers.length}
@@ -777,7 +784,7 @@ const addKeyword = () => {
 
             <button
               onClick={allPageSelected ? clearSelection : selectPage}
-              className="text-xs text-gray-500 hover:text-gray-700 border border-gray-200 hover:border-gray-300 bg-white hover:bg-gray-50 rounded-lg px-2.5 py-1 transition-all"
+              className={`${totalPages > 1 ? '' : 'hidden sm:block '}text-xs text-gray-500 hover:text-gray-700 border border-gray-200 hover:border-gray-300 bg-white hover:bg-gray-50 rounded-lg px-2.5 py-1 transition-all`}
             >
               {allPageSelected ? '取消当前页' : '选当前页'}
             </button>
@@ -841,13 +848,13 @@ const addKeyword = () => {
             )}
 
             <button
-              onClick={() => setShowExportModal(true)}
+              onClick={() => { setExportOpts(o => ({ ...o, selectedOnly: selectedIds.size > 0 })); setShowExportModal(true) }}
               className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700 border border-gray-200 hover:border-gray-300 bg-white hover:bg-gray-50 rounded-lg px-2.5 py-1 transition-all"
             >
               <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
               </svg>
-              导出
+              {selectedIds.size > 0 ? `导出已选 ${selectedIds.size}` : '导出'}
             </button>
           </div>
         )}
@@ -1265,7 +1272,7 @@ const addKeyword = () => {
               <p className="text-sm text-gray-400 leading-relaxed max-w-md">
                 在左侧描述你的研究问题，AI 提取关键词，按学科检索 OpenAlex、PubMed、arXiv 等学术数据库，再逐篇判断相关性
               </p>
-              <p className="text-xs text-gray-300 mt-2">目前只检索英文学术数据库，暂不包含知网、万方等中文库</p>
+              <p className="text-xs text-gray-400 mt-2">中英文都能问；知网、万方的论文在结果页可一键跳过去搜</p>
               <TrialHint className="mt-3" />
             </div>
             <div className="flex flex-col gap-2 w-full max-w-xs">
@@ -1527,14 +1534,26 @@ const addKeyword = () => {
             </p>
             <p className="text-xs text-gray-400 mb-4">
               将导出{' '}
-              <span className="font-medium text-gray-600">
-                {exportOpts.aiOnly ? papers.length : papers.length + rejectedPapers.length}
-              </span>{' '}
+              <span className="font-medium text-gray-600">{exportList.length}</span>{' '}
               篇论文
             </p>
 
             <div className="space-y-3">
-              <label className="flex items-start gap-3 cursor-pointer group">
+              {selectedForExport.length > 0 && (
+                <label className="flex items-start gap-3 cursor-pointer group">
+                  <input
+                    type="checkbox"
+                    checked={exportOpts.selectedOnly}
+                    onChange={e => setExportOpts(o => ({ ...o, selectedOnly: e.target.checked }))}
+                    className="mt-0.5 w-4 h-4 rounded accent-blue-600 cursor-pointer"
+                  />
+                  <div>
+                    <p className="text-sm text-gray-700 group-hover:text-gray-900">只导出已勾选的 {selectedForExport.length} 篇</p>
+                    <p className="text-xs text-gray-400">取消勾选则按下面的范围导出</p>
+                  </div>
+                </label>
+              )}
+              <label className={`flex items-start gap-3 cursor-pointer group ${exportSelected ? 'opacity-40 pointer-events-none' : ''}`}>
                 <input
                   type="checkbox"
                   checked={exportOpts.aiOnly}
@@ -1615,7 +1634,7 @@ const addKeyword = () => {
                     </svg>
                     <span className="truncate">{exportStatus || '处理中…'}</span>
                   </>
-                ) : '确认导出'}
+                ) : `导出 ${exportList.length} 篇`}
               </button>
             </div>
           </div>

@@ -91,3 +91,17 @@ async def test_reregistering_unverified_email_replaces_password(client, db_sessi
     login = lambda pw: client.post("/api/auth/login", json={"email": "victim@b.com", "password": pw})
     assert (await login("attacker-pass")).status_code == 401
     assert (await login("owner-pass-1")).status_code == 200
+
+
+async def test_register_reports_unsent_verification_email(client):
+    """发信失败时如实告诉用户：以前照样说"已发送"，用户一直等邮件、反复点重发。"""
+    from unittest.mock import AsyncMock, patch
+    with patch("routers.auth.send_verification_email", new=AsyncMock(return_value=False)):
+        r = await client.post("/api/auth/register", json={"email": "x@y.com", "password": "password123"})
+        assert r.status_code == 200
+        assert r.json()["email_sent"] is False and "没发出去" in r.json()["message"]
+        r = await client.post("/api/auth/resend-verification", json={"email": "x@y.com"})
+        assert r.status_code == 503
+    with patch("routers.auth.send_verification_email", new=AsyncMock(return_value=True)):
+        r = await client.post("/api/auth/register", json={"email": "z@y.com", "password": "password123"})
+        assert r.json()["email_sent"] is True

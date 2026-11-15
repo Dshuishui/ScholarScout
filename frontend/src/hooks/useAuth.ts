@@ -27,7 +27,8 @@ interface AuthContextValue {
   token: string | null
   isLoggedIn: boolean
   /** 注册：发验证邮件，不自动登录，返回成功提示文本 */
-  register: (email: string, password: string) => Promise<string>
+  /** emailSent=false：账号建好了但验证邮件没发出去，界面要如实说，别让用户干等 */
+  register: (email: string, password: string) => Promise<{ message: string; emailSent: boolean }>
   login: (email: string, password: string) => Promise<void>
   /** 用已知 JWT 直接登录（邮箱验证回调用） */
   loginWithToken: (token: string) => Promise<void>
@@ -72,9 +73,9 @@ function useAuthState(): AuthContextValue {
     }
   }, [])
 
-  const register = useCallback(async (email: string, password: string): Promise<string> => {
+  const register = useCallback(async (email: string, password: string) => {
     const data = await apiFetch('/register', { email, password })
-    return (data.message as string) || '验证邮件已发送，请查收'
+    return { message: (data.message as string) || '验证邮件已发送，请查收', emailSent: data.email_sent !== false }
   }, [])
 
   const login = useCallback(async (email: string, password: string) => {

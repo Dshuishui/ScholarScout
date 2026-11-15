@@ -79,6 +79,8 @@ async def test_trial_status_reports_remaining(client, db_session, trial):
     headers = {"X-Trial-Device": DEVICE_A, "X-Real-IP": "1.1.1.1"}
     data = (await client.get("/api/trial/status", headers=headers)).json()
     assert data["enabled"] is True and data["anon_remaining"] == 2 and data["signup_bonus"] == 3
+    import config
+    assert data["signup_chat_bonus"] == config.ACCOUNT_FREE_CHATS  # 免费对话用完时提示"注册再领 N 条"
     await _search(client)
     data = (await client.get("/api/trial/status", headers=headers)).json()
     assert data["anon_remaining"] == 1

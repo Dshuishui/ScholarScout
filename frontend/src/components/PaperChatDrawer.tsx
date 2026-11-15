@@ -3,6 +3,10 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import type { Paper } from '../types'
 import type { ChatMessage, PdfStatus } from '../hooks/usePaperChat'
+import { getDownloadUrl } from '../api/client'
+import { track } from '../lib/analytics'
+
+const AUTO_PDF_TIMEOUT_MS = 90_000
 
 const PROMPTS_KEY = 'scholarscout_quick_prompts'
 const DEFAULT_PROMPTS = [
@@ -73,7 +77,13 @@ export function PaperChatDrawer({ paper, messages, isStreaming, pdfStatus, onSen
   const [newPrompt, setNewPrompt] = useState('')
   const [uploading, setUploading] = useState(false)
   const [uploadError, setUploadError] = useState(false)
+  // 有免费 PDF 时由我们代为下载再解析：以前要用户先点下载、再回来上传，手机上尤其麻烦
+  const [fetchingPdf, setFetchingPdf] = useState(false)
+  const [autoPdfFailed, setAutoPdfFailed] = useState(false)
+  const paperIdRef = useRef(paper?.paper_id)
+  useEffect(() => { paperIdRef.current = paper?.paper_id }, [paper?.paper_id])
   const [resumeCount, setResumeCount] = useState(0)
+  const [confirmClear, setConfirmClear] = useState(false)
   const [showPrompts, setShowPrompts] = useState(false)
   const [isDragging, setIsDragging] = useState(false)
   const dragCounter = useRef(0)
@@ -102,6 +112,8 @@ export function PaperChatDrawer({ paper, messages, isStreaming, pdfStatus, onSen
       setIsDragging(false)
       dragCounter.current = 0
       setResumeCount(messages.filter(m => !m.isStreaming).length)
+      setConfirmClear(false)
+      setAutoPdfFailed(false)
     }
   }, [isOpen, paper?.paper_id]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -128,6 +140,32 @@ export function PaperChatDrawer({ paper, messages, isStreaming, pdfStatus, onSen
       setUploading(false)
     }
   }, [onUploadPdf])
+
+  const loadFreePdf = useCallback(async () => {
+    if (!paper?.pdf_url) return
+    const startId = paper.paper_id
+    setFetchingPdf(true)
+    setAutoPdfFailed(false)
+    track('chat_pdf_autoload')
+    try {
+      const ctrl = new AbortController()
+      const timer = setTimeout(() => ctrl.abort(), AUTO_PDF_TIMEOUT_MS)
+      let blob: Blob
+      try {
+        const r = await fetch(getDownloadUrl(paper.pdf_url, paper.doi, paper.paper_id), { signal: ctrl.signal })
+        if (!r.ok) throw new Error(String(r.status))
+        blob = await r.blob()
+      } finally {
+        clearTimeout(timer)
+      }
+      if (paperIdRef.current !== startId) return  // 下载期间换了论文：别把 PDF 挂到另一篇上
+      await processFile(new File([blob], 'paper.pdf', { type: 'application/pdf' }))
+    } catch {
+      if (paperIdRef.current === startId) setAutoPdfFailed(true)
+    } finally {
+      setFetchingPdf(false)
+    }
+  }, [paper, processFile])
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -228,15 +266,25 @@ export function PaperChatDrawer({ paper, messages, isStreaming, pdfStatus, onSen
 
               {/* 恢复对话提示 */}
               {resumeCount > 0 && (
-                <div className="mt-2 flex items-center gap-1.5 text-xs text-gray-400">
+                <div className="mt-2 flex flex-wrap items-center gap-1.5 text-xs text-gray-400">
                   <svg className="w-3 h-3 text-violet-400 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
                     <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
                   </svg>
                   <span>已加载上次 {resumeCount} 条对话</span>
                   <span className="text-gray-200">·</span>
-                  <button onClick={() => { onNewChat(); setResumeCount(0) }} className="text-violet-500 hover:text-violet-700 hover:underline">
-                    新建会话
-                  </button>
+                  {/* 以前叫"新建会话"，实际会删掉之前的对话：改成如实的名字，并先确认 */}
+                  {confirmClear ? (
+                    <>
+                      <span className="text-red-500">之前的对话会被删除，无法恢复</span>
+                      <button onClick={() => { onNewChat(); setResumeCount(0); setConfirmClear(false) }}
+                        className="text-red-500 font-medium hover:text-red-700 hover:underline">确定清空</button>
+                      <button onClick={() => setConfirmClear(false)} className="hover:text-gray-600 hover:underline">取消</button>
+                    </>
+                  ) : (
+                    <button onClick={() => setConfirmClear(true)} className="text-violet-500 hover:text-violet-700 hover:underline">
+                      清空，重新开始
+                    </button>
+                  )}
                 </div>
               )}
             </div>
@@ -286,12 +334,22 @@ export function PaperChatDrawer({ paper, messages, isStreaming, pdfStatus, onSen
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
                   <span className="flex-1">
-                    {paper.abstract ? <>基于<strong>摘要</strong>分析</> : '这篇没有公开摘要，AI 只知道标题，具体内容需要全文'}
+                    {autoPdfFailed
+                      ? '没能自动拿到全文（可能要登录或付费才能下载），可以自己下载后上传'
+                      : paper.abstract ? <>基于<strong>摘要</strong>分析</> : '这篇没有公开摘要，AI 只知道标题，具体内容需要全文'}
                   </span>
-                  <button
-                    onClick={() => fileInputRef.current?.click()}
-                    className="text-blue-600 hover:text-blue-800 font-medium underline underline-offset-2 whitespace-nowrap"
-                  >上传 PDF 获取全文分析 →</button>
+                  {paper.pdf_url && !autoPdfFailed ? (
+                    <button
+                      onClick={loadFreePdf}
+                      disabled={fetchingPdf || uploading}
+                      className="text-blue-600 hover:text-blue-800 font-medium underline underline-offset-2 whitespace-nowrap disabled:opacity-60 disabled:no-underline"
+                    >{fetchingPdf || uploading ? '正在读取全文…' : '读取免费全文 →'}</button>
+                  ) : (
+                    <button
+                      onClick={() => fileInputRef.current?.click()}
+                      className="text-blue-600 hover:text-blue-800 font-medium underline underline-offset-2 whitespace-nowrap"
+                    >上传 PDF 获取全文分析 →</button>
+                  )}
                 </>
               )}
             </div>
@@ -441,8 +499,8 @@ export function PaperChatDrawer({ paper, messages, isStreaming, pdfStatus, onSen
                   onClick={onRequireKey}
                   className="w-full mb-2 flex items-center justify-between gap-2 text-left text-xs text-amber-800 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded-xl px-3 py-2 transition-colors"
                 >
-                  <span>论文对话需要你自己的 DeepSeek Key，免费次数只用于搜索</span>
-                  <span className="font-semibold flex-shrink-0">填写 Key →</span>
+                  <span>免费对话条数已用完，点这里看怎么继续</span>
+                  <span className="font-semibold flex-shrink-0">继续使用 →</span>
                 </button>
               )}
               <div className={`rounded-2xl border transition-all bg-white overflow-hidden ${

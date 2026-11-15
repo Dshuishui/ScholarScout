@@ -42,8 +42,8 @@ function nextStepsTip(): string {
     if (localStorage.getItem(NEXT_STEPS_KEY)) return ''
     localStorage.setItem(NEXT_STEPS_KEY, '1')
   } catch { return '' }
-  return '\n\n接下来可以：点论文下方的 **AI 对话**，让 AI 帮你读这篇；点结果上方的 **中文标题**，一键翻译全部标题；' +
-    '点 **订阅更新**（需登录），每天早上把这个方向的新论文发到邮箱。'
+  return '\n\n接下来可以：点论文下方的「AI 对话」，让 AI 帮你读这篇；点结果上方的「中文标题」，一键翻译全部标题；' +
+    '点「订阅」（需登录），每天早上把这个方向的新论文发到邮箱。'
 }
 
 function daysAgo(timestamp: number): string {
@@ -65,6 +65,8 @@ export function useSearch(apiKey: string, settings: SearchSettings, model?: stri
   const [previewPapers, setPreviewPapers] = useState<Paper[]>([])
   const [previewTotal, setPreviewTotal] = useState(0)
   const [hasSearchError, setHasSearchError] = useState(false)
+  // 这次的结果只在对话里（AI 直接回答、或理解问题时就出错）：手机上要切回搜索页才看得到
+  const [chatOnlyReplyAt, setChatOnlyReplyAt] = useState(0)
   const [currentSessionId, setCurrentSessionId] = useState<number | null>(null)
   const { history, addHistory, saveResults, removeHistory } = useSearchHistory()
   const { token } = useAuth()
@@ -263,9 +265,16 @@ export function useSearch(apiKey: string, settings: SearchSettings, model?: stri
     }
   }
 
-  /** forceSearch：用户在 AI 的直接回答下点了"按这个问题搜论文"，不再判断意图 */
-  const search = async (query: string, forceSearch = false) => {
-    if (!guard()) return
+  /** forceSearch：用户在 AI 的直接回答下点了"按这个问题搜论文"，不再判断意图。
+   *  返回这次搜索有没有开始：额度不够被拦下时返回 false，输入框据此保留用户刚写的问题，
+   *  注册或填完 Key 回来直接再点搜索即可，不用重打一遍。 */
+  const search = (query: string, forceSearch = false): boolean => {
+    if (!guard()) return false
+    void runSearch(query, forceSearch)
+    return true
+  }
+
+  const runSearch = async (query: string, forceSearch: boolean) => {
     // 提取关键词的几秒里就锁住输入框：以前要到真正开始检索才锁，连点两次会发出两次搜索，后返回的覆盖先发的，还多扣次数
     setIsLoading(true)
     track('search_submit', forceSearch ? { mode, forced: true } : { mode })
@@ -291,6 +300,7 @@ export function useSearch(apiKey: string, settings: SearchSettings, model?: stri
       if (result.intent === 'chat') {
         updateAssistant(assistantId, { content: result.reply, isLoading: false, searchableQuery: query })
         setIsLoading(false)
+        setChatOnlyReplyAt(Date.now())
       } else {
         const kwPreview = result.keywords.join('、')
         updateAssistant(assistantId, {
@@ -315,6 +325,7 @@ export function useSearch(apiKey: string, settings: SearchSettings, model?: stri
     } catch (err) {
       updateAssistant(assistantId, { content: describeError(err), isLoading: false })
       setIsLoading(false)
+      setChatOnlyReplyAt(Date.now())
     }
   }
 
@@ -429,6 +440,7 @@ export function useSearch(apiKey: string, settings: SearchSettings, model?: stri
     zhKeywords: lastConfirmed?.zh_keywords ?? [],
     reSearch: lastConfirmed ? reSearch : undefined,
     hasSearchError,
+    chatOnlyReplyAt,
     history,
     removeHistory,
     searchFromHistory,

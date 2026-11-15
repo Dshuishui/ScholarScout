@@ -60,7 +60,7 @@ export function MainLayout() {
   const {
     messages, papers, previewPapers, previewTotal, rejectedPapers, isLoading, statusMessage, sourceStatuses,
     search, confirmedKeywords, zhKeywords, reSearch,
-    hasSearchError, history, removeHistory, searchFromHistory, searchDateRange,
+    hasSearchError, chatOnlyReplyAt, history, removeHistory, searchFromHistory, searchDateRange,
     currentSessionId, loadSession,
   } = useSearch(apiKey, settings, model)
 
@@ -72,6 +72,11 @@ export function MainLayout() {
   useEffect(() => {
     if (isMobile && isLoading) setMobileTab('results')
   }, [isLoading]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // AI 直接回答、或理解问题时就出错：内容只在对话里，切回搜索页，不然用户停在空的结果页以为没反应
+  useEffect(() => {
+    if (isMobile && chatOnlyReplyAt) setMobileTab('search')
+  }, [chatOnlyReplyAt]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // 支持子组件通过 custom event 打开页面（如订阅成功后跳转订阅管理）
   useEffect(() => {

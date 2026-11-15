@@ -19,9 +19,15 @@ export function ChineseDbLinks({ keywords, prominent = false }: Props) {
   const q = keywords.join(' ')
   return (
     <div className={`flex flex-wrap items-center gap-1.5 text-xs ${prominent ? 'justify-center' : ''}`}>
-      <span className={prominent ? 'text-gray-500 w-full text-center mb-1' : 'text-gray-400'}>
-        {prominent ? '去中文库里搜搜看：' : '知网、万方里的中文论文这里搜不到，可以直接去搜：'}
-      </span>
+      {prominent ? (
+        <span className="text-gray-500 w-full text-center mb-1">去中文库里搜搜看：</span>
+      ) : (
+        // 手机上整句会占两行，把论文挤到屏幕下半截：只留短标签
+        <span className="text-gray-400">
+          <span className="sm:hidden">去中文库搜：</span>
+          <span className="hidden sm:inline">知网、万方里的中文论文这里搜不到，可以直接去搜：</span>
+        </span>
+      )}
       {DATABASES.map(db => (
         <a
           key={db.name}

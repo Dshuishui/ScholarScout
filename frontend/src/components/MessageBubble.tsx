@@ -6,6 +6,12 @@ interface Props {
   onForceSearch?: (query: string) => void
 }
 
+/** 只处理 **加粗**：提示文案和 AI 直接回答里常用，原样显示会露出星号；不为此引入整套 Markdown 渲染 */
+function renderBold(text: string) {
+  return text.split(/\*\*(.+?)\*\*/g).map((part, i) =>
+    i % 2 ? <strong key={i} className="font-semibold">{part}</strong> : part)
+}
+
 export function MessageBubble({ message, onForceSearch }: Props) {
   const isUser = message.role === 'user'
   const searchable = !isUser && !message.isLoading && message.searchableQuery
@@ -30,7 +36,7 @@ export function MessageBubble({ message, onForceSearch }: Props) {
             ))}
           </span>
         ) : (
-          <span className="whitespace-pre-line leading-relaxed">{message.content}</span>
+          <span className="whitespace-pre-line leading-relaxed">{isUser ? message.content : renderBold(message.content)}</span>
         )}
       </div>
       {searchable && onForceSearch && (

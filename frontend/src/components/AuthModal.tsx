@@ -16,6 +16,7 @@ export function AuthModal({ onClose, defaultTab = 'login' }: Props) {
   const [loading, setLoading] = useState(false)
   // 注册成功后的"验证邮件已发送"状态
   const [sentEmail, setSentEmail] = useState<string | null>(null)
+  const [emailSent, setEmailSent] = useState(true)
   const [resendLoading, setResendLoading] = useState(false)
   const [resendMsg, setResendMsg] = useState('')
   // 忘记密码流程
@@ -60,10 +61,11 @@ export function AuthModal({ onClose, defaultTab = 'login' }: Props) {
         track('login_success')
         onClose()
       } else {
-        const msg = await register(email, password)
+        const { message, emailSent: sent } = await register(email, password)
         track('register_submit')
         setSentEmail(email)
-        setResendMsg(msg)
+        setEmailSent(sent)
+        setResendMsg(message)
       }
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : '操作失败')
@@ -102,8 +104,10 @@ export function AuthModal({ onClose, defaultTab = 'login' }: Props) {
     setResendMsg('')
     try {
       const msg = await resendVerification(sentEmail)
+      setEmailSent(true)
       setResendMsg(msg)
     } catch (err: unknown) {
+      setEmailSent(false)
       setResendMsg(err instanceof Error ? err.message : '发送失败，请稍后重试')
     } finally {
       setResendLoading(false)
@@ -122,17 +126,23 @@ export function AuthModal({ onClose, defaultTab = 'login' }: Props) {
                   d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
               </svg>
             </div>
-            <h3 className="text-base font-semibold text-gray-800 mb-2">验证邮件已发送</h3>
-            <p className="text-sm text-gray-500 leading-relaxed mb-1">请查收发送到</p>
+            <h3 className="text-base font-semibold text-gray-800 mb-2">{emailSent ? '验证邮件已发送' : '验证邮件还没发出去'}</h3>
+            <p className="text-sm text-gray-500 leading-relaxed mb-1">{emailSent ? '请查收发送到' : '账号已经建好'}</p>
             <p className="text-sm font-medium text-indigo-600 mb-3 break-all">{sentEmail}</p>
-            <p className="text-xs text-gray-400 leading-relaxed mb-5">
-              点击邮件中的链接完成验证，即可获得
-              <span className="text-indigo-500 font-medium"> 3 次免费搜索</span>。
-              链接 24 小时内有效。
-            </p>
+            {emailSent ? (
+              <p className="text-xs text-gray-400 leading-relaxed mb-5">
+                点击邮件中的链接完成验证，即可获得
+                <span className="text-indigo-500 font-medium"> 3 次免费搜索</span>。
+                链接 24 小时内有效。几分钟还没收到？先看看垃圾邮件，再确认邮箱地址没写错。
+              </p>
+            ) : (
+              <p className="text-xs text-gray-400 leading-relaxed mb-5">
+                邮件服务暂时出了问题，过几分钟点下面的「重新发送验证邮件」即可，不用重新注册。
+              </p>
+            )}
 
             {resendMsg && (
-              <p className="text-xs text-green-600 bg-green-50 rounded-lg px-3 py-2 mb-3">{resendMsg}</p>
+              <p className={`text-xs rounded-lg px-3 py-2 mb-3 ${emailSent ? 'text-green-600 bg-green-50' : 'text-amber-700 bg-amber-50'}`}>{resendMsg}</p>
             )}
 
             <div className="flex flex-col gap-2">
@@ -277,6 +287,7 @@ export function AuthModal({ onClose, defaultTab = 'login' }: Props) {
                     try {
                       const msg = await resendVerification(email)
                       setSentEmail(email)
+                      setEmailSent(true)
                       setResendMsg(msg)
                     } catch { setError('发送失败，请稍后重试') }
                   }}
