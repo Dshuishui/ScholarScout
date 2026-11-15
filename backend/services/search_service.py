@@ -1,6 +1,7 @@
 import asyncio
 import html
 from collections import Counter
+from contextvars import ContextVar
 from datetime import datetime, timezone
 import random
 import logging
@@ -17,6 +18,16 @@ from config import (
 )
 
 logger = logging.getLogger(__name__)
+
+# 每个源出错时都吞掉异常返回 []，搜索照常进行；但"出错了"和"真的没搜到"要分开记，
+# 周报才看得出哪个源坏了。search_all_sources 给每个源的任务放一个标记，源出错时置位。
+_source_failed: ContextVar[list[bool] | None] = ContextVar("_source_failed", default=None)
+
+
+def _mark_source_failed() -> None:
+    flag = _source_failed.get()
+    if flag is not None:
+        flag[0] = True
 
 
 def _quoted_or(keywords: list[str]) -> str:
@@ -123,6 +134,7 @@ async def _search_arxiv(parsed: ParsedQuery, limit: int) -> list[Paper]:
         return papers
     except Exception as e:
         logger.warning("arXiv search error: %r", e)
+        _mark_source_failed()
         return []
 
 
@@ -170,6 +182,7 @@ async def _search_semantic_scholar(parsed: ParsedQuery, limit: int) -> list[Pape
         return papers
     except Exception as e:
         logger.warning("Semantic Scholar search error: %r", e)
+        _mark_source_failed()
         return []
 
 
@@ -323,12 +336,15 @@ async def _search_openalex(parsed: ParsedQuery, limit: int) -> list[Paper]:
         for name, r in results.items():
             if isinstance(r, Exception):
                 logger.warning("OpenAlex %s sub-search error: %r", name, r)
+        if isinstance(results.get("keyword"), Exception):
+            _mark_source_failed()
         ok = {name: r for name, r in results.items() if isinstance(r, list)}
         fused = _rrf_fuse([ok[n] for n in ("keyword", "semantic", "intersection") if n in ok], limit)
         seen = {p.paper_id for p in fused}
         return fused + [p for p in ok.get("cited", []) if p.paper_id not in seen]
     except Exception as e:
         logger.warning("OpenAlex search error: %r", e)
+        _mark_source_failed()
         return []
 
 
@@ -540,6 +556,7 @@ async def _search_pubmed(parsed: ParsedQuery, limit: int) -> list[Paper]:
         return papers
     except Exception as e:
         logger.warning("PubMed search error: %r", e)
+        _mark_source_failed()
         return []
 
 
@@ -583,6 +600,7 @@ async def _search_core(parsed: ParsedQuery, limit: int) -> list[Paper]:
         return papers
     except Exception as e:
         logger.warning("CORE search error: %r", e)
+        _mark_source_failed()
         return []
 
 
@@ -640,6 +658,7 @@ async def _search_inspire(parsed: ParsedQuery, limit: int) -> list[Paper]:
         return papers
     except Exception as e:
         logger.warning("INSPIRE-HEP search error: %r", e)
+        _mark_source_failed()
         return []
 
 
@@ -693,6 +712,7 @@ async def _search_europepmc(parsed: ParsedQuery, limit: int) -> list[Paper]:
         return papers
     except Exception as e:
         logger.warning("Europe PMC search error: %r", e)
+        _mark_source_failed()
         return []
 
 
@@ -751,6 +771,7 @@ async def _search_nasa_ads(parsed: ParsedQuery, limit: int) -> list[Paper]:
         return papers
     except Exception as e:
         logger.warning("NASA ADS search error: %r", e)
+        _mark_source_failed()
         return []
 
 
@@ -840,6 +861,7 @@ async def _search_crossref(parsed: ParsedQuery, limit: int) -> list[Paper]:
         return [p for p in map(_crossref_item_to_paper, items) if p]
     except Exception as e:
         logger.warning("CrossRef search error: %r", e)
+        _mark_source_failed()
         return []
 
 
@@ -868,11 +890,14 @@ async def _search_chinese(parsed: ParsedQuery, limit: int) -> list[Paper]:
         return [p for p in map(_crossref_item_to_paper, items) if p and _CJK.search(p.title)]
 
     papers: list[Paper] = []
-    for name, result in zip(("OpenAlex", "CrossRef"), await asyncio.gather(openalex(), crossref(), return_exceptions=True)):
+    results = await asyncio.gather(openalex(), crossref(), return_exceptions=True)
+    for name, result in zip(("OpenAlex", "CrossRef"), results):
         if isinstance(result, Exception):
-            logger.warning("Chinese search via %s failed: %s", name, result)
+            logger.warning("Chinese search via %s failed: %r", name, result)
         else:
             papers.extend(result)
+    if all(isinstance(r, Exception) for r in results):
+        _mark_source_failed()
     return [p.model_copy(update={"source": CHINESE_SOURCE}) for p in papers]
 
 
@@ -932,7 +957,8 @@ async def _search_google_scholar_serpapi(parsed: ParsedQuery, limit: int) -> lis
             ))
         return papers
     except Exception as e:
-        logger.warning("Google Scholar (SerpAPI) error: %s", e)
+        logger.warning("Google Scholar (SerpAPI) error: %r", e)
+        _mark_source_failed()
         return []
 
 
@@ -1315,8 +1341,11 @@ async def search_all_sources(
              for name in get_source_names(sources, parsed.domains, zh=bool(parsed.zh_keywords))}
 
     async def run_source(name: str, fn) -> list[Paper]:
+        # gather 给每个源单独建任务、各自拷一份上下文，这里设的标记只影响这个源
+        failed = [False]
+        _source_failed.set(failed)
         papers = await fn(parsed, limit_per_source)
-        record_source_result(name, len(papers))
+        record_source_result(name, len(papers), failed=failed[0])
         # 每个源一返回就补摘要，和还没返回的慢源同时进行，不额外拖慢整体
         papers = await backfill_abstracts([_sanitize_paper(p) for p in papers], name, parsed.domains)
         if on_source_done:

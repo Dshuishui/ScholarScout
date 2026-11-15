@@ -1,3 +1,4 @@
+import asyncio
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -933,3 +934,37 @@ async def test_search_all_sources_enforces_date_range():
     with patch.dict("services.search_service._SOURCE_FUNCS", source_mocks):
         result = await search_all_sources(ParsedQuery(keywords=["x"], date_from="2014-01-01", date_to="2018-12-31"))
     assert sorted(r.paper_id for r in result) == ["x1", "x3"]   # 没有日期的保留
+
+
+async def test_source_errors_recorded_apart_from_empty_results(monkeypatch):
+    """源出错和"没搜到"都返回 []，要分开记；并发的几个源互不串标记。"""
+    from services import search_service as s
+    recorded = {}
+    monkeypatch.setattr(s, "record_source_result",
+                        lambda name, count, failed=False: recorded.__setitem__(name, failed))
+
+    async def broken(parsed, limit):
+        await asyncio.sleep(0)
+        s._mark_source_failed()
+        return []
+
+    async def empty(parsed, limit):
+        await asyncio.sleep(0)
+        return []
+
+    mocks = {src: AsyncMock(return_value=[]) for src in _ALL_SOURCE_NAMES}
+    mocks.update({"arXiv": broken, "OpenAlex": empty})
+    with patch.dict("services.search_service._SOURCE_FUNCS", mocks):
+        await s.search_all_sources(ParsedQuery(keywords=["x"]), sources=["arXiv", "OpenAlex"])
+    assert recorded == {"arXiv": True, "OpenAlex": False}
+
+
+async def test_arxiv_http_error_marks_source_failed(monkeypatch):
+    from services import search_service as s
+    flag = [False]
+    token = s._source_failed.set(flag)
+    try:
+        await _capture_params(monkeypatch, s._search_arxiv, ParsedQuery(keywords=["raft"]))
+    finally:
+        s._source_failed.reset(token)
+    assert flag[0] is True

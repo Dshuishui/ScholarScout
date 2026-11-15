@@ -30,6 +30,8 @@ async def lifespan(app: FastAPI):
     logger.info("ScholarScout started")
     yield
     sched.shutdown(wait=False)
+    from services.health_monitor import persist_source_counts
+    await persist_source_counts()  # 部署重启时别丢掉还没写进数据库的数据源计数
     logger.info("ScholarScout shutdown")
 
 

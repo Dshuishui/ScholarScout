@@ -23,7 +23,7 @@ import logging
 import os
 import time
 from pathlib import Path
-from collections import defaultdict, deque
+from collections import Counter, defaultdict, deque
 from datetime import datetime, timedelta
 
 import config
@@ -100,8 +100,37 @@ def openalex_budget_problem(now: float) -> tuple[str, str] | None:
             f"需要向 OpenAlex 申请更高额度")
 
 
-def record_source_result(source: str, count: int) -> None:
+# 周报用的各源调用次数和出错次数。上面的 6 小时告警在访问量很小时凑不够 MIN_CALLS：
+# 2026-10 下旬起 arXiv 带日期的查询全部失败了几周、Semantic Scholar 一直 429，都没有告警。
+# 先在内存里攒着，每小时健康检查和关机时写进 site_counters，重启最多丢不到一小时的数。
+SOURCE_CALL_PREFIX = "src_call:"
+SOURCE_ERROR_PREFIX = "src_err:"
+_pending_source_counts: Counter = Counter()
+
+
+def record_source_result(source: str, count: int, failed: bool = False) -> None:
+    """failed：这个源报错了（网络、限流、接口返回错误），和"正常查询但没搜到"分开记。"""
     _calls[source].append((time.time(), count))
+    day = datetime.utcnow().strftime("%Y-%m-%d")
+    _pending_source_counts[(day, SOURCE_CALL_PREFIX + source)] += 1
+    if failed:
+        _pending_source_counts[(day, SOURCE_ERROR_PREFIX + source)] += 1
+
+
+async def persist_source_counts() -> None:
+    """把攒下的各源计数写进数据库；失败只记日志（统计不能影响业务）。"""
+    if not _pending_source_counts:
+        return
+    from database import AsyncSessionLocal
+    from services import stats
+    pending = dict(_pending_source_counts)
+    _pending_source_counts.clear()
+    try:
+        async with AsyncSessionLocal() as db:
+            for (day, name), n in pending.items():
+                await stats.bump(db, name[:32], n, day=day)
+    except Exception:
+        logger.exception("Failed to persist source counters")
 
 
 def _window_stats(source: str, start: float, end: float) -> tuple[int, int]:
@@ -300,6 +329,7 @@ async def run_health_check() -> list[str]:
     from services.email_service import send_admin_alert
 
     now = time.time()
+    await persist_source_counts()
     problems = detect_problems(now)
     try:
         async with AsyncSessionLocal() as db:

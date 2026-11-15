@@ -89,6 +89,7 @@ def _isolate_environment_checks(monitor, monkeypatch, keep_trial: bool = False):
     monkeypatch.setattr(monitor, "error_spike_problem", lambda now: None)
     monkeypatch.setattr(monitor, "push_failure_problem", AsyncMock(return_value=None))
     monkeypatch.setattr(monitor, "first_real_user", AsyncMock(return_value=None))
+    monkeypatch.setattr(monitor, "persist_source_counts", AsyncMock())  # 别写进本地开发库
 
 
 @pytest.fixture
@@ -96,11 +97,13 @@ def monitor(tmp_path, monkeypatch):
     from services import health_monitor as hm
     hm._calls.clear()
     hm._last_alert.clear()
+    hm._pending_source_counts.clear()
     monkeypatch.setattr(hm, "ALERT_STATE_FILE", tmp_path / "alert_state.json")
     monkeypatch.setattr(hm, "_state_loaded", False)
     yield hm
     hm._calls.clear()
     hm._last_alert.clear()
+    hm._pending_source_counts.clear()
 
 
 def test_alerts_when_healthy_source_starts_returning_nothing(monitor):
@@ -399,3 +402,41 @@ async def test_weekly_report_is_sent_even_without_activity(db_session, monkeypat
     stats = sent.await_args.args[0]
     assert stats["headline"] == "本周没人使用"
     assert any("每周一都会发" in n for n in stats["notes"])
+
+
+async def test_source_errors_reach_weekly_report(db_session, monitor, monkeypatch):
+    """6 小时告警在访问量小时凑不够次数，arXiv 坏了几周都没报；周报按周统计每个源出错几次。"""
+    from contextlib import asynccontextmanager
+    from datetime import datetime
+    import database
+    from services import weekly_report
+
+    @asynccontextmanager
+    async def session():
+        yield db_session
+
+    monkeypatch.setattr(database, "AsyncSessionLocal", session)
+    for _ in range(4):
+        monitor.record_source_result("arXiv", 0, failed=True)
+        monitor.record_source_result("OpenAlex", 12)
+    monitor.record_source_result("CrossRef", 0, failed=True)
+    monitor.record_source_result("CrossRef", 9)
+    monitor.record_source_result("CrossRef", 0)   # 没搜到不算出错
+    await monitor.persist_source_counts()
+    assert not monitor._pending_source_counts
+
+    data = await weekly_report.collect(db_session, days=7)
+    assert data["sources"]["arXiv"] == {"calls": 4, "errors": 4}
+    assert data["sources"]["CrossRef"] == {"calls": 3, "errors": 1}
+    assert data["sources"]["OpenAlex"] == {"calls": 4, "errors": 0}
+
+    notes = weekly_report._format(data, None, datetime.utcnow())["notes"]
+    assert "数据源出错次数（本周）：arXiv 4/4 次、CrossRef 1/3 次" in notes
+    assert any(n.startswith("⚠️ arXiv 本周 4 次调用里 4 次出错") for n in notes)
+    assert not any(n.startswith("⚠️ CrossRef") for n in notes)
+
+
+def test_source_notes_when_nothing_failed():
+    from services.weekly_report import _source_notes
+    assert _source_notes({}) == []
+    assert _source_notes({"arXiv": {"calls": 5, "errors": 0}}) == ["数据源本周没有出错（共调用 5 次）"]

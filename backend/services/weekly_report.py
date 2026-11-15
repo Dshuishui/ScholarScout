@@ -6,8 +6,41 @@ from datetime import datetime, timedelta
 
 from sqlalchemy import func, select
 
+import config
 from models_db import Feedback, SavedPaper, SearchSession, Subscription, SubscriptionQueueItem, TrialUsage, User
 from services import stats as stats_service
+from services.health_monitor import SOURCE_CALL_PREFIX, SOURCE_ERROR_PREFIX
+
+SOURCE_BROKEN_RATIO = 0.5   # 一周里一半以上的调用都出错，就在周报里标出来
+SOURCE_BROKEN_MIN_CALLS = 3
+
+
+def _source_stats(counters: dict[str, int]) -> dict[str, dict[str, int]]:
+    """{源名: {"calls": 调用次数, "errors": 出错次数}}"""
+    out: dict[str, dict[str, int]] = {}
+    for name, n in counters.items():
+        for prefix, field in ((SOURCE_CALL_PREFIX, "calls"), (SOURCE_ERROR_PREFIX, "errors")):
+            if name.startswith(prefix):
+                out.setdefault(name[len(prefix):], {"calls": 0, "errors": 0})[field] += n
+    return out
+
+
+def _source_notes(sources: dict[str, dict[str, int]]) -> list[str]:
+    """周报里关于数据源的几行：哪些源本周出过错，几乎全错的单独标警告。"""
+    if not sources:
+        return []
+    failing = sorted(((name, s["errors"], s["calls"]) for name, s in sources.items() if s["errors"]),
+                     key=lambda x: (-x[1] / max(x[2], 1), x[0]))
+    total = sum(s["calls"] for s in sources.values())
+    if not failing:
+        return [f"数据源本周没有出错（共调用 {total} 次）"]
+    notes = ["数据源出错次数（本周）：" + "、".join(f"{name} {e}/{c} 次" for name, e, c in failing)]
+    for name, errors, calls in failing:
+        if calls >= SOURCE_BROKEN_MIN_CALLS and errors / calls >= SOURCE_BROKEN_RATIO:
+            hint = "（没有 API Key 时一直被限流，申请到 Key 后填进 .env 即可）" \
+                if name == "Semantic Scholar" and not config.SEMANTIC_SCHOLAR_API_KEY else "，需要检查"
+            notes.append(f"⚠️ {name} 本周 {calls} 次调用里 {errors} 次出错，基本不可用{hint}")
+    return notes
 
 
 
@@ -47,6 +80,7 @@ async def collect(db, days: int = 7, now: datetime | None = None) -> dict:
         "new_sessions": await count(SearchSession, SearchSession.created_at),
         "new_subs": await count(Subscription, Subscription.created_at),
         "pushed": pushed,
+        "sources": _source_stats(counters),
         "total_users": int(await db.scalar(select(func.count()).select_from(User)) or 0),
         "active_subs": int(await db.scalar(
             select(func.count()).select_from(Subscription).where(Subscription.active == True)) or 0),  # noqa: E712
@@ -79,6 +113,7 @@ def _format(data: dict, balance: float | None, now: datetime, openalex: dict | N
         notes.append(f"DeepSeek 余额：¥{balance:.2f}")
     if openalex:
         notes.append(f"OpenAlex 今日剩余额度：${openalex['remaining']:.3f} / ${openalex['limit']:.2f}")
+    notes.extend(_source_notes(data.get("sources") or {}))
     if data["push_failed"]:
         notes.append(f"⚠️ 有 {data['push_failed']} 封订阅推送邮件发送失败，需要检查")
     if data["search"] and not data["register"]:
