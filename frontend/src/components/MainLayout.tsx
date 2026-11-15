@@ -60,7 +60,7 @@ export function MainLayout() {
   const {
     messages, papers, previewPapers, previewTotal, rejectedPapers, isLoading, statusMessage, sourceStatuses,
     search, confirmedKeywords, zhKeywords, reSearch,
-    hasSearchError, chatOnlyReplyAt, history, removeHistory, searchFromHistory, searchDateRange,
+    hasSearchError, chatOnlyReplyAt, stopSearch, history, removeHistory, searchFromHistory, searchDateRange,
     currentSessionId, loadSession,
   } = useSearch(apiKey, settings, model)
 
@@ -117,13 +117,14 @@ export function MainLayout() {
     })
   }
 
-  const handleUploadPdf = async (file: File): Promise<boolean> => {
-    if (!activePaper) return false
+  /** 成功返回 null，失败返回原因：对话框里照原因提示，以前一律说成"扫描版或加密 PDF"，用户会反复换文件 */
+  const handleUploadPdf = async (file: File): Promise<string | null> => {
+    if (!activePaper) return '没有选中论文'
     const paperId = activePaper.paper_id
     const fail = (reason: string) => {
       toast.show(reason)
       setPdfError(paperId)
-      return false
+      return reason
     }
     if (file.size > MAX_PDF_UPLOAD_MB * 1024 * 1024) {
       return fail(`PDF 超过 ${MAX_PDF_UPLOAD_MB}MB，暂不支持上传`)
@@ -137,7 +138,7 @@ export function MainLayout() {
       const data = await r.json()
       if (data.text) {
         setPdfText(activePaper, data.text)
-        return true
+        return null
       }
       if (data.error === 'too_large') return fail(`PDF 超过 ${MAX_PDF_UPLOAD_MB}MB，暂不支持上传`)
       if (data.error === 'extract_failed') return fail('没能从 PDF 中提取到文字，可能是扫描版或图片版 PDF')
@@ -364,6 +365,7 @@ export function MainLayout() {
         {/* 结果面板（桌面端始终显示，移动端 results tab 时显示） */}
         <div className={`${isMobile ? (mobileTab === 'results' ? 'flex-1 min-w-0' : 'hidden') : 'flex-1 min-w-0'}`}>
           <ResultsPanel
+            onStopSearch={stopSearch}
             papers={papers}
             previewPapers={previewPapers}
             previewTotal={previewTotal}
@@ -470,7 +472,7 @@ export function MainLayout() {
       </Suspense>
       {activePage === 'saved' && token && (
         <div className="fixed inset-0 z-40 bg-white">
-          <Suspense fallback={null}><SavedPage token={token} onClose={() => setActivePage(null)} /></Suspense>
+          <Suspense fallback={null}><SavedPage token={token} onClose={() => setActivePage(null)} onOpenChat={handleAnalyzePaper} /></Suspense>
         </div>
       )}
       {activePage === 'history' && token && (

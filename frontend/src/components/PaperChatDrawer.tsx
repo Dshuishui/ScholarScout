@@ -90,7 +90,8 @@ interface Props {
   onSend: (content: string) => void
   onStop: () => void
   onClose: () => void
-  onUploadPdf: (file: File) => Promise<boolean>
+  /** 成功返回 null，失败返回原因 */
+  onUploadPdf: (file: File) => Promise<string | null>
   onRemovePdf?: () => void
   onNewChat: () => void
   onRegenerate?: () => void
@@ -106,7 +107,7 @@ export function PaperChatDrawer({ paper, messages, isStreaming, pdfStatus, onSen
   const [editingPrompts, setEditingPrompts] = useState(false)
   const [newPrompt, setNewPrompt] = useState('')
   const [uploading, setUploading] = useState(false)
-  const [uploadError, setUploadError] = useState(false)
+  const [uploadError, setUploadError] = useState<string | null>(null)
   // 有免费 PDF 时由我们代为下载再解析：以前要用户先点下载、再回来上传，手机上尤其麻烦
   const [fetchingPdf, setFetchingPdf] = useState(false)
   const [autoPdfFailed, setAutoPdfFailed] = useState(false)
@@ -138,7 +139,7 @@ export function PaperChatDrawer({ paper, messages, isStreaming, pdfStatus, onSen
     if (isOpen) {
       setTimeout(() => textareaRef.current?.focus(), 300)
       setInput('')
-      setUploadError(false)
+      setUploadError(null)
       setIsDragging(false)
       dragCounter.current = 0
       setResumeCount(messages.filter(m => !m.isStreaming).length)
@@ -162,10 +163,9 @@ export function PaperChatDrawer({ paper, messages, isStreaming, pdfStatus, onSen
   const processFile = useCallback(async (file: File) => {
     if (!file || !file.name.toLowerCase().endsWith('.pdf')) return
     setUploading(true)
-    setUploadError(false)
+    setUploadError(null)
     try {
-      const ok = await onUploadPdf(file)
-      if (!ok) setUploadError(true)
+      setUploadError(await onUploadPdf(file))
     } finally {
       setUploading(false)
     }
@@ -352,7 +352,13 @@ export function PaperChatDrawer({ paper, messages, isStreaming, pdfStatus, onSen
                   <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
-                  <span className="flex-1">PDF 解析失败（扫描版或加密 PDF），基于摘要分析</span>
+                  <span className="flex-1">
+                    {uploadError ?? '这份 PDF 没能读取'}；目前{paper.abstract ? '基于摘要回答' : '只知道标题'}
+                  </span>
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    className="text-red-600 hover:text-red-800 font-medium underline underline-offset-2 whitespace-nowrap"
+                  >重新上传</button>
                 </>
               ) : (
                 <>
@@ -546,17 +552,6 @@ export function PaperChatDrawer({ paper, messages, isStreaming, pdfStatus, onSen
                     </span>
                   </div>
                 )}
-                {uploadError && pdfStatus === 'error' && (
-                  <div className="px-3 pt-3">
-                    <span className="inline-flex items-center gap-1.5 bg-red-50 border border-red-200 text-red-600 text-xs rounded-lg px-2.5 py-1">
-                      <svg className="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                      </svg>
-                      PDF 解析失败，请尝试其他文件
-                    </span>
-                  </div>
-                )}
-
                 {/* Textarea */}
                 <textarea
                   ref={textareaRef}
@@ -619,7 +614,7 @@ export function PaperChatDrawer({ paper, messages, isStreaming, pdfStatus, onSen
                   )}
                 </div>
               </div>
-              <p className="hidden sm:block text-[10px] text-gray-300 text-center mt-1.5">Enter 发送 · Shift+Enter 换行 · 拖拽 PDF 到此处上传</p>
+              <p className="hidden sm:block text-[10px] text-gray-300 text-center mt-1.5">Enter 发送 · Shift+Enter 换行 · 拖拽 PDF 到此处上传（能选中文字的 PDF，最大 50MB）</p>
             </div>
 
             <input ref={fileInputRef} type="file" accept=".pdf" className="hidden" onChange={handleFileChange} />

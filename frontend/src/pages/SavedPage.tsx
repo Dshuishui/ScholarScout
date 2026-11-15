@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { Paper } from '../types'
+import { toast } from '../components/Toast'
 import { PaperCard } from '../components/PaperCard'
 import { useAuth } from '../hooks/useAuth'
 
@@ -12,9 +13,11 @@ interface SavedItem {
 interface Props {
   token: string
   onClose: () => void
+  /** 收藏后回来读：以前收藏页没有「AI 对话」，要重新搜到这篇才能问 */
+  onOpenChat?: (paper: Paper) => void
 }
 
-export function SavedPage({ token, onClose }: Props) {
+export function SavedPage({ token, onClose, onOpenChat }: Props) {
   const { sessionExpired } = useAuth()
   const [items, setItems] = useState<SavedItem[]>([])
   const [loading, setLoading] = useState(true)
@@ -33,10 +36,15 @@ export function SavedPage({ token, onClose }: Props) {
   useEffect(() => { load() }, [token]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const unsave = async (item: SavedItem) => {
-    await fetch(`/api/user/saved/${item.paper_id_hash}`, {
+    // 以前不看结果就把卡片移掉：失败时显示已取消，刷新后论文又回来了
+    const ok = await fetch(`/api/user/saved/${item.paper_id_hash}`, {
       method: 'DELETE',
       headers: { Authorization: `Bearer ${token}` },
-    })
+    }).then(r => r.ok).catch(() => false)
+    if (!ok) {
+      toast.show('取消收藏没有成功，请稍后再试')
+      return
+    }
     setItems(prev => prev.filter(i => i.id !== item.id))
   }
 
@@ -103,6 +111,7 @@ export function SavedPage({ token, onClose }: Props) {
             paper={item.paper}
             isSaved={true}
             onSave={() => unsave(item)}
+            onAnalyze={onOpenChat ? () => onOpenChat(item.paper) : undefined}
           />
         ))}
       </div>

@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
+import { aiErrorMessage } from '../lib/friendlyError'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { saveSessionAnalysis } from '../api/client'
@@ -105,7 +106,7 @@ export function ComparePanel({ papers, apiKey, onClose, token, sessionId }: Prop
         }),
       })
 
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+      if (!resp.ok) throw new Error(aiErrorMessage(resp.status))
 
       const reader = resp.body!.getReader()
       const decoder = new TextDecoder()
@@ -129,7 +130,8 @@ export function ComparePanel({ papers, apiKey, onClose, token, sessionId }: Prop
       cacheRef.current[mode] = accumulated
     } catch (err) {
       if ((err as Error).name !== 'AbortError') {
-        setContent(prev => prev + `\n\n> ⚠️ 生成失败：${(err as Error).message}`)
+        const msg = err instanceof TypeError ? '网络连接失败，请检查网络后重试。' : (err as Error).message
+        setContent(prev => prev + `\n\n> ⚠️ 生成失败：${msg}`)
       }
     } finally {
       abortRef.current = null

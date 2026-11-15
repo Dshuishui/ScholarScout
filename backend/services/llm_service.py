@@ -268,8 +268,12 @@ def rank_accepted(papers: list[Paper]) -> list[Paper]:
 
     必须在截取 validated_limit 之前调用，否则排在后面的数据源里的高分论文会先被截掉。
     """
+    from services.journal_quality import LOW_TIER_PENALTY
+
     def key(p: Paper) -> tuple[float, bool, float]:
         if p.relevance_score is None:
             return (-1.0, False, 0.0)
-        return (p.relevance_score, bool(p.abstract), citation_bonus(p.citations))
+        # 低门槛出版社的论文往后排（分数本身不改，卡片上照常显示）
+        score = p.relevance_score - (LOW_TIER_PENALTY if p.low_tier_publisher else 0.0)
+        return (score, bool(p.abstract), citation_bonus(p.citations))
     return sorted(papers, key=key, reverse=True)

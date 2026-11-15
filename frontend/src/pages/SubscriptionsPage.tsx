@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useAuth } from '../hooks/useAuth'
 import { toast } from '../components/Toast'
 import { LibraryImportPanel } from '../components/LibraryImportPanel'
@@ -133,37 +133,77 @@ export function SubscriptionsPage({ token, onClose, initialExpandId }: Props) {
   const [queues, setQueues] = useState<Record<number, QueueItem[]>>({})
   const [queueLoading, setQueueLoading] = useState<number | null>(null)
   const [refreshingId, setRefreshingId] = useState<number | null>(null)
+  // 加载失败和"确实是空的"要分开：以前接口出错也显示"还没有订阅""队列已清空"，用户以为订阅丢了
+  const [loadError, setLoadError] = useState(false)
+  const [queueErrors, setQueueErrors] = useState<Record<number, boolean>>({})
+  // 后台正在查找论文的订阅：查找完会自动刷新队列，不用用户自己反复点
+  const [searchingIds, setSearchingIds] = useState<Set<number>>(new Set())
+  const mounted = useRef(true)
+  useEffect(() => () => { mounted.current = false }, [])
 
   // daily_limit 编辑
   const [editingLimit, setEditingLimit] = useState<Record<number, number>>({})
   const [savingLimit, setSavingLimit] = useState<number | null>(null)
 
-  useEffect(() => {
+  const loadSubs = useCallback(() => {
+    setLoading(true)
+    setLoadError(false)
     fetch('/api/subscriptions', { headers: { Authorization: `Bearer ${token}` } })
-      .then(r => { if (r.status === 401) { sessionExpired(); return null } return r.json() })
+      .then(r => {
+        if (r.status === 401) { sessionExpired(); return null }
+        if (!r.ok) throw new Error(String(r.status))
+        return r.json()
+      })
       .then(data => { if (data) setSubs(Array.isArray(data) ? data : []) })
-      .catch(() => {})
+      .catch(() => setLoadError(true))
       .finally(() => setLoading(false))
   }, [token]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const fetchQueue = useCallback(async (subId: number) => {
-    setQueueLoading(subId)
+  useEffect(() => { loadSubs() }, [loadSubs])
+
+  /** 返回队列条数；加载失败返回 null。quiet：后台轮询时不显示转圈 */
+  const fetchQueue = useCallback(async (subId: number, quiet = false): Promise<number | null> => {
+    if (!quiet) setQueueLoading(subId)
     try {
       const r = await fetch(`/api/subscriptions/${subId}/queue`, {
         headers: { Authorization: `Bearer ${token}` },
       })
-      if (r.ok) {
-        const data: QueueItem[] = await r.json()
-        setQueues(prev => ({ ...prev, [subId]: data }))
-      }
+      if (!r.ok) throw new Error(String(r.status))
+      const data: QueueItem[] = await r.json()
+      setQueues(prev => ({ ...prev, [subId]: data }))
+      setQueueErrors(prev => ({ ...prev, [subId]: false }))
+      return data.length
+    } catch {
+      if (!quiet) setQueueErrors(prev => ({ ...prev, [subId]: true }))
+      return null
     } finally {
-      setQueueLoading(null)
+      if (!quiet) setQueueLoading(null)
     }
   }, [token])
 
-  // 有 initialExpandId 时，subs 加载完自动拉取队列
+  /** 后台查找论文要 1-2 分钟：每 15 秒看一次队列，多出论文或超过 3 分钟就停 */
+  const pollQueue = useCallback(async (subId: number, before: number) => {
+    setSearchingIds(prev => new Set(prev).add(subId))
+    for (let i = 0; i < 12 && mounted.current; i++) {
+      await new Promise(res => setTimeout(res, 15_000))
+      if (!mounted.current) return
+      const n = await fetchQueue(subId, true)
+      if (n !== null && n > before) break
+    }
+    if (mounted.current) setSearchingIds(prev => { const s = new Set(prev); s.delete(subId); return s })
+  }, [fetchQueue])
+
+  /** 刚建的订阅后台还在找论文：队列是空的就自动轮询，找到后显示，不用用户自己刷新 */
+  const openQueue = useCallback(async (subId: number) => {
+    const n = await fetchQueue(subId)
+    const sub = subs.find(s => s.id === subId)
+    const justCreated = sub && Date.now() - new Date(sub.created_at).getTime() < 3 * 60 * 1000
+    if (n === 0 && justCreated && !searchingIds.has(subId)) void pollQueue(subId, 0)
+  }, [fetchQueue, pollQueue, subs, searchingIds])
+
+  // 有 initialExpandId 时（刚订阅完跳过来），subs 加载完自动拉取队列
   useEffect(() => {
-    if (initialExpandId && !loading) fetchQueue(initialExpandId)
+    if (initialExpandId && !loading) void openQueue(initialExpandId)
   }, [initialExpandId, loading]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const toggleExpand = (subId: number) => {
@@ -171,20 +211,23 @@ export function SubscriptionsPage({ token, onClose, initialExpandId }: Props) {
       setExpandedId(null)
     } else {
       setExpandedId(subId)
-      if (!queues[subId]) fetchQueue(subId)
+      if (!queues[subId]) void openQueue(subId)
     }
   }
 
   const handleToggle = async (id: number) => {
     setTogglingId(id)
+    const wasActive = subs.find(s => s.id === id)?.active
     try {
       const r = await fetch(`/api/subscriptions/${id}/toggle`, {
         method: 'PATCH',
         headers: { Authorization: `Bearer ${token}` },
-      })
-      if (r.ok) {
+      }).catch(() => null)
+      if (r?.ok) {
         const updated: Subscription = await r.json()
         setSubs(prev => prev.map(s => s.id === id ? updated : s))
+      } else {
+        toast.show(wasActive ? '暂停没有成功，这个订阅仍在推送，请稍后再试' : '恢复没有成功，请稍后再试')
       }
     } finally {
       setTogglingId(null)
@@ -197,11 +240,13 @@ export function SubscriptionsPage({ token, onClose, initialExpandId }: Props) {
       const r = await fetch(`/api/subscriptions/${id}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` },
-      })
-      if (r.ok || r.status === 204) {
+      }).catch(() => null)
+      if (r && (r.ok || r.status === 204)) {
         setSubs(prev => prev.filter(s => s.id !== id))
         setQueues(prev => { const n = { ...prev }; delete n[id]; return n })
         if (expandedId === id) setExpandedId(null)
+      } else {
+        toast.show('删除没有成功，这个订阅仍然有效，请稍后再试')
       }
     } finally {
       setDeletingId(null)
@@ -217,11 +262,10 @@ export function SubscriptionsPage({ token, onClose, initialExpandId }: Props) {
       })
       if (!r.ok) {
         const data = await r.json().catch(() => null)
-        toast.show(data?.detail ?? '刷新失败，请稍后重试')
+        toast.show(data?.detail ?? '查找没有启动成功，请稍后重试')
         return
       }
-      // 后台刷新，3 秒后重新拉取
-      setTimeout(() => fetchQueue(id), 3000)
+      void pollQueue(id, queues[id]?.length ?? 0)
     } finally {
       setRefreshingId(null)
     }
@@ -298,6 +342,12 @@ export function SubscriptionsPage({ token, onClose, initialExpandId }: Props) {
         {loading ? (
           <div className="flex items-center justify-center h-48">
             <div className="w-6 h-6 rounded-full border-2 border-indigo-400 border-t-transparent animate-spin" />
+          </div>
+        ) : loadError ? (
+          <div className="flex flex-col items-center justify-center h-48 gap-3 text-center">
+            <p className="text-sm text-gray-500">暂时没能加载订阅列表，你的订阅不受影响</p>
+            <button onClick={loadSubs}
+              className="text-sm text-indigo-600 hover:text-indigo-700 border border-indigo-200 rounded-lg px-4 py-1.5 transition-colors">重新加载</button>
           </div>
         ) : subs.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-64 text-center gap-4">
@@ -468,10 +518,10 @@ export function SubscriptionsPage({ token, onClose, initialExpandId }: Props) {
                         <button
                           onClick={() => handleRefreshQueue(sub.id)}
                           disabled={refreshingId === sub.id}
-                          title="重新搜索论文并追加到队列"
+                          title="在后台重新搜一遍这个方向的论文，找到的新论文会排进推送队列"
                           className="flex items-center gap-1 text-xs text-indigo-500 hover:text-indigo-700 disabled:opacity-50 transition-colors"
                         >
-                          {refreshingId === sub.id ? (
+                          {refreshingId === sub.id || searchingIds.has(sub.id) ? (
                             <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
                               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
                               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
@@ -482,29 +532,39 @@ export function SubscriptionsPage({ token, onClose, initialExpandId }: Props) {
                                 d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                             </svg>
                           )}
-                          刷新队列
+                          {searchingIds.has(sub.id) ? '正在查找…' : '查找更多论文'}
                         </button>
                       </div>
 
+                      {searchingIds.has(sub.id) && queue.length > 0 && (
+                        <p className="text-xs text-indigo-500 bg-indigo-50 rounded-lg px-3 py-2 mb-2">
+                          正在后台查找这个方向的新论文，通常要 1–2 分钟，找到后这里会自动更新
+                        </p>
+                      )}
                       {queueLoading === sub.id ? (
                         <div className="flex justify-center py-6">
                           <div className="w-5 h-5 rounded-full border-2 border-indigo-300 border-t-transparent animate-spin" />
+                        </div>
+                      ) : queueErrors[sub.id] ? (
+                        <div className="text-center py-6 text-xs text-gray-500">
+                          <p>暂时没能加载推送队列</p>
+                          <button onClick={() => fetchQueue(sub.id)} className="mt-1 text-indigo-600 hover:underline">点这里重试</button>
                         </div>
                       ) : queue.length === 0 ? (
                         (() => {
                           // 区分"刚创建正在填充"和"真的空了"
                           const createdMs = new Date(sub.created_at).getTime()
-                          const isPopulating = Date.now() - createdMs < 3 * 60 * 1000 // 3分钟内
+                          const isPopulating = searchingIds.has(sub.id) || Date.now() - createdMs < 3 * 60 * 1000 // 3分钟内
                           return isPopulating ? (
                             <div className="flex flex-col items-center gap-2 py-6 text-xs text-indigo-500">
                               <div className="w-5 h-5 rounded-full border-2 border-indigo-300 border-t-transparent animate-spin" />
                               <p className="font-medium">正在后台搜索相关论文…</p>
-                              <p className="text-gray-400">通常需要 1-2 分钟，完成后点击「刷新队列」查看</p>
+                              <p className="text-gray-400">通常需要 1-2 分钟，完成后这里会自动更新</p>
                             </div>
                           ) : (
                             <div className="text-center py-6 text-xs text-gray-400">
-                              <p>队列已清空</p>
-                              <p className="mt-1">点击「刷新队列」重新搜索并补充论文</p>
+                              <p>这个方向暂时没有待推送的论文了</p>
+                              <p className="mt-1">可以点「查找更多论文」再搜一遍</p>
                             </div>
                           )
                         })()

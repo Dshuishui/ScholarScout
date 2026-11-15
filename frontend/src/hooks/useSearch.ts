@@ -58,6 +58,9 @@ export function useSearch(apiKey: string, settings: SearchSettings, model?: stri
   const [isLoading, setIsLoading] = useState(false)
   // 每次换一组结果就加 1：上一次搜索 done 之后还在补论文，用户这时开始新搜索或打开历史，旧流后面的事件都要丢掉
   const resultsGen = useRef(0)
+  // 用户点「停止搜索」时中断请求，已经搜到的论文留下
+  const abortRef = useRef<AbortController | null>(null)
+  const userStopped = useRef(false)
   const [statusMessage, setStatusMessage] = useState('')
   const [lastConfirmed, setLastConfirmed] = useState<PendingSearch | null>(null)
   const [sourceStatuses, setSourceStatuses] = useState<Record<string, SourceStatus>>({})
@@ -143,6 +146,9 @@ export function useSearch(apiKey: string, settings: SearchSettings, model?: stri
     let sessionReq: Promise<{ id: number } | null> | null = null
     const gen = ++resultsGen.current
     const stale = () => gen !== resultsGen.current
+    const ctrl = new AbortController()
+    abortRef.current = ctrl
+    userStopped.current = false
 
     try {
       for await (const event of searchPapers(
@@ -151,6 +157,7 @@ export function useSearch(apiKey: string, settings: SearchSettings, model?: stri
           zh_keywords: pending.zh_keywords },
         model,
         trialAuth,
+        ctrl.signal,
       )) {
         if (stale()) break
         if (event.type === 'quota') {
@@ -254,6 +261,15 @@ export function useSearch(apiKey: string, settings: SearchSettings, model?: stri
       if (!stale()) keepPreviewAsResults()
     } catch (err) {
       if (stale()) return
+      if (userStopped.current) {
+        const kept = keepPreviewAsResults()
+        setStatusMessage('')
+        updateAssistant(assistantId, {
+          content: kept ? '已停止搜索，保留了已找到的论文（未经 AI 筛选）。' : '已停止搜索。',
+          isLoading: false,
+        })
+        return
+      }
       setHasSearchError(true)
       const kept = keepPreviewAsResults()
       updateAssistant(assistantId, {
@@ -261,8 +277,19 @@ export function useSearch(apiKey: string, settings: SearchSettings, model?: stri
         isLoading: false,
       })
     } finally {
+      if (abortRef.current === ctrl) abortRef.current = null
       if (!stale()) setIsLoading(false)
     }
+  }
+
+  /** 等太久时用户可以自己停：中断请求，已经搜到、还没筛选完的论文留在页面上 */
+  const stopSearch = () => {
+    const ctrl = abortRef.current
+    if (!ctrl) return
+    userStopped.current = true
+    abortRef.current = null
+    track('search_stop', { mode })
+    ctrl.abort()
   }
 
   /** forceSearch：用户在 AI 的直接回答下点了"按这个问题搜论文"，不再判断意图。
@@ -441,6 +468,7 @@ export function useSearch(apiKey: string, settings: SearchSettings, model?: stri
     reSearch: lastConfirmed ? reSearch : undefined,
     hasSearchError,
     chatOnlyReplyAt,
+    stopSearch,
     history,
     removeHistory,
     searchFromHistory,

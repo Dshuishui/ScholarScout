@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
+import { aiErrorMessage } from '../lib/friendlyError'
 import type { Paper } from '../types'
 import { useAuth } from './useAuth'
 import { useAccess } from './useAccess'
@@ -219,13 +220,7 @@ export function usePaperChat(apiKey: string, model: string = 'deepseek-v4-flash'
           }),
         })
 
-        if (!resp.ok) {
-          // 余额不足 / Key 无效专项错误
-          if (resp.status === 402) throw new Error('__INSUFFICIENT_BALANCE__')
-          if (resp.status === 401) throw new Error('__INVALID_KEY__')
-          if (resp.status === 429) throw new Error('__RATE_LIMIT__')
-          throw new Error(`HTTP ${resp.status}`)
-        }
+        if (!resp.ok) throw new Error(aiErrorMessage(resp.status))
 
         const reader = resp.body!.getReader()
         const decoder = new TextDecoder()
@@ -274,15 +269,9 @@ export function usePaperChat(apiKey: string, model: string = 'deepseek-v4-flash'
             return next
           })
         } else {
-          const errMsg = err instanceof Error ? err.message : String(err)
-          let displayMsg = `请求失败：${errMsg}`
-          if (errMsg === '__INSUFFICIENT_BALANCE__') {
-            displayMsg = '⚠️ DeepSeek API 余额不足，请前往 [platform.deepseek.com](https://platform.deepseek.com) 充值后重试。'
-          } else if (errMsg === '__INVALID_KEY__') {
-            displayMsg = '⚠️ API Key 无效或已过期，请点击顶栏「换 Key」重新输入。'
-          } else if (errMsg === '__RATE_LIMIT__') {
-            displayMsg = '⚠️ 请求过于频繁（Rate Limit），请等待片刻后重试。'
-          }
+          // fetch 本身抛的 TypeError（断网、跨域失败）消息是英文，统一说成网络问题
+          const displayMsg = '⚠️ ' + (err instanceof TypeError ? '网络连接失败，请检查网络后重试。'
+            : err instanceof Error ? err.message : '请求没有成功，请稍后再试。')
           setHistories(prev => {
             const next = new Map(prev)
             const msgs = [...(prev.get(paperId) ?? [])]

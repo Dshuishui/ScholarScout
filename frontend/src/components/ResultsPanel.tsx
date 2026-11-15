@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useRef, lazy, Suspense } from 'react'
+import { downloadErrorMessage } from '../lib/friendlyError'
 import { useAuth } from '../hooks/useAuth'
 import { AuthModal } from './AuthModal'
 import type { Paper } from '../types'
@@ -41,6 +42,9 @@ const SOURCE_COLORS: Record<string, string> = {
 const ITEMS_PER_PAGE = 20
 // AI 评分低于这个分（即只给了 5 分）的论文默认收起：实测一题 42 篇里有 11 篇是 5 分，和切题的论文混在一起显得不专业
 const WEAK_SCORE = 6
+// 低门槛期刊排序时扣的分，和后端 services/journal_quality.py 的 LOW_TIER_PENALTY 保持一致
+const LOW_TIER_PENALTY = 2
+const rankScore = (p: Paper) => (p.relevance_score ?? 0) - (p.low_tier_publisher ? LOW_TIER_PENALTY : 0)
 const isWeak = (p: Paper) => p.relevance_score != null && p.relevance_score < WEAK_SCORE
 const DOWNLOAD_CONCURRENCY = 1   // 顺序下载，防止并发触发 arXiv/Sci-Hub 等源的 IP 限流
 const DOWNLOAD_TIMEOUT_MS = 90_000
@@ -63,6 +67,8 @@ interface Props {
   sourceStatuses?: Record<string, SourceStatus>
   onAnalyzePaper?: (paper: Paper) => void
   onExampleSearch?: (query: string) => boolean | void
+  /** 中断正在进行的搜索，保留已找到的论文 */
+  onStopSearch?: () => void
   apiKey?: string
   getMessages?: (paperId: string) => ChatMessage[]
   hasSearchError?: boolean
@@ -217,7 +223,7 @@ function Pagination({ current, total, onChange }: {
   )
 }
 
-export function ResultsPanel({ papers, availableSources, previewPapers = [], previewTotal = 0, rejectedPapers = [], isLoading, statusMessage, sourceStatuses = {}, settings, onSettingsChange, onReSearch, confirmedKeywords, zhKeywords = [], onAnalyzePaper, onExampleSearch, apiKey, getMessages, hasSearchError = false, searchDateRange, sessionId, onOpenRag, onOpenGraph, onRequireKey }: Props) {
+export function ResultsPanel({ papers, availableSources, previewPapers = [], previewTotal = 0, rejectedPapers = [], isLoading, statusMessage, sourceStatuses = {}, settings, onSettingsChange, onReSearch, confirmedKeywords, zhKeywords = [], onAnalyzePaper, onExampleSearch, apiKey, getMessages, hasSearchError = false, searchDateRange, sessionId, onOpenRag, onOpenGraph, onRequireKey, onStopSearch }: Props) {
   const [currentPage, setCurrentPage] = useState(1)
   const [showBackToTop, setShowBackToTop] = useState(false)
   const listScrollRef = useRef<HTMLDivElement>(null)
@@ -329,30 +335,33 @@ export function ResultsPanel({ papers, availableSources, previewPapers = [], pre
   const handleSave = async (paper: Paper) => {
     if (!token) return
     const existingHash = savedMap.get(paper.paper_id)
+    const setSaved = (hash: string | null) => setSavedMap(prev => {
+      const m = new Map(prev)
+      if (hash === null) m.delete(paper.paper_id); else m.set(paper.paper_id, hash)
+      localStorage.setItem('ss_saved_map', JSON.stringify([...m.entries()]))
+      return m
+    })
     if (existingHash) {
-      // 乐观更新
-      setSavedMap(prev => {
-        const m = new Map(prev); m.delete(paper.paper_id)
-        localStorage.setItem('ss_saved_map', JSON.stringify([...m.entries()]))
-        return m
-      })
-      await fetch(`/api/user/saved/${existingHash}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } })
+      // 乐观更新；失败了要改回来并提示，以前显示已取消、刷新后论文又回来了
+      setSaved(null)
+      const ok = await fetch(`/api/user/saved/${existingHash}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } })
+        .then(r => r.ok).catch(() => false)
+      if (!ok) {
+        setSaved(existingHash)
+        toast.show('取消收藏没有成功，请稍后再试')
+      }
     } else {
       const r = await fetch('/api/user/saved', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ paper }),
-      })
-      if (r.ok) {
-        // 乐观更新（无需重新拉取全量）
-        const data = await r.json() as { paper_id_hash?: string }
-        const hash = data.paper_id_hash ?? ''
-        setSavedMap(prev => {
-          const m = new Map(prev); m.set(paper.paper_id, hash)
-          localStorage.setItem('ss_saved_map', JSON.stringify([...m.entries()]))
-          return m
-        })
+      }).catch(() => null)
+      if (!r || !r.ok) {
+        toast.show(r?.status === 401 ? '登录已过期，请重新登录后收藏' : '收藏没有成功，请稍后再试')
+        return
       }
+      const data = await r.json() as { paper_id_hash?: string }
+      setSaved(data.paper_id_hash ?? '')
     }
   }
 
@@ -499,7 +508,7 @@ export function ResultsPanel({ papers, availableSources, previewPapers = [], pre
 
   const sortedPapers = useMemo(() => {
     return [...yearFilteredPapers].sort((a, b) => {
-      if (sortBy === 'relevance') return (b.relevance_score ?? 0) - (a.relevance_score ?? 0)
+      if (sortBy === 'relevance') return rankScore(b) - rankScore(a)
       if (sortBy === 'citations') return b.citations - a.citations
       const da = a.published_date ?? ''
       const db = b.published_date ?? ''
@@ -631,8 +640,8 @@ const addKeyword = () => {
           if (resp.ok) {
             zip.file(filename, await resp.arrayBuffer())
           } else {
-            let reason = `HTTP ${resp.status}`
-            try { const j = await resp.json(); reason = j.detail ?? reason } catch { /* ignore */ }
+            let reason = downloadErrorMessage(resp.status)
+            try { const j = await resp.json(); if (typeof j.detail === 'string') reason = j.detail } catch { /* ignore */ }
             failed.push({ title: paper.title, authors: paper.authors.join('; '), year, url: downloadUrl, reason })
           }
         } catch (err) {
@@ -1194,7 +1203,8 @@ const addKeyword = () => {
       {/* 论文列表 */}
       <div
         ref={listScrollRef}
-        className="flex-1 overflow-y-auto p-4 space-y-3 relative"
+        // 电脑上右下角有吉祥物和留言按钮：右侧留出空位，免得盖住卡片右边的「收藏」「AI 对话」
+        className="flex-1 overflow-y-auto p-4 sm:pr-20 space-y-3 relative"
         onScroll={e => setShowBackToTop((e.target as HTMLDivElement).scrollTop > 400)}
       >
         {/* 搜索中：来源进度网格 + 骨架屏 */}
@@ -1202,13 +1212,25 @@ const addKeyword = () => {
           <div className="space-y-3">
             {Object.keys(sourceStatuses).length > 0 ? (
               <div className="bg-white rounded-xl border border-gray-100 p-4">
-                <p className="text-xs font-medium text-gray-500 mb-3">
-                  并发搜索中
-                  <span className="ml-2 text-gray-300 font-normal">
-                    {Object.values(sourceStatuses).filter(s => s.status === 'done').length}
-                    &nbsp;/&nbsp;{Object.keys(sourceStatuses).length} 完成
-                  </span>
-                </p>
+                {/* 以前进度网格一出来就不再说当前在做什么：数据库都查完了还在等 AI 筛选，用户以为卡住了 */}
+                <div className="flex items-start gap-2 mb-3">
+                  <div className="w-3.5 h-3.5 mt-0.5 rounded-full border-2 border-indigo-400 border-t-transparent animate-spin flex-shrink-0" />
+                  <p className="flex-1 text-sm text-gray-700 leading-snug">
+                    {statusMessage || '正在查找论文…'}
+                    <span className="block text-xs text-gray-400 mt-0.5">
+                      数据库 {Object.values(sourceStatuses).filter(s => s.status === 'done').length}
+                      /{Object.keys(sourceStatuses).length} 已返回 · 之后 AI 会逐篇判断相关性，通常共要二三十秒
+                    </span>
+                  </p>
+                  {onStopSearch && (
+                    <button
+                      onClick={onStopSearch}
+                      className="flex-shrink-0 text-xs text-gray-500 hover:text-red-600 border border-gray-200 hover:border-red-200 rounded-lg px-2.5 py-1 transition-colors"
+                    >
+                      {previewPapers.length > 0 ? '停止，保留已找到的' : '停止搜索'}
+                    </button>
+                  )}
+                </div>
                 <div className="grid grid-cols-2 gap-x-4 gap-y-2">
                   {Object.entries(sourceStatuses).map(([source, st]) => (
                     <div key={source} className="flex items-center gap-2">

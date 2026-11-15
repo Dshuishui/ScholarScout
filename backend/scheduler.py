@@ -33,9 +33,12 @@ def rank_for_push(papers: list[Paper]) -> list[Paper]:
     from services.llm_service import citation_bonus
     from services.email_service import _is_unreviewed
 
+    from services.journal_quality import LOW_TIER_PENALTY
+
     def key(p: Paper) -> float:
         score = p.relevance_score if p.relevance_score is not None else 5.0
-        return score + citation_bonus(p.citations) - (1.0 if _is_unreviewed(p) else 0.0)
+        return (score + citation_bonus(p.citations) - (1.0 if _is_unreviewed(p) else 0.0)
+                - (LOW_TIER_PENALTY if p.low_tier_publisher else 0.0))
 
     return sorted(papers, key=key, reverse=True)
 

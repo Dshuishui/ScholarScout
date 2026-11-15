@@ -64,9 +64,11 @@ export async function* searchPapers(
   confirmed?: { keywords: string[]; date_from?: string | null; date_to?: string | null; domains?: string[]; concepts?: string[][]; zh_keywords?: string[] },
   model?: string,
   trial?: TrialAuth,
+  signal?: AbortSignal,
 ): AsyncGenerator<SearchEvent> {
   const response = await fetch(`${API_BASE}/search`, {
     method: 'POST',
+    signal,
     headers: requestHeaders(apiKey, trial),
     body: JSON.stringify({
       query,

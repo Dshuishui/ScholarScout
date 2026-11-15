@@ -24,7 +24,8 @@ const POS_KEY = 'scholarscout_panda_pos'
 function getDefaultPos() {
   const w = typeof window !== 'undefined' ? window.innerWidth : 1200
   const h = typeof window !== 'undefined' ? window.innerHeight : 800
-  return { x: w - PANDA_W - 80, y: h - PANDA_H - 80 }
+  // 默认贴右边、站在留言按钮正上方：结果列表右侧留了空位，不会挡住论文卡片上的按钮
+  return { x: w - PANDA_W - 22, y: h - PANDA_H - 88 }
 }
 
 export function RedPandaWidget({ isSearching = false }: { isSearching?: boolean }) {

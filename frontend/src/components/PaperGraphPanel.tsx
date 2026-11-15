@@ -243,8 +243,8 @@ export function PaperGraphPanel({ papers, onClose }: Props) {
         </span>
       </div>
 
-      {/* 图谱区 + 侧边信息面板 */}
-      <div className="flex-1 flex overflow-hidden">
+      {/* 图谱区 + 侧边信息面板；手机上侧栏固定 224px 会把图挤成一条，改成放到下方 */}
+      <div className="flex-1 flex flex-col sm:flex-row overflow-hidden">
         {/* 图谱 canvas */}
         <div
           ref={containerRef}
@@ -313,7 +313,7 @@ export function PaperGraphPanel({ papers, onClose }: Props) {
         </div>
 
         {/* 右侧图例 + 节点详情 */}
-        <div className="w-56 flex-shrink-0 border-l border-gray-100 flex flex-col overflow-y-auto">
+        <div className="w-full sm:w-56 max-h-[38%] sm:max-h-none flex-shrink-0 border-t sm:border-t-0 sm:border-l border-gray-100 flex flex-col overflow-y-auto">
           {/* 图例 */}
           <div className="p-3 border-b border-gray-50">
             <p className="text-xs font-semibold text-gray-500 mb-2">数据来源</p>

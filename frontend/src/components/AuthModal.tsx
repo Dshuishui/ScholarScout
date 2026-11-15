@@ -117,8 +117,8 @@ export function AuthModal({ onClose, defaultTab = 'login' }: Props) {
   // ── 注册成功 → 等待验证 ────────────────────────────────────────────────────
   if (sentEmail) {
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={onClose}>
-        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm mx-4 p-8" onClick={e => e.stopPropagation()}>
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4" onClick={onClose}>
+        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm max-h-[90dvh] overflow-y-auto p-6 sm:p-8" onClick={e => e.stopPropagation()}>
           <div className="text-center">
             <div className="w-14 h-14 rounded-full bg-indigo-50 border border-indigo-100 flex items-center justify-center mx-auto mb-4">
               <svg className="w-7 h-7 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -175,8 +175,8 @@ export function AuthModal({ onClose, defaultTab = 'login' }: Props) {
   // ── 忘记密码：发送重置邮件 ────────────────────────────────────────────────
   if (forgotMode) {
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={onClose}>
-        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm mx-4 p-8" onClick={e => e.stopPropagation()}>
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4" onClick={onClose}>
+        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm max-h-[90dvh] overflow-y-auto p-6 sm:p-8" onClick={e => e.stopPropagation()}>
           {forgotSent ? (
             <div className="text-center">
               <div className="w-14 h-14 rounded-full bg-green-50 border border-green-100 flex items-center justify-center mx-auto mb-4">
@@ -233,8 +233,8 @@ export function AuthModal({ onClose, defaultTab = 'login' }: Props) {
 
   // ── 登录 / 注册表单 ────────────────────────────────────────────────────────
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={onClose}>
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm mx-4 p-8" onClick={e => e.stopPropagation()}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm max-h-[90dvh] overflow-y-auto p-6 sm:p-8" onClick={e => e.stopPropagation()}>
         <div className="flex justify-between items-center mb-6">
           <div className="flex gap-4">
             <button

@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { MainLayout } from './components/MainLayout'
 import { ResetPasswordModal } from './components/ResetPasswordModal'
+import { LinkExpiredModal } from './components/LinkExpiredModal'
+import { AuthModal } from './components/AuthModal'
 import { AccessModal } from './components/AccessModal'
 import { AuthProvider, useAuth } from './hooks/useAuth'
 import { AccessProvider } from './hooks/useAccess'
@@ -10,6 +12,8 @@ import { track } from './lib/analytics'
 function AppInner() {
   const { loginWithToken } = useAuth()
   const [resetToken, setResetToken] = useState<string | null>(null)
+  const [expired, setExpired] = useState<{ kind: 'verify' | 'reset'; reason: string } | null>(null)
+  const [showLogin, setShowLogin] = useState(false)
 
   // 邮箱验证回调：URL 含 ?verify=<token> 时自动完成验证并登录
   // 密码重置回调：URL 含 ?reset=<token> 时打开重置密码弹窗
@@ -22,6 +26,7 @@ function AppInner() {
       fetch(`/api/auth/verify-email?token=${encodeURIComponent(verifyToken)}`)
         .then(r => r.json())
         .then(data => {
+          // 已经验证过的人再点一次旧链接也会走到这里：给出登录和重发入口，别只闪一句"验证失败"
           if (data.access_token) {
             return loginWithToken(data.access_token).then(() => {
               track('email_verified')
@@ -30,7 +35,7 @@ function AppInner() {
               toast.show(`✅ 邮箱验证成功！${msg}`)
             })
           }
-          toast.show(`验证失败：${data.detail || '链接无效或已过期'}`)
+          setExpired({ kind: 'verify', reason: data.detail || '链接无效或已过期' })
         })
         .catch(() => toast.show('验证请求失败，请重试'))
       return
@@ -53,8 +58,18 @@ function AppInner() {
           token={resetToken}
           onClose={() => setResetToken(null)}
           onSuccess={() => setResetToken(null)}
+          onExpired={reason => { setResetToken(null); setExpired({ kind: 'reset', reason }) }}
         />
       )}
+      {expired && (
+        <LinkExpiredModal
+          kind={expired.kind}
+          reason={expired.reason}
+          onClose={() => setExpired(null)}
+          onLogin={() => { setExpired(null); setShowLogin(true) }}
+        />
+      )}
+      {showLogin && <AuthModal defaultTab="login" onClose={() => setShowLogin(false)} />}
     </>
   )
 }

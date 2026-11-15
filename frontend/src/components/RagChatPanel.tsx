@@ -1,4 +1,5 @@
 import { useState, useRef } from 'react'
+import { aiErrorMessage } from '../lib/friendlyError'
 import type { Paper } from '../types'
 
 interface Props {
@@ -43,7 +44,7 @@ export function RagChatPanel({ papers, apiKey, model, onClose }: Props) {
       })
 
       if (!r.ok) {
-        setAnswer('请求失败，请检查 API Key 是否有效。')
+        setAnswer(aiErrorMessage(r.status))
         return
       }
 
@@ -58,7 +59,7 @@ export function RagChatPanel({ papers, apiKey, model, onClose }: Props) {
       }
     } catch (e: unknown) {
       if (e instanceof Error && e.name !== 'AbortError') {
-        setAnswer('网络错误，请重试。')
+        setAnswer('网络连接失败，请检查网络后重试。')
       }
     } finally {
       setLoading(false)

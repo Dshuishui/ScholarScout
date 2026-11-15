@@ -968,3 +968,30 @@ async def test_arxiv_http_error_marks_source_failed(monkeypatch):
     finally:
         s._source_failed.reset(token)
     assert flag[0] is True
+
+
+def test_low_tier_publishers_flagged_and_ranked_lower():
+    """中文结果里大量论文来自新加坡、香港注册的收费发表出版社：标出来，排在普通论文后面。"""
+    from services.journal_quality import low_tier_publisher
+    from services.llm_service import rank_accepted
+    assert low_tier_publisher("10.37155/2717-5359-0601-1", "基于大数据的教学改革") == "Omniscient Pte Ltd"
+    assert low_tier_publisher("10.12677/ecl.2024.131", "") == "Hans Publishers（汉斯出版社）"
+    assert low_tier_publisher("10.3760/cma.j.issn.0254-1416.2020.01.001", "术后认知功能障碍") is None  # 中华医学会
+    # 名单外的：靠 CrossRef 给的出版社名兜底，只认中文标题，大出版社不算
+    assert low_tier_publisher("10.99999/x", "数字金融研究", "New Star Publishing Pte. Ltd.") == "New Star Publishing Pte. Ltd."
+    assert low_tier_publisher("10.99999/x", "Deep learning", "New Star Publishing Pte. Ltd.") is None
+    assert low_tier_publisher("10.1007/x", "数字金融研究", "Springer Nature Singapore Pte Ltd") is None
+
+    good = Paper(paper_id="g", title="普通期刊论文", authors=[], source="中文文献", relevance_score=7.0)
+    low = Paper(paper_id="l", title="低门槛论文", authors=[], source="中文文献", relevance_score=8.5,
+                low_tier_publisher="Omniscient Pte Ltd")
+    assert [p.paper_id for p in rank_accepted([low, good])] == ["g", "l"]
+
+
+def test_sanitize_and_merge_keep_low_tier_flag():
+    from services.search_service import _sanitize_paper, _merge
+    p = Paper(paper_id="a", title="基于大数据的教学改革", authors=[], source="中文文献", doi="10.69979/3029-2700.24.1.1")
+    tagged = _sanitize_paper(p)
+    assert tagged.low_tier_publisher == "Singapore Juzhi Journal Publishing"
+    plain = Paper(paper_id="b", title="基于大数据的教学改革", authors=[], source="CrossRef")
+    assert _merge(plain, tagged).low_tier_publisher == "Singapore Juzhi Journal Publishing"

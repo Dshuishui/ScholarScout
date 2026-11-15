@@ -17,6 +17,8 @@ export interface Paper {
   fallback_links?: { name: string; url: string }[]
   /** 首屏之后补来的：citations 沿引用链找到，requery 换个说法再搜找到 */
   found_via?: 'citations' | 'requery'
+  /** 收费发表、审稿宽松的出版社名：卡片上标"低门槛期刊"，排序时往后放 */
+  low_tier_publisher?: string
 }
 
 export interface Message {

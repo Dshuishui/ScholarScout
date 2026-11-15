@@ -12,6 +12,7 @@ import feedparser
 import httpx
 from models import Paper, ParsedQuery
 from services.health_monitor import record_openalex_budget, record_source_result
+from services.journal_quality import low_tier_publisher
 import config
 from config import (
     CORE_API_KEY, NASA_ADS_API_KEY, SERPAPI_KEY, OPENALEX_API_KEY, SEMANTIC_SCHOLAR_HEADERS, POLITE_EMAIL,
@@ -223,6 +224,8 @@ def _openalex_item_to_paper(item: dict) -> Paper:
         source="OpenAlex",
         citations=item.get("cited_by_count", 0) or 0,
         venue=venue,
+        # 引用链补来的论文不经过 _sanitize_paper，这里先标上
+        low_tier_publisher=low_tier_publisher(doi, item.get("title") or ""),
     )
 
 
@@ -776,7 +779,7 @@ async def _search_nasa_ads(parsed: ParsedQuery, limit: int) -> list[Paper]:
 
 
 _CROSSREF_SELECT = ("DOI,title,author,published-print,published-online,abstract,is-referenced-by-count,URL,link,"
-                    "license,container-title")
+                    "license,container-title,publisher")
 
 
 async def _crossref_query(query: str, rows: int, date_from: str | None = None) -> list[dict]:
@@ -851,6 +854,8 @@ def _crossref_item_to_paper(item: dict) -> Paper | None:
         source="CrossRef",
         citations=item.get("is-referenced-by-count", 0) or 0,
         venue=venue,
+        # CrossRef 带出版社名，名单外新冒出来的同类出版社靠它兜底
+        low_tier_publisher=low_tier_publisher(doi, title, item.get("publisher")),
     )
 
 
@@ -1163,6 +1168,10 @@ def _sanitize_paper(p: Paper) -> Paper:
         updates["authors"] = clean_authors
     if clean_pdf_url != p.pdf_url:
         updates["pdf_url"] = clean_pdf_url
+    if not p.low_tier_publisher:
+        low_tier = low_tier_publisher(p.doi, p.title)
+        if low_tier:
+            updates["low_tier_publisher"] = low_tier
     return p.model_copy(update=updates) if updates else p
 
 
@@ -1216,6 +1225,7 @@ def _merge(existing: Paper, newcomer: Paper) -> Paper:
         "doi":          existing.doi or newcomer.doi,
         "source_links": source_links,
         "venue":        existing.venue or newcomer.venue,
+        "low_tier_publisher": existing.low_tier_publisher or newcomer.low_tier_publisher,
     })
 
 

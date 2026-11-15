@@ -50,6 +50,7 @@ export function PaperCard({ paper, selected = false, onToggle, isRejected = fals
   const [copied, setCopied] = useState(false)
   const [expanded, setExpanded] = useState(false)
   const [abstractExpanded, setAbstractExpanded] = useState(false)
+  const [showLowTierNote, setShowLowTierNote] = useState(false)
   const { isLoggedIn } = useAuth()
   const showAbstract = !compact || expanded
   // 紧凑模式下没有摘要也给展开入口：展开后告诉用户去哪看摘要
@@ -233,7 +234,24 @@ export function PaperCard({ paper, selected = false, onToggle, isRejected = fals
                 已对话
               </span>
             )}
+            {paper.low_tier_publisher && (
+              // 手机上没有悬停提示：做成按钮，点一下展开说明
+              <button
+                type="button"
+                onClick={() => setShowLowTierNote(v => !v)}
+                className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-2 py-0.5"
+                title="收费发表、审稿宽松的出版社，点击查看说明"
+              >
+                低门槛期刊 {showLowTierNote ? '▴' : '▾'}
+              </button>
+            )}
           </div>
+          {paper.low_tier_publisher && showLowTierNote && (
+            <p className="text-xs text-amber-800 bg-amber-50 border border-amber-100 rounded-lg px-2.5 py-1.5 mb-2 leading-relaxed">
+              这篇发表在 {paper.low_tier_publisher} 的期刊上。这类出版社收费发表、出刊快，同行评审宽松，
+              学术认可度一般，已排在同等相关的论文后面。引用前请留意，写论文时尽量引用核心期刊。
+            </p>
+          )}
 
           {/* 一句话总结：针对用户问题的核心发现；没摘要时只是 AI 根据标题的推测 */}
           {paper.tldr && !isRejected && (

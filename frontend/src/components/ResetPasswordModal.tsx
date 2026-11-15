@@ -5,9 +5,11 @@ interface Props {
   token: string
   onClose: () => void
   onSuccess: () => void
+  /** 链接无效、已用过或已过期：交给外层显示重新获取的入口 */
+  onExpired?: (reason: string) => void
 }
 
-export function ResetPasswordModal({ token, onClose, onSuccess }: Props) {
+export function ResetPasswordModal({ token, onClose, onSuccess, onExpired }: Props) {
   const [password, setPassword] = useState('')
   const [confirm, setConfirm] = useState('')
   const [loading, setLoading] = useState(false)
@@ -31,7 +33,12 @@ export function ResetPasswordModal({ token, onClose, onSuccess }: Props) {
         body: JSON.stringify({ token, new_password: password }),
       })
       const data = await r.json()
-      if (!r.ok) { setError(data.detail || '重置失败，请重试'); return }
+      if (!r.ok) {
+        const detail = typeof data.detail === 'string' ? data.detail : ''
+        if (r.status === 400 && detail.includes('链接') && onExpired) { onExpired(detail); return }
+        setError(detail || '重置失败，请重试')
+        return
+      }
       if (data.access_token) await loginWithToken(data.access_token)
       setDone(true)
       setTimeout(onSuccess, 1800)
@@ -43,8 +50,8 @@ export function ResetPasswordModal({ token, onClose, onSuccess }: Props) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={onClose}>
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm mx-4 p-8" onClick={e => e.stopPropagation()}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm max-h-[90dvh] overflow-y-auto p-6 sm:p-8" onClick={e => e.stopPropagation()}>
         {done ? (
           <div className="text-center">
             <div className="w-14 h-14 rounded-full bg-green-50 border border-green-100 flex items-center justify-center mx-auto mb-4">
