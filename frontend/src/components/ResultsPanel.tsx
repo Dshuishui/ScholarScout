@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useRef, lazy, Suspense } from 'react'
 import { downloadErrorMessage } from '../lib/friendlyError'
+import { fetchArxivDirect } from '../lib/pdfFetch'
 import { useAuth } from '../hooks/useAuth'
 import { AuthModal } from './AuthModal'
 import type { Paper } from '../types'
@@ -631,6 +632,12 @@ const addKeyword = () => {
 
         const downloadUrl = paper.pdf_url || paper.url || ''
         try {
+          // arXiv 论文先由浏览器直接下：服务器下 arXiv 很慢，以前批量下载时常超时失败
+          const direct = await fetchArxivDirect(paper)
+          if (direct) {
+            zip.file(filename, await direct.arrayBuffer())
+            return
+          }
           const ctrl = new AbortController()
           const timer = setTimeout(() => ctrl.abort(), DOWNLOAD_TIMEOUT_MS)
           let resp: Response
