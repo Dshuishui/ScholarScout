@@ -6,8 +6,37 @@ import type { ChatMessage, PdfStatus } from '../hooks/usePaperChat'
 import { getDownloadUrl } from '../api/client'
 import { track } from '../lib/analytics'
 
-// 服务器从国外站点下 PDF 较慢，几 MB 的文件常要一分钟以上（nginx 那边等 150 秒）
+// 先让浏览器直接下：arXiv 允许跨域，用户自己的网络通常比我们的服务器快得多
+// （服务器下 arXiv 一篇 2MB 的 PDF 实测要近两分钟）；下不了再走服务器代下，那边 nginx 等 150 秒
+const DIRECT_PDF_TIMEOUT_MS = 40_000
 const AUTO_PDF_TIMEOUT_MS = 150_000
+
+/** 只对 arXiv 浏览器直连：页面的 CSP 只放行了这两个域名（它们允许跨域），其他站点直接走服务器 */
+function arxivDirectUrl(url: string): string | null {
+  try {
+    const u = new URL(url)
+    if (!['arxiv.org', 'www.arxiv.org', 'export.arxiv.org'].includes(u.hostname) || !u.pathname.startsWith('/pdf/')) return null
+    return `https://arxiv.org${u.pathname}`
+  } catch {
+    return null
+  }
+}
+
+async function fetchPdfBlob(url: string, timeoutMs: number): Promise<Blob> {
+  const ctrl = new AbortController()
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs)
+  try {
+    const r = await fetch(url, { signal: ctrl.signal })
+    if (!r.ok) throw new Error(String(r.status))
+    const blob = await r.blob()
+    // 不少"PDF 链接"其实返回登录页或落地页
+    const head = new Uint8Array(await blob.slice(0, 5).arrayBuffer())
+    if (String.fromCharCode(...head) !== '%PDF-') throw new Error('not a pdf')
+    return blob
+  } finally {
+    clearTimeout(timer)
+  }
+}
 
 const PROMPTS_KEY = 'scholarscout_quick_prompts'
 const DEFAULT_PROMPTS = [
@@ -149,16 +178,12 @@ export function PaperChatDrawer({ paper, messages, isStreaming, pdfStatus, onSen
     setAutoPdfFailed(false)
     track('chat_pdf_autoload')
     try {
-      const ctrl = new AbortController()
-      const timer = setTimeout(() => ctrl.abort(), AUTO_PDF_TIMEOUT_MS)
-      let blob: Blob
-      try {
-        const r = await fetch(getDownloadUrl(paper.pdf_url, paper.doi, paper.paper_id), { signal: ctrl.signal })
-        if (!r.ok) throw new Error(String(r.status))
-        blob = await r.blob()
-      } finally {
-        clearTimeout(timer)
+      const direct = arxivDirectUrl(paper.pdf_url)
+      let blob: Blob | null = null
+      if (direct) {
+        try { blob = await fetchPdfBlob(direct, DIRECT_PDF_TIMEOUT_MS) } catch { /* 直连不通再走服务器 */ }
       }
+      if (!blob) blob = await fetchPdfBlob(getDownloadUrl(paper.pdf_url, paper.doi, paper.paper_id), AUTO_PDF_TIMEOUT_MS)
       if (paperIdRef.current !== startId) return  // 下载期间换了论文：别把 PDF 挂到另一篇上
       await processFile(new File([blob], 'paper.pdf', { type: 'application/pdf' }))
     } catch {
