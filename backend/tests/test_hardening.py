@@ -343,3 +343,12 @@ async def test_pdf_parsing_is_limited_to_a_few_at_a_time():
     from routers import paper
     slot = paper._parse_slot()
     assert slot is paper._parse_slot() and slot._value == paper.MAX_CONCURRENT_PARSES <= 2
+
+
+def test_arxiv_pdfs_use_export_mirror():
+    """arxiv.org 从国内服务器下 PDF 常卡住，改走 export.arxiv.org。"""
+    from services.download_service import _arxiv_mirror
+    assert _arxiv_mirror("https://arxiv.org/pdf/1706.03762") == "https://export.arxiv.org/pdf/1706.03762"
+    assert _arxiv_mirror("http://www.arxiv.org/pdf/2401.00001v2") == "http://export.arxiv.org/pdf/2401.00001v2"
+    assert _arxiv_mirror("https://arxiv.org/abs/1706.03762") == "https://arxiv.org/abs/1706.03762"
+    assert _arxiv_mirror("https://example.org/pdf/1.pdf") == "https://example.org/pdf/1.pdf"

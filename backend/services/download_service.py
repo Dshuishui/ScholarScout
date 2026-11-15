@@ -209,13 +209,25 @@ def _arxiv_id(paper_id: str, doi: str | None) -> str | None:
     return None
 
 
+# arxiv.org 从国内服务器下 PDF 很慢、还常常卡住不动（2026-11 实测 2MB 一分钟没下完，有一次 45 秒 0 字节）；
+# arXiv 给程序访问用的 export.arxiv.org 是同样的文件，实测快一倍以上且不卡
+_ARXIV_MIRROR = "export.arxiv.org"
+ARXIV_TIMEOUT = 60
+
+
+def _arxiv_mirror(url: str) -> str:
+    p = urlparse(url)
+    if (p.hostname or "").lower() in ("arxiv.org", "www.arxiv.org") and p.path.startswith("/pdf/"):
+        return p._replace(netloc=_ARXIV_MIRROR).geturl()
+    return url
+
+
 async def _via_arxiv(paper_id: str, doi: str | None) -> bytes | None:
     ax_id = _arxiv_id(paper_id, doi)
     if not ax_id:
         return None
     try:
-        # arxiv.org 从国内服务器直连能访问但很慢，默认 25 秒常常下不完
-        return await _fetch_bytes(f"https://arxiv.org/pdf/{ax_id}", timeout=60)
+        return await _fetch_bytes(f"https://{_ARXIV_MIRROR}/pdf/{ax_id}", timeout=ARXIV_TIMEOUT)
     except Exception as e:
         logger.debug("arXiv failed for %s: %s", ax_id, e)
     return None
@@ -291,7 +303,8 @@ async def fetch_pdf_with_fallback(
 ) -> bytes:
     """按开放获取渠道逐级尝试，返回 PDF 字节；全部失败抛 ValueError。"""
     steps = [
-        ("primary URL",       lambda: _fetch_bytes(url)),
+        ("primary URL",       lambda: _fetch_bytes(_arxiv_mirror(url),
+                                                   timeout=ARXIV_TIMEOUT if _arxiv_mirror(url) != url else 25)),
         ("Unpaywall",         lambda: _via_unpaywall(doi) if doi else None),
         ("Semantic Scholar",  lambda: _via_semantic_scholar(doi) if doi else None),
         ("arXiv",             lambda: _via_arxiv(paper_id or "", doi) if paper_id else None),

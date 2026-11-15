@@ -6,7 +6,8 @@ import type { ChatMessage, PdfStatus } from '../hooks/usePaperChat'
 import { getDownloadUrl } from '../api/client'
 import { track } from '../lib/analytics'
 
-const AUTO_PDF_TIMEOUT_MS = 90_000
+// 服务器从国外站点下 PDF 较慢，几 MB 的文件常要一分钟以上（nginx 那边等 150 秒）
+const AUTO_PDF_TIMEOUT_MS = 150_000
 
 const PROMPTS_KEY = 'scholarscout_quick_prompts'
 const DEFAULT_PROMPTS = [
@@ -343,7 +344,7 @@ export function PaperChatDrawer({ paper, messages, isStreaming, pdfStatus, onSen
                       onClick={loadFreePdf}
                       disabled={fetchingPdf || uploading}
                       className="text-blue-600 hover:text-blue-800 font-medium underline underline-offset-2 whitespace-nowrap disabled:opacity-60 disabled:no-underline"
-                    >{fetchingPdf || uploading ? '正在读取全文…' : '读取免费全文 →'}</button>
+                    >{fetchingPdf ? '正在下载全文，可能要 1 分钟…' : uploading ? '正在读取全文…' : '读取免费全文 →'}</button>
                   ) : (
                     <button
                       onClick={() => fileInputRef.current?.click()}
